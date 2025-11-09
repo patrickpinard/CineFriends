@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-slate-100 text-slate-900">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/180.png') }}" />
+    <meta name="theme-color" content="#0ea5e9" />
+    <title>{% block title %}Dashboard{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            200: '#a7f3d0',
+                            300: '#6ee7b7',
+                            400: '#34d399',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        },
+                        teal: {
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                        },
+                        slate: {
+                            950: '#020817',
+                        },
+                    },
+                    boxShadow: {
+                        soft: '0 12px 40px -20px rgba(14, 165, 233, 0.25)',
+                        card: '0 18px 60px -40px rgba(15, 23, 42, 0.65)',
+                    },
+                    borderRadius: {
+                        xl: '1rem',
+                        '2xl': '1.5rem',
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --safe-area-top: env(safe-area-inset-top, 0px);
+            --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+            --sidebar-width: 18rem;
+            --sidebar-width-collapsed: 5.25rem;
+        }
+        body {
+            font-size: 15px;
+            line-height: 1.55;
+            padding-bottom: calc(var(--safe-area-bottom) + 4.5rem);
+        }
+        @media (min-width: 1024px) {
+            body {
+                font-size: 16px;
+                padding-bottom: 0;
+            }
+        }
+        .pwa-standalone body {
+            background-color: #f1f5f9;
+        }
+        @media (min-width: 1024px) {
+            body:not(.sidebar-collapsed) .layout-shell {
+                padding-left: var(--sidebar-width);
+            }
+            body.sidebar-collapsed .layout-shell {
+                padding-left: var(--sidebar-width-collapsed);
+            }
+            body:not(.sidebar-collapsed) aside[data-sidebar] {
+                width: var(--sidebar-width);
+            }
+            body.sidebar-collapsed aside[data-sidebar] {
+                width: var(--sidebar-width-collapsed);
+            }
+            body.sidebar-collapsed aside[data-sidebar] .nav-label {
+                opacity: 0;
+                visibility: hidden;
+                width: 0;
+                margin-left: 0;
+            }
+            body.sidebar-collapsed aside[data-sidebar] .nav-link {
+                justify-content: center;
+                padding-inline: 0.75rem;
+            }
+            body.sidebar-collapsed aside[data-sidebar] .nav-icon {
+                border-color: rgba(148, 163, 184, 0.35);
+            }
+            body.sidebar-collapsed aside[data-sidebar] .sidebar-footer,
+            body.sidebar-collapsed aside[data-sidebar] .sidebar-title {
+                display: none;
+            }
+            body.sidebar-collapsed [data-sidebar-toggle] svg {
+                transform: rotate(180deg);
+            }
+        }
+        [data-sidebar-toggle] svg {
+            transition: transform 0.2s ease;
+        }
+        .skeleton-animate {
+            position: relative;
+            overflow: hidden;
+            background: #e2e8f0;
+        }
+        .skeleton-animate::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.55), rgba(255,255,255,0));
+            animation: shimmer 1.2s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        #page-skeleton {
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            background: rgba(244, 249, 251, 0.94);
+            backdrop-filter: blur(6px);
+            display: grid;
+            place-items: center;
+            transition: opacity .3s ease;
+        }
+        #page-skeleton.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+    <script defer src="{{ url_for('static', filename='js/pwa.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/filters.js') }}"></script>
+</head>
+<body class="h-full bg-gradient-to-br from-slate-100 via-white to-sky-50 antialiased">
+    <div id="toast-container" class="pointer-events-none fixed inset-x-4 z-50 flex flex-col gap-3 md:items-end" style="top: calc(var(--safe-area-top, 0px) + 1rem);"></div>
+    <div id="page-skeleton">
+        <div class="w-full max-w-lg space-y-6 rounded-3xl border border-slate-200/60 bg-white/80 p-8 shadow-card">
+            <div class="skeleton-animate h-4 w-24 rounded-full"></div>
+            <div class="skeleton-animate h-8 w-3/4 rounded-full"></div>
+            <div class="space-y-3 pt-4">
+                <div class="skeleton-animate h-10 rounded-2xl"></div>
+                <div class="skeleton-animate h-10 rounded-2xl"></div>
+                <div class="skeleton-animate h-10 rounded-2xl"></div>
+            </div>
+        </div>
+    </div>
+    <div class="flex min-h-screen">
+        <aside class="fixed inset-y-0 left-0 z-30 hidden border-r border-slate-200 bg-white/90 backdrop-blur lg:flex lg:flex-col" data-sidebar>
+            <div class="flex items-center gap-3 px-6 pb-6" style="padding-top: calc(var(--safe-area-top) + 1.75rem);">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo Dashboard" class="h-10 w-10 rounded-2xl object-contain" />
+                <span class="sidebar-title text-xl font-semibold text-slate-900">Dashboard</span>
+            </div>
+            <nav class="flex-1 space-y-1 px-4 pb-6 text-sm font-medium text-slate-600">
+                <a href="{{ url_for('main.dashboard') }}"
+                   class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.dashboard' else '' }}"
+                   title="DashBoard">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.dashboard' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9.75 12 3l9 6.75M4.5 10.5V21h15V10.5" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Dashboard</span>
+                </a>
+                <a href="{{ url_for('main.automation') }}"
+                   class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.automation' else '' }}"
+                   title="Automatisation">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.automation' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 7h11M4.5 7h.01M8.5 12h11M4.5 12h.01M8.5 17h11M4.5 17h.01" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Automatisation</span>
+                </a>
+                <a href="{{ url_for('main.camera') }}"
+                   class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint in ['main.camera', 'main.camera_feed'] else '' }}"
+                   title="Caméra">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint in ['main.camera', 'main.camera_feed'] else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.5-3v9l-4.5-3m-9 3h6.75A2.25 2.25 0 0 0 15.75 14.25V9.75A2.25 2.25 0 0 0 13.5 7.5H6.75A2.25 2.25 0 0 0 4.5 9.75v4.5A2.25 2.25 0 0 0 6.75 16.5z" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Caméra</span>
+                </a>
+                <a href="{{ url_for('main.settings') }}"
+                   class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.settings' else '' }}"
+                   title="Paramètres">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.settings' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.54.56-.94 1.11-.94h2.59c.55 0 1.02.4 1.11.94l.21 1.26a1.13 1.13 0 0 0 1.13.94h1.05c.7 0 1.26.56 1.26 1.26v2.2c0 .43-.22.83-.58 1.06l-.9.58a1.13 1.13 0 0 0 0 1.92l.9.58c.36.23.58.63.58 1.06v2.2c0 .7-.56 1.26-1.26 1.26H15.7c-.55 0-1.02.4-1.11.94l-.21 1.26c-.09.54-.56.94-1.11.94h-2.59c-.55 0-1.02-.4-1.11-.94l-.21-1.26a1.13 1.13 0 0 0-1.13-.94H6.68a1.26 1.26 0 0 1-1.26-1.26v-2.2c0-.43.22-.83.58-1.06l.9-.58a1.13 1.13 0 0 0 0-1.92l-.9-.58a1.26 1.26 0 0 1-.58-1.06v-2.2c0-.7.56-1.26 1.26-1.26h1.05a1.13 1.13 0 0 0 1.13-.94l.21-1.26z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5z" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Paramètres</span>
+                </a>
+                {% if is_admin %}
+                <a href="{{ url_for('admin.users') }}"
+                   class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user'] else '' }}"
+                   title="Utilisateurs">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user'] else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.125a3.375 3.375 0 1 0 6.75 0 3.375 3.375 0 0 0-6.75 0zM4.5 8.25a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0zM1.5 19.125a6 6 0 0 1 6-6h3a6 6 0 0 1 6 6" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Utilisateurs</span>
+                </a>
+                {% endif %}
+            </nav>
+        </aside>
+
+        <div class="layout-shell flex min-h-screen flex-1 flex-col">
+            <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur" style="padding-top: var(--safe-area-top);">
+                <div class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center gap-3">
+                        <button type="button"
+                                class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 lg:hidden"
+                                data-mobile-nav-toggle>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                            </svg>
+                        </button>
+                        <button type="button"
+                                class="hidden rounded-lg border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-50 lg:inline-flex"
+                                data-sidebar-toggle
+                                aria-label="Basculer le menu">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15m0 0L9 6m-4.5 6L9 18" />
+                            </svg>
+                        </button>
+                        <div class="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                            {% block header_title %}{% endblock %}
+                        </div>
+                    </div>
+                    <div class="relative flex items-center gap-2">
+                        {% if current_user.is_authenticated %}
+                        <div class="relative">
+                            <button type="button"
+                                    class="inline-flex items-center rounded-full border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-50"
+                                    data-notification-toggle
+                                    aria-label="Ouvrir les notifications">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 1-5.714 0c-1.347-.151-2.449-1.214-2.652-2.556-.27-1.79-.401-3.601-.393-5.414.01-1.636.66-3.205 1.803-4.39a5.985 5.985 0 0 1 8.412-.262 6.042 6.042 0 0 1 1.89 4.477c.008 1.77-.112 3.538-.364 5.293-.211 1.433-1.322 2.515-2.682 2.69z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 20.25a3 3 0 0 0 6 0" />
+                                </svg>
+                                {% if header_unread_notifications %}
+                                <span data-notification-badge="true" class="absolute -top-1 -right-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                                    {{ header_unread_notifications }}
+                                </span>
+                                {% endif %}
+                            </button>
+                            <div class="invisible absolute left-1/2 top-full mt-2 w-80 -translate-x-1/2 origin-top scale-95 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-xl opacity-0 transition"
+                                 data-notification-menu>
+                                <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                                    <p class="text-sm font-semibold text-slate-700">Notifications</p>
+                                </div>
+                                <div class="max-h-80 overflow-y-auto" data-notification-list>
+                                    {% if header_notifications %}
+                                        {% for notif in header_notifications %}
+                                        <div class="group flex items-start gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-0 {% if not notif.read %}bg-teal-50/40{% endif %}"
+                                           data-notification-id="{{ notif.id }}"
+                                           data-unread="{{ 'true' if not notif.read else 'false' }}">
+                                            <div class="flex-1">
+                                                <a href="{{ notif.action_url or '#' }}" class="block">
+                                                    <p class="flex items-center gap-2 font-semibold text-slate-800">
+                                                        {% if notif.level == 'success' %}
+                                                        <span class="inline-flex h-2 w-2 rounded-full bg-primary-500"></span>
+                                                        {% elif notif.level == 'warning' %}
+                                                        <span class="inline-flex h-2 w-2 rounded-full bg-amber-400"></span>
+                                                        {% elif notif.level == 'danger' %}
+                                                        <span class="inline-flex h-2 w-2 rounded-full bg-rose-500"></span>
+                                                        {% else %}
+                                                        <span class="inline-flex h-2 w-2 rounded-full bg-slate-300"></span>
+                                                        {% endif %}
+                                                        {{ notif.title }}
+                                                    </p>
+                                                    <p class="mt-1 text-xs text-slate-500">{{ notif.message }}</p>
+                                                    <p class="mt-2 text-[11px] uppercase tracking-wide text-slate-400">{{ notif.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                                                </a>
+                                            </div>
+                                            <button type="button" class="mt-1 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" data-notification-delete="{{ notif.id }}" aria-label="Supprimer la notification">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="px-6 py-12 text-center text-sm text-slate-500">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6a1.5 1.5 0 0 0-3 0m6 0a6 6 0 0 1-12 0c0-3.314 2.463-6 5.5-6s6.5 2.686 6.5 6zM5.5 6h13M5 21h14" />
+                                            </svg>
+                                            <p class="mt-3 font-semibold">Rien à signaler</p>
+                                            <p class="text-xs text-slate-400">Vous serez notifié ici lors des activations, désactivations ou incidents.</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <template id="notification-empty-template">
+                                    <div class="px-6 py-12 text-center text-sm text-slate-500">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6a1.5 1.5 0 0 0-3 0m6 0a6 6 0 0 1-12 0c0-3.314 2.463-6 5.5-6s6.5 2.686 6.5 6zM5.5 6h13M5 21h14" />
+                                        </svg>
+                                        <p class="mt-3 font-semibold">Rien à signaler</p>
+                                        <p class="text-xs text-slate-400">Vous serez notifié ici lors des activations, désactivations ou incidents.</p>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        {% set palette = avatar_palette(current_user.username or '') %}
+                        <button type="button"
+                                class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
+                                data-profile-toggle>
+                            {% if current_user.avatar_filename %}
+                            <span class="inline-flex h-9 w-9 overflow-hidden rounded-full shadow-soft" style="box-shadow: {{ palette.shadow }};">
+                                <img src="{{ url_for('static', filename='uploads/' ~ current_user.avatar_filename) }}" alt="Avatar" class="h-9 w-9 object-cover" />
+                            </span>
+                            {% else %}
+                            <span class="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold uppercase tracking-wide text-white shadow-soft"
+                                  style="background: {{ palette.gradient }}; box-shadow: {{ palette.shadow }};">
+                                {{ current_user.username[:2].upper() }}
+                            </span>
+                            {% endif %}
+                            <span class="hidden sm:flex sm:flex-col sm:items-start">
+                                <span>{{ current_user.username }}</span>
+                                {% if current_user.email %}
+                                <span class="text-xs font-normal text-slate-400">{{ current_user.email }}</span>
+                                {% endif %}
+                            </span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m6 9 6 6 6-6"/>
+                            </svg>
+                        </button>
+                        <div class="invisible absolute right-0 top-full mt-2 w-52 origin-top-right scale-95 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg opacity-0 transition"
+                             data-profile-menu>
+                            <div class="px-4 py-3 text-sm text-slate-600">
+                                <p class="font-semibold text-slate-800">{{ current_user.username }}</p>
+                                {% if current_user.email %}
+                                <p class="mt-1 text-xs text-slate-400">{{ current_user.email }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="{{ url_for('main.profile') }}"
+                                   class="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 transition hover:bg-sky-50 hover:text-sky-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20.25a8.25 8.25 0 0 1 15 0" />
+                                    </svg>
+                                    Profil
+                                </a>
+                                <a href="{{ url_for('auth.logout') }}"
+                                   class="flex items-center gap-2 px-4 py-2 text-sm text-rose-500 transition hover:bg-rose-50 hover:text-rose-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25a2.25 2.25 0 0 0-2.25-2.25h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                                    </svg>
+                                    Déconnexion
+                                </a>
+                            </div>
+                        </div>
+                        {% else %}
+                        <a href="{{ url_for('auth.login') }}" class="rounded-full bg-teal-500 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-400">Connexion</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </header>
+
+            <div class="flex-1 px-4 py-6 pb-32 sm:px-6 lg:px-8 lg:pb-8">
+                <section class="mt-6">
+                    {% block content %}{% endblock %}
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-confirm-cancel></div>
+        <div class="relative mx-auto mt-28 w-[92%] max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+            <div class="flex items-start gap-3">
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4.5m0 3h.008v.008H12V16.5Zm0-12a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" />
+                    </svg>
+                </span>
+                <div class="space-y-2 text-sm text-slate-600">
+                    <h2 class="text-base font-semibold text-slate-900">Confirmer l’action</h2>
+                    <p data-confirm-message></p>
+                </div>
+            </div>
+            <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button type="button" data-confirm-cancel class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+                    Annuler
+                </button>
+                <button type="button" data-confirm-approve class="inline-flex items-center justify-center gap-2 rounded-full bg-rose-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-rose-400">
+                    Supprimer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="install-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-install-close></div>
+        <div class="relative mx-auto mt-24 w-[92%] max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+            <div class="flex items-start gap-3">
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-100 text-teal-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
+                    </svg>
+                </span>
+                <div class="space-y-2 text-sm text-slate-600">
+                    <h2 class="text-base font-semibold text-slate-900">Installer le Dashboard</h2>
+                    <p data-install-description></p>
+                </div>
+            </div>
+            <div class="mt-4 space-y-3 text-sm text-slate-600">
+                <ol data-install-steps="default" class="space-y-2">
+                    <li class="flex items-start gap-2">
+                        <span class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">1</span>
+                        Cliquez sur « Installer » dans la boîte de dialogue système.
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">2</span>
+                        L’application sera ajoutée à votre écran d’accueil pour un accès rapide.
+                    </li>
+                </ol>
+                <ol data-install-steps="ios" class="hidden space-y-2">
+                    <li class="flex items-start gap-2">
+                        <span class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">1</span>
+                        Touchez <span class="font-semibold">Partager</span> dans la barre inférieure de Safari.
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">2</span>
+                        Choisissez <span class="font-semibold">Ajouter à l’écran d’accueil</span>.
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">3</span>
+                        Validez le nom « Dashboard » puis touchez <span class="font-semibold">Ajouter</span>.
+                    </li>
+                </ol>
+            </div>
+            <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button type="button" data-install-close class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+                    Plus tard
+                </button>
+                <button type="button" data-install-action class="inline-flex items-center justify-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400">
+                    Installer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <nav class="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-lg backdrop-blur-sm lg:hidden">
+        <div class="mx-auto flex max-w-md items-center justify-around gap-3 px-4" style="padding-bottom: calc(var(--safe-area-bottom) + 0.5rem); padding-top: 0.5rem;">
+            <a href="{{ url_for('main.dashboard') }}"
+               class="flex flex-col items-center gap-1 text-xs font-semibold transition {{ 'text-teal-600' if request.endpoint == 'main.dashboard' else 'text-slate-400 hover:text-teal-500' }}">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl border {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint == 'main.dashboard' else 'border-slate-200 bg-white' }} shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 9.75 12 3l9 6.75M4.5 10.5V21h15V10.5" />
+                    </svg>
+                </span>
+                Dashboard
+            </a>
+            <a href="{{ url_for('main.automation') }}"
+               class="flex flex-col items-center gap-1 text-xs font-semibold transition {{ 'text-teal-600' if request.endpoint == 'main.automation' else 'text-slate-400 hover:text-teal-500' }}">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl border {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint == 'main.automation' else 'border-slate-200 bg-white' }} shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.5 7h11M4.5 7h.01M8.5 12h11M4.5 12h.01M8.5 17h11M4.5 17h.01" />
+                    </svg>
+                </span>
+                Règles
+            </a>
+            <a href="{{ url_for('main.journal') }}"
+               class="flex flex-col items-center gap-1 text-xs font-semibold transition {{ 'text-teal-600' if request.endpoint == 'main.journal' else 'text-slate-400 hover:text-teal-500' }}">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl border {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint == 'main.journal' else 'border-slate-200 bg-white' }} shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75h9a2.25 2.25 0 0 1 2.25 2.25v12.75a.75.75 0 0 1-1.16.62l-2.84-1.89a1.5 1.5 0 0 0-1.68 0l-2.84 1.89a.75.75 0 0 1-1.16-.62V6A2.25 2.25 0 0 1 7.5 3.75z" />
+                    </svg>
+                </span>
+                Journal
+            </a>
+            <a href="{{ url_for('main.settings') }}"
+               class="flex flex-col items-center gap-1 text-xs font-semibold transition {{ 'text-teal-600' if request.endpoint == 'main.settings' else 'text-slate-400 hover:text-teal-500' }}">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl border {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint == 'main.settings' else 'border-slate-200 bg-white' }} shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.54.56-.94 1.11-.94h2.59c.55 0 1.02.4 1.11.94l.21 1.26a1.13 1.13 0 0 0 1.13.94h1.05c.7 0 1.26.56 1.26 1.26v2.2c0 .43-.22.83-.58 1.06l-.9.58a1.13 1.13 0 0 0 0 1.92l.9.58c.36.23.58.63.58 1.06v2.2c0 .7-.56 1.26-1.26 1.26H15.7c-.55 0-1.02.4-1.11.94l-.21 1.26c-.09.54-.56.94-1.11.94h-2.59c-.55 0-1.02-.4-1.11-.94l-.21-1.26a1.13 1.13 0 0 0-1.13-.94H6.68a1.26 1.26 0 0 1-1.26-1.26v-2.2c0-.43.22-.83.58-1.06l.9-.58a1.13 1.13 0 0 0 0-1.92l-.9-.58a1.26 1.26 0 0 1-.58-1.06v-2.2c0-.7.56-1.26 1.26-1.26h1.05a1.13 1.13 0 0 0 1.13-.94l.21-1.26z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5z" />
+                    </svg>
+                </span>
+                Paramètres
+            </a>
+            {% if is_admin %}
+            <a href="{{ url_for('admin.users') }}"
+               class="flex flex-col items-center gap-1 text-xs font-semibold transition {{ 'text-teal-600' if request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user'] else 'text-slate-400 hover:text-teal-500' }}">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl border {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user'] else 'border-slate-200 bg-white' }} shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.125a3.375 3.375 0 1 0 6.75 0 3.375 3.375 0 0 0-6.75 0zM4.5 8.25a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0zM1.5 19.125a6 6 0 0 1 6-6h3a6 6 0 0 1 6 6" />
+                    </svg>
+                </span>
+                Utilisateurs
+            </a>
+            {% endif %}
+            <button type="button" data-pwa-install-trigger class="hidden flex flex-col items-center gap-1 text-xs font-semibold text-slate-400 transition hover:text-teal-500">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
+                    </svg>
+                </span>
+                Installer
+            </button>
+        </div>
+    </nav>
+
+    <div class="fixed inset-0 z-20 hidden bg-slate-900/40 backdrop-blur-sm" data-mobile-nav-backdrop></div>
+    <aside class="fixed inset-y-0 left-0 z-30 flex w-72 max-w-xs -translate-x-full flex-col border-r border-slate-200 bg-white/95 shadow-lg transition-transform lg:hidden"
+           data-mobile-nav>
+        <div class="px-6 pb-6" style="padding-top: calc(var(--safe-area-top) + 1.5rem);">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo Dashboard" class="h-10 w-10 rounded-2xl object-contain" />
+                    <span class="text-lg font-semibold text-slate-900">Navigation</span>
+                </div>
+                <button type="button" class="rounded-full p-2 text-slate-400 hover:text-slate-600" data-mobile-nav-close>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18 18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <nav class="flex-1 space-y-1 px-4 pb-6 text-sm font-medium text-slate-600">
+            <a href="{{ url_for('main.dashboard') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Dashboard</a>
+            <a href="{{ url_for('main.automation') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Automatisation</a>
+            <a href="{{ url_for('main.camera') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Caméra</a>
+            <a href="{{ url_for('main.settings') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Paramètres</a>
+            {% if is_admin %}
+            <a href="{{ url_for('main.journal') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Journal</a>
+            {% endif %}
+            {% if is_admin %}
+            <a href="{{ url_for('admin.users') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Utilisateurs</a>
+            {% endif %}
+        </nav>
+    </aside>
+
+    {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+            <script id="flash-data" type="application/json">{{ messages|tojson }}</script>
+        {% endif %}
+    {% endwith %}
+
+    <script>
+        const CSRF_TOKEN = "{{ csrf_token() }}";
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const skeleton = document.getElementById('page-skeleton');
+            skeleton?.classList.add('hidden');
+            const mobileToggle = document.querySelector('[data-mobile-nav-toggle]');
+            const mobileNav = document.querySelector('[data-mobile-nav]');
+            const mobileBackdrop = document.querySelector('[data-mobile-nav-backdrop]');
+            const mobileClose = document.querySelector('[data-mobile-nav-close]');
+            const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
+            const profileToggle = document.querySelector('[data-profile-toggle]');
+            const profileMenu = document.querySelector('[data-profile-menu]');
+            const notificationToggle = document.querySelector('[data-notification-toggle]');
+            const notificationMenu = document.querySelector('[data-notification-menu]');
+            const notificationList = document.querySelector('[data-notification-list]');
+            const notificationEmptyTemplate = document.getElementById('notification-empty-template');
+            const toastContainer = document.getElementById('toast-container');
+            const body = document.body;
+            const SIDEBAR_STORAGE_KEY = 'dashboard.sidebar.collapsed';
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmMessageEl = confirmModal?.querySelector('[data-confirm-message]');
+            const confirmApproveBtn = confirmModal?.querySelector('[data-confirm-approve]');
+            const confirmCancelBtn = confirmModal?.querySelectorAll('[data-confirm-cancel]');
+            let pendingConfirmForm = null;
+
+            const toastVariants = {
+                success: { title: 'Succès', indicator: 'bg-emerald-500', accent: 'text-emerald-600' },
+                warning: { title: 'Attention', indicator: 'bg-amber-400', accent: 'text-amber-600' },
+                danger: { title: 'Erreur', indicator: 'bg-rose-500', accent: 'text-rose-600' },
+                info: { title: 'Information', indicator: 'bg-sky-500', accent: 'text-sky-600' },
+                default: { title: 'Notification', indicator: 'bg-slate-400', accent: 'text-slate-600' },
+            };
+
+            function createToast(category = 'info', message = '') {
+                if (!toastContainer || !message) return;
+
+                const variant = toastVariants[category] || toastVariants.default;
+                const toast = document.createElement('div');
+                toast.className = 'pointer-events-auto overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg ring-1 ring-black/5 transition duration-200 ease-out';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-12px)';
+
+                const inner = document.createElement('div');
+                inner.className = 'flex items-start gap-3 p-4 text-sm text-slate-700';
+
+                const dot = document.createElement('span');
+                dot.className = `mt-1.5 h-2.5 w-2.5 rounded-full ${variant.indicator}`;
+                inner.appendChild(dot);
+
+                const content = document.createElement('div');
+                content.className = 'flex-1';
+
+                const titleEl = document.createElement('p');
+                titleEl.className = `font-semibold text-base ${variant.accent}`;
+                titleEl.textContent = variant.title;
+
+                const messageEl = document.createElement('p');
+                messageEl.className = 'mt-1 text-[0.95rem] leading-relaxed text-slate-600';
+                messageEl.textContent = message;
+
+                content.appendChild(titleEl);
+                content.appendChild(messageEl);
+                inner.appendChild(content);
+
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'rounded-full p-1 text-slate-400 transition hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-200';
+                closeBtn.setAttribute('aria-label', 'Fermer la notification');
+
+                const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                closeIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                closeIcon.setAttribute('viewBox', '0 0 24 24');
+                closeIcon.setAttribute('fill', 'none');
+                closeIcon.setAttribute('stroke', 'currentColor');
+                closeIcon.setAttribute('stroke-width', '1.5');
+                closeIcon.classList.add('h-4', 'w-4');
+
+                const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                closePath.setAttribute('stroke-linecap', 'round');
+                closePath.setAttribute('stroke-linejoin', 'round');
+                closePath.setAttribute('d', 'M6 18 18 6M6 6l12 12');
+
+                closeIcon.appendChild(closePath);
+                closeBtn.appendChild(closeIcon);
+                inner.appendChild(closeBtn);
+
+                toast.appendChild(inner);
+                toastContainer.appendChild(toast);
+
+                requestAnimationFrame(() => {
+                    toast.style.opacity = '1';
+                    toast.style.transform = 'translateY(0)';
+                });
+
+                let dismissTimer = setTimeout(() => dismissToast(), 6000);
+
+                function dismissToast() {
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateY(-8px)';
+                    setTimeout(() => toast.remove(), 180);
+                }
+
+                closeBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    clearTimeout(dismissTimer);
+                    dismissToast();
+                });
+
+                toast.addEventListener('mouseenter', () => clearTimeout(dismissTimer));
+                toast.addEventListener('mouseleave', () => {
+                    clearTimeout(dismissTimer);
+                    dismissTimer = setTimeout(() => dismissToast(), 3000);
+                });
+            }
+
+            const flashDataEl = document.getElementById('flash-data');
+            if (flashDataEl) {
+                try {
+                    const flashMessages = JSON.parse(flashDataEl.textContent || '[]');
+                    flashMessages.forEach(([category, message]) => createToast(category, message));
+                } catch (error) {
+                    console.error('Impossible de traiter les notifications flash:', error);
+                } finally {
+                    flashDataEl.remove();
+                }
+            }
+
+            window.addEventListener('app:toast', (event) => {
+                const detail = event.detail || {};
+                if (!detail.message) return;
+                createToast(detail.category || 'info', detail.message);
+            });
+
+            function applySidebarState(collapsed) {
+                body.classList.toggle('sidebar-collapsed', collapsed);
+                sidebarToggle?.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+            }
+
+            function markNotificationsAsRead(ids) {
+                if (!ids || !ids.length) return;
+                fetch('{{ url_for("main.notifications_mark_read") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ ids }),
+                }).catch(() => {
+                    console.warn('Impossible de mettre à jour les notifications.');
+                });
+            }
+
+            const storedSidebarState = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+            if (storedSidebarState !== null) {
+                applySidebarState(storedSidebarState === 'true');
+            }
+
+            sidebarToggle?.addEventListener('click', () => {
+                const collapsed = !body.classList.contains('sidebar-collapsed');
+                applySidebarState(collapsed);
+                localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+            });
+
+            const updateNotificationBadge = () => {
+                if (!notificationToggle) return;
+                const badge = notificationToggle.querySelector('[data-notification-badge]');
+                const unreadCount = notificationMenu?.querySelectorAll('[data-unread="true"]').length || 0;
+                if (badge && unreadCount <= 0) {
+                    badge.remove();
+                } else if (badge) {
+                    badge.textContent = String(unreadCount);
+                } else if (unreadCount > 0) {
+                    const newBadge = document.createElement('span');
+                    newBadge.dataset.notificationBadge = 'true';
+                    newBadge.className = 'absolute -top-1 -right-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white';
+                    newBadge.textContent = String(unreadCount);
+                    notificationToggle.appendChild(newBadge);
+                }
+            };
+
+            if (notificationToggle && notificationMenu) {
+                const toggleNotifications = () => {
+                    const isOpen = notificationMenu.classList.contains('opacity-100');
+                    notificationMenu.classList.toggle('opacity-100', !isOpen);
+                    notificationMenu.classList.toggle('opacity-0', isOpen);
+                    notificationMenu.classList.toggle('invisible', isOpen);
+                    notificationMenu.classList.toggle('scale-100', !isOpen);
+                    notificationMenu.classList.toggle('scale-95', isOpen);
+                    if (!isOpen) {
+                        const unreadItems = notificationMenu.querySelectorAll('[data-unread="true"]');
+                        if (unreadItems.length) {
+                            const ids = Array.from(unreadItems).map((el) => {
+                                el.setAttribute('data-unread', 'false');
+                                el.classList.remove('bg-teal-50/40');
+                                return Number(el.getAttribute('data-notification-id'));
+                            });
+                            markNotificationsAsRead(ids);
+                            updateNotificationBadge();
+                        }
+                    }
+                };
+
+                notificationToggle.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    toggleNotifications();
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (!notificationMenu.contains(event.target) && !notificationToggle.contains(event.target)) {
+                        notificationMenu.classList.add('invisible', 'scale-95', 'opacity-0');
+                        notificationMenu.classList.remove('opacity-100', 'scale-100');
+                    }
+                });
+            }
+
+            notificationList?.addEventListener('click', (event) => {
+                const deleteBtn = event.target.closest('[data-notification-delete]');
+                if (!deleteBtn) return;
+                event.preventDefault();
+                const notificationId = Number(deleteBtn.getAttribute('data-notification-delete'));
+                const wrapper = deleteBtn.closest('[data-notification-id]');
+                if (!wrapper || Number.isNaN(notificationId)) return;
+
+                wrapper.remove();
+                updateNotificationBadge();
+
+                fetch('{{ url_for("main.notifications_clear") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ ids: [notificationId] }),
+                }).catch(() => {
+                    console.warn('Impossible de supprimer la notification.');
+                });
+
+                if (!notificationList.querySelector('[data-notification-id]') && notificationEmptyTemplate) {
+                    const clone = notificationEmptyTemplate.content.cloneNode(true);
+                    notificationList.appendChild(clone);
+                }
+            });
+
+            updateNotificationBadge();
+
+            function openConfirmModal(form, message) {
+                if (!confirmModal || !confirmMessageEl) {
+                    form.submit();
+                    return;
+                }
+                pendingConfirmForm = form;
+                confirmMessageEl.textContent = message || 'Confirmer cette action ?';
+                confirmModal.classList.remove('hidden');
+            }
+
+            function closeConfirmModal() {
+                confirmModal?.classList.add('hidden');
+                pendingConfirmForm = null;
+            }
+
+            confirmApproveBtn?.addEventListener('click', () => {
+                if (pendingConfirmForm) {
+                    const form = pendingConfirmForm;
+                    closeConfirmModal();
+                    form.submit();
+                }
+            });
+
+            confirmCancelBtn?.forEach((btn) => {
+                btn.addEventListener('click', () => closeConfirmModal());
+            });
+
+            confirmModal?.addEventListener('click', (event) => {
+                if (event.target instanceof Element && event.target.hasAttribute('data-confirm-cancel')) {
+                    closeConfirmModal();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !confirmModal?.classList.contains('hidden')) {
+                    closeConfirmModal();
+                }
+            });
+
+            document.querySelectorAll('form[data-confirm]').forEach((form) => {
+                form.addEventListener('submit', (event) => {
+                    if (confirmModal?.classList.contains('hidden')) {
+                        event.preventDefault();
+                        openConfirmModal(form, form.getAttribute('data-confirm') || undefined);
+                    }
+                });
+            });
+
+            if (profileToggle && profileMenu) {
+                const toggleMenu = () => {
+                    const isOpen = profileMenu.classList.contains('opacity-100');
+                    profileMenu.classList.toggle('opacity-100', !isOpen);
+                    profileMenu.classList.toggle('opacity-0', isOpen ? true : false);
+                    profileMenu.classList.toggle('invisible', isOpen);
+                    profileMenu.classList.toggle('scale-100', !isOpen);
+                    profileMenu.classList.toggle('scale-95', isOpen);
+                };
+
+                profileToggle.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    toggleMenu();
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (!profileMenu.contains(event.target) && !profileToggle.contains(event.target)) {
+                        profileMenu.classList.add('invisible', 'scale-95', 'opacity-0');
+                        profileMenu.classList.remove('opacity-100', 'scale-100');
+                    }
+                });
+            }
+
+            function openMobileNav(show) {
+                if (!mobileNav || !mobileBackdrop) return;
+                mobileNav.classList.toggle('-translate-x-full', !show);
+                mobileBackdrop.classList.toggle('hidden', !show);
+            }
+
+            mobileToggle && mobileToggle.addEventListener('click', () => openMobileNav(true));
+            mobileClose && mobileClose.addEventListener('click', () => openMobileNav(false));
+            mobileBackdrop && mobileBackdrop.addEventListener('click', () => openMobileNav(false));
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+Bonjour {{ user.username }},
+
+Votre demande d’accès au Dashboard vient d’être approuvée. Votre compte est désormais actif.
+
+Vous pouvez vous connecter dès maintenant : {{ url_for('auth.login', _external=True) }}
+
+Pensez à garder vos identifiants en lieu sûr. Pour toute question, contactez votre administrateur.
+
+À très vite,
+L’équipe Dashboard Automatisation
+
+---
+Email automatique, merci de ne pas répondre.
+
