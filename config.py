@@ -18,7 +18,7 @@ class Config:
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
     PREFERRED_URL_SCHEME = "https"
-    UPLOAD_FOLDER = str(BASE_DIR / "dashboard_app" / "static" / "uploads")
+    UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 5 * 1024 * 1024))
     TWOFA_CODE_LENGTH = int(os.getenv("TWOFA_CODE_LENGTH", "6"))
     TWOFA_CODE_TTL_SECONDS = int(os.getenv("TWOFA_CODE_TTL_SECONDS", "300"))

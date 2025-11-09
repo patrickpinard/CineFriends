@@ -14,7 +14,7 @@ __pycache__/
 instance/
 dashboard.db
 
-dashboard_app/static/uploads/
+app/static/uploads/
 
 .vscode/
 *** End Patch
