@@ -13,7 +13,7 @@ from . import db
 from .forms import AutomationRuleForm, ProfileForm, SettingForm
 from .models import AutomationRule, JournalEntry, Notification, Setting, User
 from .services import create_notification
-from .utils import build_changes, delete_avatar, save_avatar
+from .utils import build_changes, build_hardware_overview, delete_avatar, save_avatar
 
 try:
     import cv2  # type: ignore
@@ -22,6 +22,60 @@ except ImportError:  # pragma: no cover - dépendance optionnelle
 
 
 main_bp = Blueprint("main", __name__)
+
+
+HARDWARE_SETTING_GROUPS = [
+    {
+        "id": "actuators",
+        "title": "Actionneurs • Carte relais",
+        "subtitle": "Définissez les broches BCM utilisées par les trois relais pilotés via RPi.GPIO.",
+        "items": [
+            {
+                "key": "Relay_Ch1",
+                "label": "Relais canal 1 (GPIO BCM)",
+                "default": "26",
+                "description": "Broche BCM pour le premier relais (CH1).",
+            },
+            {
+                "key": "Relay_Ch2",
+                "label": "Relais canal 2 (GPIO BCM)",
+                "default": "20",
+                "description": "Broche BCM pour le deuxième relais (CH2).",
+            },
+            {
+                "key": "Relay_Ch3",
+                "label": "Relais canal 3 (GPIO BCM)",
+                "default": "21",
+                "description": "Broche BCM pour le troisième relais (CH3).",
+            },
+        ],
+    },
+    {
+        "id": "sensors",
+        "title": "Capteurs • Température & humidité",
+        "subtitle": "Paramétrez les sondes connectées au Raspberry Pi.",
+        "items": [
+            {
+                "key": "Sensor_DS18B20_Interface",
+                "label": "Sonde intérieure DS18B20 (interface)",
+                "default": "w1",
+                "description": "Interface utilisée pour la sonde 1-Wire (DS18B20).",
+            },
+            {
+                "key": "Sensor_AM2315_Type",
+                "label": "Sonde extérieure AM2315",
+                "default": "AM2315",
+                "description": "Identifiant du capteur I²C pour la température et l’humidité extérieures.",
+            },
+            {
+                "key": "Sensor_AM2315_Address",
+                "label": "Adresse I²C AM2315",
+                "default": "0x5C",
+                "description": "Adresse I²C par défaut du capteur AM2315.",
+            },
+        ],
+    },
+]
 
 
 def _camera_stream() -> Generator[bytes, None, None]:
@@ -258,19 +312,107 @@ def camera_feed():
 def settings():
     form = SettingForm()
     settings_list = Setting.query.order_by(Setting.key.asc()).all()
+    settings_map = {setting.key: setting for setting in settings_list}
+
+    initialized = False
+    for key, default_value in ((item["key"], item["default"]) for group in HARDWARE_SETTING_GROUPS for item in group["items"]):
+        if key not in settings_map:
+            new_setting = Setting(key=key, value=default_value)
+            db.session.add(new_setting)
+            db.session.add(
+                JournalEntry(
+                    level="info",
+                    message=f"Paramètre initialisé : {key}",
+                    details={"value": default_value, "source": "default", "category": "hardware"},
+                )
+            )
+            initialized = True
+
+    if initialized:
+        db.session.commit()
+        settings_list = Setting.query.order_by(Setting.key.asc()).all()
+        settings_map = {setting.key: setting for setting in settings_list}
+
+    if request.method == "POST" and request.form.get("refresh_hardware") == "1":
+        flash("Diagnostic matériel relancé.", "info")
+        return redirect(url_for("main.settings"))
 
     if form.validate_on_submit():
         setting = Setting.query.filter_by(key=form.key.data).first()
+        before_value = setting.value if setting else None
         if not setting:
             setting = Setting(key=form.key.data)
             db.session.add(setting)
         setting.value = form.value.data
-        db.session.add(JournalEntry(level="info", message=f"Paramètre mis à jour: {setting.key}"))
+        db.session.add(
+            JournalEntry(
+                level="info",
+                message=f"Paramètre mis à jour : {setting.key}",
+                details={"before": before_value, "after": form.value.data},
+            )
+        )
         db.session.commit()
         flash("Paramètre enregistré.", "success")
         return redirect(url_for("main.settings"))
 
-    return render_template("dashboard/settings.html", form=form, settings=settings_list)
+    hardware_groups = []
+    hardware_keys = set()
+    for group in HARDWARE_SETTING_GROUPS:
+        items = []
+        for item in group["items"]:
+            setting_obj = settings_map.get(item["key"])
+            items.append(
+                {
+                    **item,
+                    "value": setting_obj.value if setting_obj else item["default"],
+                    "updated_at": setting_obj.updated_at if setting_obj else None,
+                }
+            )
+            hardware_keys.add(item["key"])
+        hardware_groups.append(
+            {
+                "id": group["id"],
+                "title": group["title"],
+                "subtitle": group["subtitle"],
+                "parameters": items,
+            }
+        )
+
+    def _get_int_value(key: str, fallback: int) -> int:
+        value = settings_map.get(key).value if settings_map.get(key) else fallback
+        try:
+            return int(str(value).strip())
+        except (ValueError, TypeError, AttributeError):
+            return fallback
+
+    relay_pins = [
+        _get_int_value("Relay_Ch1", 26),
+        _get_int_value("Relay_Ch2", 20),
+        _get_int_value("Relay_Ch3", 21),
+    ]
+
+    hardware_status = build_hardware_overview(relay_pins)
+    configured_values = {
+        "relays": ", ".join(str(pin) for pin in relay_pins),
+        "ds18b20": settings_map.get("Sensor_DS18B20_Interface").value if settings_map.get("Sensor_DS18B20_Interface") else "—",
+        "am2315": settings_map.get("Sensor_AM2315_Type").value if settings_map.get("Sensor_AM2315_Type") else "—",
+        "am2315_address": settings_map.get("Sensor_AM2315_Address").value if settings_map.get("Sensor_AM2315_Address") else "—",
+    }
+
+    for status in hardware_status:
+        if status["id"] == "relays":
+            status["configured"] = f"GPIO configurés : {configured_values['relays']}"
+        elif status["id"] == "ds18b20":
+            status["configured"] = f"Interface actuelle : {configured_values['ds18b20']}"
+        elif status["id"] == "am2315":
+            status["configured"] = f"Capteur : {configured_values['am2315']} @ {configured_values['am2315_address']}"
+
+    return render_template(
+        "dashboard/settings.html",
+        form=form,
+        hardware_groups=hardware_groups,
+        hardware_status=hardware_status,
+    )
 
 
 @main_bp.route("/journal")
