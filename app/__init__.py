@@ -7,6 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from sqlalchemy import text
+from flask_cors import CORS
 
 from config import Config
 
@@ -19,6 +20,13 @@ csrf = CSRFProtect()
 def create_app():
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.config.from_object(Config)
+
+    cors_origins = os.getenv("CORS_ORIGINS")
+    if cors_origins:
+        origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+        CORS(app, resources={r"/*": {"origins": origins}}, supports_credentials=True)
+    else:
+        CORS(app, resources={r"/*": {"origins": "*"}})
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -53,9 +61,8 @@ def create_app():
                     & (current_user.role == "admin")
                 )
             ).order_by(Notification.created_at.desc())
-            unread_query = base_query.filter(Notification.read.is_(False))
-            notifications = unread_query.limit(10).all()
-            unread_count = unread_query.count()
+            notifications = base_query.limit(10).all()
+            unread_count = base_query.filter(Notification.read.is_(False)).count()
         return {
             "header_notifications": notifications,
             "header_unread_notifications": unread_count,

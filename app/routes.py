@@ -7,6 +7,7 @@ from typing import Generator
 from flask import (Blueprint, Response, current_app, flash, jsonify, redirect,
                    render_template, request, url_for)
 from flask_login import current_user, login_required
+from urllib.parse import urlencode
 
 from . import db
 from .forms import AutomationRuleForm, ProfileForm, SettingForm
@@ -56,27 +57,16 @@ def dashboard():
     rules_count = AutomationRule.query.count()
     journal_count = JournalEntry.query.count()
     today = datetime.utcnow().date()
-    start_date = today - timedelta(days=6)
-    start_datetime = datetime.combine(start_date, datetime.min.time())
-
-    recent_entries = JournalEntry.query.filter(JournalEntry.created_at >= start_datetime).all()
-    counts_by_day: dict[date, int] = {}
-    for entry in recent_entries:
-        day = entry.created_at.date()
-        counts_by_day[day] = counts_by_day.get(day, 0) + 1
-
-    chart_labels = []
-    chart_values = []
-    for i in range(6, -1, -1):
-        day = today - timedelta(days=i)
-        chart_labels.append(day.strftime('%d/%m'))
-        chart_values.append(counts_by_day.get(day, 0))
+    chart_labels = [(today - timedelta(days=i)).strftime('%d/%m') for i in range(6, -1, -1)]
+    chart_temperatures = [21.5, 22.1, 20.8, 19.9, 21.2, 22.4, 21.0]
+    chart_humidity = [48, 51, 55, 58, 53, 49, 52]
     return render_template(
         "dashboard/index.html",
         rules_count=rules_count,
         journal_count=journal_count,
         chart_labels=chart_labels,
-        chart_values=chart_values,
+        chart_temperatures=chart_temperatures,
+        chart_humidity=chart_humidity,
     )
 
 
@@ -109,6 +99,9 @@ def automation():
     else:
         query = query.order_by(AutomationRule.created_at.desc())
 
+    filters = {"q": search, "owner": owner_id, "sort": sort}
+    filters_query = urlencode({k: v for k, v in filters.items() if v})
+
     if form.validate_on_submit():
         rule = AutomationRule(
             name=form.name.data,
@@ -120,14 +113,113 @@ def automation():
         db.session.add(JournalEntry(level="info", message=f"Nouvelle règle créée: {rule.name}"))
         db.session.commit()
         flash("Règle enregistrée.", "success")
-        return redirect(url_for("main.automation"))
+        redirect_url = url_for("main.automation") + ("?" + filters_query if filters_query else "")
+        return redirect(redirect_url)
 
     rules = query.all()
     return render_template(
         "dashboard/automation.html",
         form=form,
         rules=rules,
-        filters={"q": search},
+        filters=filters,
+        filters_query=filters_query,
+        form_action=url_for("main.automation") + ("?" + filters_query if filters_query else ""),
+        form_title="Créer une règle",
+        form_subtitle="Définissez les déclencheurs et actions pour automatiser vos scénarios.",
+        submit_label="Enregistrer",
+        cancel_url=None,
+        editing_rule_id=None,
+    )
+
+
+@main_bp.route("/automatisation/<int:rule_id>/modifier", methods=["GET", "POST"])
+@login_required
+def edit_rule(rule_id: int):
+    rule = AutomationRule.query.get_or_404(rule_id)
+    if rule.owner != current_user and current_user.role != "admin":
+        flash("Accès refusé.", "danger")
+        return redirect(url_for("main.automation"))
+
+    form = AutomationRuleForm(obj=rule)
+
+    search = request.args.get("q", "").strip()
+    owner_id = request.args.get("owner", "")
+    sort = request.args.get("sort", "")
+    query = AutomationRule.query.join(User)
+
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                AutomationRule.name.ilike(like),
+                AutomationRule.trigger.ilike(like),
+                AutomationRule.action.ilike(like),
+            )
+        )
+
+    if owner_id.isdigit():
+        query = query.filter(AutomationRule.owner_id == int(owner_id))
+
+    if sort == "name":
+        query = query.order_by(AutomationRule.name.asc())
+    else:
+        query = query.order_by(AutomationRule.created_at.desc())
+
+    filters = {"q": search, "owner": owner_id, "sort": sort}
+    filters_query = urlencode({k: v for k, v in filters.items() if v})
+
+    if form.validate_on_submit():
+        original = {"name": rule.name, "trigger": rule.trigger, "action": rule.action}
+        updated = {
+            "name": form.name.data,
+            "trigger": form.trigger.data,
+            "action": form.action.data,
+        }
+        changes = build_changes(original, updated, ["name", "trigger", "action"])
+
+        rule.name = updated["name"]
+        rule.trigger = updated["trigger"]
+        rule.action = updated["action"]
+
+        if changes:
+            db.session.add(
+                JournalEntry(
+                    level="info",
+                    message=f"Règle modifiée: {rule.name}",
+                    details={
+                        "entity": "automation_rule",
+                        "rule_id": rule.id,
+                        "changes": changes,
+                        "updated_by": current_user.username,
+                    },
+                )
+            )
+
+        db.session.commit()
+        flash("Règle mise à jour.", "success")
+        redirect_url = url_for("main.automation") + ("?" + filters_query if filters_query else "")
+        return redirect(redirect_url)
+
+    rules = query.all()
+
+    form_action = url_for("main.edit_rule", rule_id=rule.id)
+    cancel_url = url_for("main.automation")
+    if filters_query:
+        form_action = f"{form_action}?{filters_query}"
+        cancel_url = f"{cancel_url}?{filters_query}"
+
+    return render_template(
+        "dashboard/automation.html",
+        form=form,
+        rules=rules,
+        filters=filters,
+        filters_query=filters_query,
+        form_action=form_action,
+        form_title="Modifier la règle",
+        form_subtitle=f"Dernière mise à jour le {rule.updated_at.strftime('%d/%m/%Y %H:%M') if rule.updated_at else rule.created_at.strftime('%d/%m/%Y %H:%M')}",
+        submit_label="Mettre à jour",
+        cancel_url=cancel_url,
+        editing_rule_id=rule.id,
     )
 
 
