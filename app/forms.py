@@ -1,7 +1,17 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField
-from wtforms import BooleanField, PasswordField, SelectField, StringField, SubmitField, TextAreaField
-from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional, Regexp
+from wtforms import (
+    BooleanField,
+    DecimalField,
+    HiddenField,
+    IntegerField,
+    PasswordField,
+    SelectField,
+    StringField,
+    SubmitField,
+    TextAreaField,
+)
+from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange, Optional, Regexp
 
 
 class LoginForm(FlaskForm):
@@ -13,8 +23,29 @@ class LoginForm(FlaskForm):
 
 class AutomationRuleForm(FlaskForm):
     name = StringField("Nom", validators=[DataRequired(), Length(max=120)])
-    trigger = StringField("Déclencheur", validators=[DataRequired(), Length(max=255)])
-    action = TextAreaField("Action", validators=[DataRequired(), Length(max=255)])
+    sensor_type = SelectField("Capteur", validators=[DataRequired()])
+    sensor_id = SelectField("Identifiant capteur", validators=[Optional()])
+    sensor_metric = SelectField("Mesure", validators=[DataRequired()])
+    operator = SelectField(
+        "Condition",
+        choices=[(">", ">"), (">=", "≥"), ("<", "<"), ("<=", "≤"), ("==", "="), ("!=", "≠")],
+        validators=[DataRequired()],
+    )
+    threshold = DecimalField("Seuil", places=2, validators=[DataRequired()], default=0)
+    relay_channel = SelectField("Relais à commander", coerce=int, validators=[DataRequired()])
+    relay_action = SelectField(
+        "Action",
+        choices=[("on", "Allumer"), ("off", "Éteindre"), ("toggle", "Basculer")],
+        validators=[DataRequired()],
+    )
+    trigger = HiddenField()
+    action = HiddenField()
+    cooldown_seconds = IntegerField(
+        "Temps de repos (secondes)",
+        validators=[Optional(), NumberRange(min=0, max=86400)],
+        default=300,
+    )
+    enabled = BooleanField("Activer la règle", default=True)
     submit = SubmitField("Enregistrer la règle")
 
 

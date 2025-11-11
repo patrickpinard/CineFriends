@@ -2,11 +2,16 @@
 {% block title %}Dashboard{% endblock %}
 {% block header_title %}Tableau de bord{% endblock %}
 {% block content %}
-<div class="grid gap-6 md:grid-cols-3">
+<div class="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 class="text-sm uppercase tracking-wide text-slate-500">Règles</h2>
         <p class="mt-2 text-4xl font-semibold text-slate-900">{{ rules_count }}</p>
-        <p class="mt-2 text-sm text-slate-600">Règles d’automatisation actives</p>
+        <p class="mt-2 text-sm text-slate-600">Total des scénarios configurés</p>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 class="text-sm uppercase tracking-wide text-slate-500">Actives</h2>
+        <p class="mt-2 text-4xl font-semibold text-teal-600">{{ active_rules }}</p>
+        <p class="mt-2 text-sm text-slate-600">Règles d’automatisation en service</p>
     </div>
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 class="text-sm uppercase tracking-wide text-slate-500">Journal</h2>
@@ -14,35 +19,116 @@
         <p class="mt-2 text-sm text-slate-600">Entrées enregistrées</p>
     </div>
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 class="text-sm uppercase tracking-wide text-slate-500">Sécurité</h2>
-        <div class="mt-4 space-y-3 text-sm text-slate-600">
-            <div class="flex items-center justify-between">
-                <span>Statut du Dashboard</span>
-                <span class="inline-flex items-center gap-1 rounded-full bg-teal-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-600">
-                    <span class="h-2 w-2 rounded-full bg-teal-500"></span> Actif
-                </span>
-            </div>
-            <div class="flex items-center justify-between">
-                <span>Notifications critiques</span>
-                <span class="text-xs uppercase tracking-wide text-slate-400">Synchronisées</span>
-            </div>
-            <div class="flex items-center justify-between">
-                <span>2FA</span>
-                {% if current_user.twofa_enabled %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-teal-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-600">Active</span>
-                {% else %}
-                <span class="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Désactivée</span>
-                {% endif %}
-            </div>
-            <a href="{{ url_for('main.profile') }}" class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-teal-600 transition hover:text-teal-500">
-                Voir le résumé sécurité
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-                </svg>
-            </a>
-        </div>
+        <h2 class="text-sm uppercase tracking-wide text-slate-500">Journal (24h)</h2>
+        <p class="mt-2 text-4xl font-semibold text-slate-900">{{ journal_last_24h }}</p>
+        <p class="mt-2 text-sm text-slate-600">Événements sur les dernières 24&nbsp;heures</p>
     </div>
 </div>
+
+{% if relays_available %}
+<section class="mt-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <h2 class="text-lg font-semibold text-slate-900">Relais</h2>
+            {% if relay_manual_disabled %}
+            <p class="mt-1 text-sm text-amber-600">Relais non détectés sur cette plateforme. Les interrupteurs sont désactivés.</p>
+            {% else %}
+            <p class="mt-1 text-sm text-slate-500">Commandes manuelles pour test. Un relais est verrouillé si une règle active le pilote.</p>
+            {% endif %}
+        </div>
+        <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Mode {{ 'active low' if relays_active_low else 'active high' }}
+        </span>
+    </div>
+    <div class="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {% for relay in relay_cards %}
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <header class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-xs uppercase tracking-wide text-slate-400">{{ relay.label }}</p>
+                    <h3 class="text-base font-semibold text-slate-900">GPIO {{ relay.pin }}</h3>
+                </div>
+                {% if relay.state == 'on' %}
+                <span class="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span> On
+                </span>
+                {% elif relay.state == 'off' %}
+                <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <span class="h-2.5 w-2.5 rounded-full bg-slate-400"></span> Off
+                </span>
+                {% else %}
+                <span class="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span> Inconnu
+                </span>
+                {% endif %}
+            </header>
+            {% if relay.rules %}
+            <div class="mt-3 rounded-xl bg-teal-50/80 p-3 text-xs text-teal-700">
+                <p class="font-semibold uppercase tracking-wide">Contrôlé par l’automatisation</p>
+                <ul class="mt-1 list-inside list-disc space-y-1">
+                    {% for name in relay.rules %}
+                    <li>{{ name }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            <form method="post" action="{{ url_for('main.relay_command', channel=relay.channel) }}" class="mt-5">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="command" value="{{ 'toggle' if relay.state != 'on' else 'off' }}">
+                <label class="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
+                    <span class="text-sm font-medium text-slate-600">
+                        {% if relay.rules %}
+                            Contrôle automatisé
+                        {% elif relay_manual_disabled %}
+                            Relais non détecté
+                        {% else %}
+                            Commande manuelle
+                        {% endif %}
+                    </span>
+                    <input type="checkbox"
+                           class="relative h-5 w-10 cursor-pointer appearance-none rounded-full border border-slate-300 bg-slate-200 transition before:absolute before:left-0.5 before:top-1/2 before:h-4 before:w-4 before:-translate-y-1/2 before:rounded-full before:bg-white before:shadow-sm before:transition checked:bg-teal-500 checked:before:translate-x-5 focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:before:bg-slate-300"
+                           {% if relay.state == 'on' %}checked{% endif %}
+                           {% if relay.rules or relay_manual_disabled %}disabled{% endif %}
+                           onchange="this.form.command.value = this.checked ? 'on' : 'off'; this.form.submit();">
+                </label>
+            </form>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% else %}
+<section class="mt-6 rounded-[28px] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-soft">
+    <h2 class="text-lg font-semibold text-slate-900">Relais</h2>
+    <p class="mt-1 text-amber-600">Relais non détectés sur cette plateforme. Les commandes restent visibles à titre de démonstration.</p>
+</section>
+{% endif %}
+
+{% if last_automation_event %}
+<div class="mt-8 rounded-2xl border border-teal-200 bg-teal-50/80 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-teal-500 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M16.24 7.76a6.5 6.5 0 0 1 0 9.19A6.5 6.5 0 1 1 7.05 7.76a6.5 6.5 0 0 1 9.19 0Z" />
+                </svg>
+            </div>
+            <div>
+                <p class="text-sm uppercase tracking-wide text-teal-700">Dernière automatisation</p>
+                <p class="text-base font-semibold text-slate-900">
+                    {{ last_automation_event.created_at.strftime('%d/%m/%Y %H:%M') }}
+                </p>
+            </div>
+        </div>
+        <a href="{{ url_for('main.journal') }}" class="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-teal-600 shadow-sm transition hover:bg-teal-50">
+            Voir les détails
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
+            </svg>
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <div class="mt-8 overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-soft">
     <div class="relative px-6 py-5 sm:px-8">
         <div class="absolute inset-y-0 right-0 h-full w-1/2 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.12),transparent_60%)]"></div>
@@ -67,6 +153,43 @@
         </div>
     </div>
 </div>
+
+{% if sensor_cards %}
+<section class="mt-8">
+    <h2 class="text-lg font-semibold text-slate-900">Capteurs</h2>
+    <p class="mt-1 text-sm text-slate-500">Dernières valeurs relevées par le Raspberry&nbsp;Pi.</p>
+    <div class="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {% for card in sensor_cards %}
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <header class="flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-base font-semibold text-slate-900">{{ card.title }}</h3>
+                    {% if card.subtitle %}
+                    <p class="text-xs uppercase tracking-wide text-slate-400">{{ card.subtitle }}</p>
+                    {% endif %}
+                </div>
+                <span class="text-xs text-slate-400">Maj {{ card.updated_at_text }}</span>
+            </header>
+            <dl class="mt-4 space-y-3">
+                {% for metric in card.metrics %}
+                <div class="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <dt class="text-sm font-medium text-slate-600">{{ metric.label }}</dt>
+                    <dd class="text-sm font-semibold text-slate-900">
+                        {% if metric.value is not none %}
+                        {{ metric.value }} {{ metric.unit }}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                {% endfor %}
+            </dl>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {

@@ -275,6 +275,9 @@
                                  data-notification-menu>
                                 <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                                     <p class="text-sm font-semibold text-slate-700">Notifications</p>
+                                    <button type="button" class="text-xs font-semibold uppercase tracking-wide text-teal-600 transition hover:text-teal-500 disabled:cursor-not-allowed disabled:opacity-50" data-notification-mark-all>
+                                        Tout lus
+                                    </button>
                                 </div>
                                 <div class="max-h-80 overflow-y-auto" data-notification-list>
                                     {% if header_notifications %}
@@ -584,6 +587,7 @@
             const notificationToggle = document.querySelector('[data-notification-toggle]');
             const notificationMenu = document.querySelector('[data-notification-menu]');
             const notificationList = document.querySelector('[data-notification-list]');
+            const notificationMarkAllBtn = document.querySelector('[data-notification-mark-all]');
             const notificationEmptyTemplate = document.getElementById('notification-empty-template');
             const toastContainer = document.getElementById('toast-container');
             const body = document.body;
@@ -708,14 +712,14 @@
             }
 
             function markNotificationsAsRead(ids) {
-                if (!ids || !ids.length) return;
+                const payload = ids && ids.length ? { ids } : {};
                 fetch('{{ url_for("main.notifications_mark_read") }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': CSRF_TOKEN,
                     },
-                    body: JSON.stringify({ ids }),
+                    body: JSON.stringify(payload),
                 }).catch(() => {
                     console.warn('Impossible de mettre à jour les notifications.');
                 });
@@ -736,6 +740,10 @@
                 if (!notificationToggle) return;
                 const badge = notificationToggle.querySelector('[data-notification-badge]');
                 const unreadCount = notificationMenu?.querySelectorAll('[data-unread="true"]').length || 0;
+                const totalCount = notificationMenu?.querySelectorAll('[data-notification-id]').length || 0;
+                if (notificationMarkAllBtn) {
+                    notificationMarkAllBtn.disabled = totalCount === 0;
+                }
                 if (badge && unreadCount <= 0) {
                     badge.remove();
                 } else if (badge) {
@@ -788,6 +796,7 @@
                 const deleteBtn = event.target.closest('[data-notification-delete]');
                 if (!deleteBtn) return;
                 event.preventDefault();
+                event.stopPropagation();
                 const notificationId = Number(deleteBtn.getAttribute('data-notification-delete'));
                 const wrapper = deleteBtn.closest('[data-notification-id]');
                 if (!wrapper || Number.isNaN(notificationId)) return;
@@ -810,6 +819,30 @@
                     const clone = notificationEmptyTemplate.content.cloneNode(true);
                     notificationList.appendChild(clone);
                 }
+            });
+
+            notificationMarkAllBtn?.addEventListener('click', (event) => {
+                event.preventDefault();
+                if (!notificationMenu) return;
+                const items = notificationMenu.querySelectorAll('[data-notification-id]');
+                if (!items.length) return;
+                const ids = [];
+                items.forEach((item) => {
+                    const id = Number(item.getAttribute('data-notification-id'));
+                    if (!Number.isNaN(id)) {
+                        ids.push(id);
+                    }
+                    if (item.getAttribute('data-unread') === 'true') {
+                        item.setAttribute('data-unread', 'false');
+                        item.classList.remove('bg-teal-50/40');
+                    }
+                });
+                if (ids.length) {
+                    markNotificationsAsRead(ids);
+                } else {
+                    markNotificationsAsRead();
+                }
+                updateNotificationBadge();
             });
 
             updateNotificationBadge();

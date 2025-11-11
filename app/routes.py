@@ -11,9 +11,178 @@ from urllib.parse import urlencode
 
 from . import db
 from .forms import AutomationRuleForm, ProfileForm, SettingForm
-from .models import AutomationRule, JournalEntry, Notification, Setting, User
+from .models import AutomationRule, JournalEntry, Notification, SensorReading, Setting, User
 from .services import create_notification
 from .utils import build_changes, build_hardware_overview, delete_avatar, save_avatar
+from .automation_engine import parse_trigger
+SENSOR_LABELS = {
+    "ds18b20": "Sonde intérieure DS18B20",
+    "am2315": "Sonde extérieure AM2315",
+}
+
+SENSOR_NAME_KEYS = {
+    "ds18b20": "Sensor_Name_DS18B20",
+    "am2315": "Sensor_Name_AM2315",
+}
+
+RELAY_NAME_KEYS = {
+    1: "Relay_Name_Ch1",
+    2: "Relay_Name_Ch2",
+    3: "Relay_Name_Ch3",
+}
+
+METRIC_LABELS = {
+    "temperature": "Température",
+    "humidity": "Humidité",
+}
+
+
+def get_setting_value(key: str, default: str) -> str:
+    setting = Setting.query.filter_by(key=key).first()
+    if setting and setting.value:
+        return setting.value
+    return default
+
+
+def get_sensor_display_name(sensor_type: str) -> str:
+    key = SENSOR_NAME_KEYS.get(sensor_type)
+    default = SENSOR_LABELS.get(sensor_type, sensor_type.upper())
+    if not key:
+        return default
+    return get_setting_value(key, default)
+
+
+def _build_sensor_registry() -> dict[str, dict[str, object]]:
+    registry: dict[str, dict[str, object]] = {}
+    readings = (
+        SensorReading.query.order_by(SensorReading.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    for reading in readings:
+        sensor_type = (reading.sensor_type or "").lower()
+        if not sensor_type:
+            continue
+        display_name = get_sensor_display_name(sensor_type)
+        entry = registry.setdefault(
+            sensor_type,
+            {
+                "label": SENSOR_LABELS.get(sensor_type, sensor_type.upper()),
+                "alias": display_name,
+                "ids": set(),
+                "metrics": set(),
+            },
+        )
+        if reading.sensor_id:
+            entry["ids"].add(reading.sensor_id)
+        entry["metrics"].add(reading.metric)
+
+    # Fallbacks pour offrir des options même sans mesures
+    if "ds18b20" not in registry:
+        display_name = get_sensor_display_name("ds18b20")
+        registry["ds18b20"] = {
+            "label": SENSOR_LABELS["ds18b20"],
+            "alias": display_name,
+            "ids": set(),
+            "metrics": {"temperature"},
+        }
+    if "am2315" not in registry:
+        display_name = get_sensor_display_name("am2315")
+        registry["am2315"] = {
+            "label": SENSOR_LABELS["am2315"],
+            "alias": display_name,
+            "ids": set(),
+            "metrics": {"temperature", "humidity"},
+        }
+
+    # Conversion sets -> listes triées
+    for entry in registry.values():
+        entry["ids"] = sorted(entry["ids"])
+        entry["metrics"] = sorted(entry["metrics"])
+    return registry
+
+
+def _hydrate_rule_form(form: AutomationRuleForm, sensor_registry: dict[str, dict[str, object]], relay_pins: dict[int, int]) -> None:
+    sensor_choices = [
+        (sensor_type, data.get("alias") or data["label"])  # type: ignore[index]
+        for sensor_type, data in sensor_registry.items()
+    ]
+    sensor_choices.sort(key=lambda item: item[1])
+    form.sensor_type.choices = sensor_choices or [("", "Aucun capteur disponible")]
+
+    selected_sensor_type = form.sensor_type.data
+    if not selected_sensor_type or selected_sensor_type not in sensor_registry:
+        selected_sensor_type = sensor_choices[0][0] if sensor_choices else ""
+        form.sensor_type.data = selected_sensor_type
+
+    sensor_ids = []
+    metrics = []
+    if selected_sensor_type and selected_sensor_type in sensor_registry:
+        registry_entry = sensor_registry[selected_sensor_type]
+        sensor_ids = [("", "Tous les capteurs")] + [
+            (sensor_id, sensor_id.upper()) for sensor_id in registry_entry["ids"]  # type: ignore[index]
+        ]
+        metrics = [
+            (metric, METRIC_LABELS.get(metric, metric.title()))
+            for metric in registry_entry["metrics"]  # type: ignore[index]
+        ]
+    else:
+        sensor_ids = [("", "Tous les capteurs")]
+        metrics = [("temperature", "Température")]
+
+    form.sensor_id.choices = sensor_ids
+    if form.sensor_id.data not in dict(sensor_ids):
+        form.sensor_id.data = ""
+
+    form.sensor_metric.choices = metrics
+    if form.sensor_metric.data not in dict(metrics):
+        form.sensor_metric.data = metrics[0][0] if metrics else ""
+
+    relay_labels = get_relay_labels()
+    relay_choices = [
+        (channel, f"{relay_labels.get(channel, f'Relais {channel}')} • GPIO {pin}")
+        for channel, pin in sorted(relay_pins.items())
+    ]
+    if not relay_choices:
+        relay_choices = [(0, "Aucun relais disponible")]
+    form.relay_channel.choices = relay_choices
+    if form.relay_channel.data not in dict(relay_choices):
+        form.relay_channel.data = relay_choices[0][0]
+
+
+def build_trigger_expression(sensor_type: str, metric: str, sensor_id: str | None, operator: str, threshold) -> str:
+    base = f"sensor:{sensor_type}.{metric}"
+    if sensor_id:
+        base += f"@{sensor_id}"
+    return f"{base} {operator} {threshold}"
+
+
+def build_action_expression(channel: int, command: str) -> str:
+    return f"relay:{channel}={command}"
+
+
+def parse_relay_action(action: str) -> tuple[int | None, str | None]:
+    for raw_line in action.splitlines():
+        line = raw_line.strip()
+        if not line or not line.lower().startswith("relay:"):
+            continue
+        try:
+            command = line.split(":", 1)[1]
+            channel_part, state_part = command.split("=", 1)
+            channel = int(channel_part.strip())
+            return channel, state_part.strip()
+        except Exception:
+            continue
+    return None, None
+
+from .hardware.gpio_controller import (
+    get_relay_states,
+    get_configured_relay_pins,
+    hardware_available,
+    is_active_low,
+    set_relay_state,
+    get_relay_labels,
+)
 
 try:
     import cv2  # type: ignore
@@ -35,18 +204,48 @@ HARDWARE_SETTING_GROUPS = [
                 "label": "Relais canal 1 (GPIO BCM)",
                 "default": "26",
                 "description": "Broche BCM pour le premier relais (CH1).",
+                "group": "relay_1",
+                "group_title": "Relais 1",
+                "group_subtitle": "Configurer la broche GPIO et le nom utilisé dans l’application.",
+            },
+            {
+                "key": "Relay_Name_Ch1",
+                "label": "Nom du relais 1",
+                "default": "Relais 1",
+                "description": "Nom affiché dans le dashboard et les règles.",
+                "group": "relay_1",
             },
             {
                 "key": "Relay_Ch2",
                 "label": "Relais canal 2 (GPIO BCM)",
                 "default": "20",
                 "description": "Broche BCM pour le deuxième relais (CH2).",
+                "group": "relay_2",
+                "group_title": "Relais 2",
+                "group_subtitle": "Configurer la broche GPIO et le nom utilisé dans l’application.",
+            },
+            {
+                "key": "Relay_Name_Ch2",
+                "label": "Nom du relais 2",
+                "default": "Relais 2",
+                "description": "Nom affiché dans le dashboard et les règles.",
+                "group": "relay_2",
             },
             {
                 "key": "Relay_Ch3",
                 "label": "Relais canal 3 (GPIO BCM)",
                 "default": "21",
                 "description": "Broche BCM pour le troisième relais (CH3).",
+                "group": "relay_3",
+                "group_title": "Relais 3",
+                "group_subtitle": "Configurer la broche GPIO et le nom utilisé dans l’application.",
+            },
+            {
+                "key": "Relay_Name_Ch3",
+                "label": "Nom du relais 3",
+                "default": "Relais 3",
+                "description": "Nom affiché dans le dashboard et les règles.",
+                "group": "relay_3",
             },
         ],
     },
@@ -57,21 +256,42 @@ HARDWARE_SETTING_GROUPS = [
         "items": [
             {
                 "key": "Sensor_DS18B20_Interface",
-                "label": "Sonde intérieure DS18B20 (interface)",
+                "label": "Sonde intérieure DS18B20",
                 "default": "w1",
                 "description": "Interface utilisée pour la sonde 1-Wire (DS18B20).",
+                "group": "sensor_ds18b20",
+                "group_title": "Sonde DS18B20",
+                "group_subtitle": "Définissez l’interface et le nom convivial.",
+            },
+            {
+                "key": "Sensor_Name_DS18B20",
+                "label": "Nom de la sonde DS18B20",
+                "default": "Sonde intérieure",
+                "description": "Alias utilisé dans l’interface et les règles.",
+                "group": "sensor_ds18b20",
             },
             {
                 "key": "Sensor_AM2315_Type",
                 "label": "Sonde extérieure AM2315",
                 "default": "AM2315",
                 "description": "Identifiant du capteur I²C pour la température et l’humidité extérieures.",
+                "group": "sensor_am2315",
+                "group_title": "Sonde AM2315",
+                "group_subtitle": "Définissez l’identifiant I²C, l’adresse et le nom convivial.",
             },
             {
                 "key": "Sensor_AM2315_Address",
                 "label": "Adresse I²C AM2315",
                 "default": "0x5C",
                 "description": "Adresse I²C par défaut du capteur AM2315.",
+                "group": "sensor_am2315",
+            },
+            {
+                "key": "Sensor_Name_AM2315",
+                "label": "Nom de la sonde AM2315",
+                "default": "Sonde extérieure",
+                "description": "Alias utilisé dans l’interface et les règles.",
+                "group": "sensor_am2315",
             },
         ],
     },
@@ -108,26 +328,209 @@ def _camera_stream() -> Generator[bytes, None, None]:
 @main_bp.route("/")
 @login_required
 def dashboard():
+    now = datetime.utcnow()
     rules_count = AutomationRule.query.count()
+    active_rules = AutomationRule.query.filter_by(enabled=True).count()
     journal_count = JournalEntry.query.count()
-    today = datetime.utcnow().date()
-    chart_labels = [(today - timedelta(days=i)).strftime('%d/%m') for i in range(6, -1, -1)]
-    chart_temperatures = [21.5, 22.1, 20.8, 19.9, 21.2, 22.4, 21.0]
-    chart_humidity = [48, 51, 55, 58, 53, 49, 52]
+    journal_last_24h = JournalEntry.query.filter(JournalEntry.created_at >= now - timedelta(days=1)).count()
+    last_automation_event = (
+        JournalEntry.query.filter(JournalEntry.message == "Automatisation déclenchée")
+        .order_by(JournalEntry.created_at.desc())
+        .first()
+    )
+
+    # Agrégation des données capteurs AM2315
+    start_window = now - timedelta(hours=24)
+    am_readings = (
+        SensorReading.query.filter(
+            SensorReading.sensor_type == "am2315",
+            SensorReading.metric.in_(["temperature", "humidity"]),
+            SensorReading.created_at >= start_window,
+        )
+        .order_by(SensorReading.created_at.asc())
+        .all()
+    )
+    buckets: dict[datetime, dict[str, list[float]]] = {}
+    for reading in am_readings:
+        if reading.value is None:
+            continue
+        bucket = reading.created_at.replace(minute=0, second=0, microsecond=0)
+        bucket_data = buckets.setdefault(bucket, {"temperature": [], "humidity": []})
+        bucket_data.setdefault(reading.metric, []).append(float(reading.value))
+
+    chart_labels: list[str] = []
+    chart_temperatures: list[float | None] = []
+    chart_humidity: list[float | None] = []
+    for bucket in sorted(buckets.keys()):
+        slot = bucket.strftime("%H:%M")
+        data = buckets[bucket]
+        temp_values = data.get("temperature", [])
+        hum_values = data.get("humidity", [])
+        chart_labels.append(slot)
+        chart_temperatures.append(round(sum(temp_values) / len(temp_values), 2) if temp_values else None)
+        chart_humidity.append(round(sum(hum_values) / len(hum_values), 2) if hum_values else None)
+
+    if not chart_labels:
+        chart_labels = [(now - timedelta(hours=i)).strftime("%H:%M") for i in range(12, -1, -1)]
+        chart_labels.reverse()
+        chart_temperatures = [None] * len(chart_labels)
+        chart_humidity = [None] * len(chart_labels)
+
+    # Résumé des capteurs
+    recent_readings = (
+        SensorReading.query.order_by(SensorReading.created_at.desc()).limit(200).all()
+    )
+    sensor_map: dict[tuple[str, str], dict[str, object]] = {}
+    for reading in recent_readings:
+        key = (reading.sensor_type, (reading.sensor_id or "").lower())
+        entry = sensor_map.setdefault(
+            key,
+            {
+                "sensor_type": reading.sensor_type,
+                "sensor_id": reading.sensor_id,
+                "metrics": {},
+                "updated_at": reading.created_at,
+            },
+        )
+        if reading.metric not in entry["metrics"]:
+            entry["metrics"][reading.metric] = {
+                "value": round(reading.value, 2) if reading.value is not None else None,
+                "unit": reading.unit,
+            }
+        if reading.created_at > entry["updated_at"]:
+            entry["updated_at"] = reading.created_at
+
+    sensor_cards: list[dict[str, object]] = []
+    for key, data in sensor_map.items():
+        sensor_type, sensor_id = key
+        title = get_sensor_display_name(sensor_type)
+        subtitle = None
+        if sensor_type == "ds18b20" and sensor_id:
+            subtitle = f"ID {sensor_id.upper()}"
+        elif sensor_type == "am2315":
+            subtitle = "Capteur combiné (température & humidité)"
+        metrics = []
+        for metric_key, metric_data in data["metrics"].items():
+            label = "Température" if metric_key == "temperature" else "Humidité" if metric_key == "humidity" else metric_key.title()
+            metrics.append(
+                {
+                    "label": label,
+                    "value": metric_data["value"],
+                    "unit": metric_data.get("unit") or "",
+                }
+            )
+        sensor_cards.append(
+            {
+                "title": title,
+                "subtitle": subtitle,
+                "metrics": metrics,
+                "updated_at": data["updated_at"],
+                "updated_at_text": data["updated_at"].strftime("%d/%m/%Y %H:%M"),
+            }
+        )
+    sensor_cards.sort(key=lambda item: item["title"])
+
+    # Relais
+    relay_pins = get_configured_relay_pins()
+    relay_labels = get_relay_labels()
+    relay_states = get_relay_states()
+    relays_available = hardware_available() and bool(relay_pins)
+    relays_active_low = is_active_low()
+    relay_cards = []
+    channel_rule_map: dict[int, list[str]] = {}
+    for rule in AutomationRule.query.filter(AutomationRule.enabled.is_(True)).all():
+        trigger = parse_trigger(rule.trigger)
+        if not trigger:
+            continue
+        lines = [line.strip() for line in rule.action.splitlines() if line.strip()]
+        for line in lines:
+            if not line.lower().startswith("relay:"):
+                continue
+            try:
+                command = line.split(":", 1)[1]
+                channel_part = command.split("=", 1)[0]
+                channel_value = int(channel_part.strip())
+            except Exception:
+                continue
+            channel_rule_map.setdefault(channel_value, []).append(rule.name)
+
+    for channel in sorted(relay_pins.keys()):
+        relay_cards.append(
+            {
+                "channel": channel,
+                "label": relay_labels.get(channel, f"Relais #{channel}"),
+                "pin": relay_pins[channel],
+                "state": relay_states.get(channel, "unknown"),
+                "locked": channel in channel_rule_map,
+                "rules": channel_rule_map.get(channel, []),
+            }
+        )
+
     return render_template(
         "dashboard/index.html",
         rules_count=rules_count,
+        active_rules=active_rules,
         journal_count=journal_count,
+        journal_last_24h=journal_last_24h,
+        last_automation_event=last_automation_event,
         chart_labels=chart_labels,
         chart_temperatures=chart_temperatures,
         chart_humidity=chart_humidity,
+        sensor_cards=sensor_cards,
+        relay_cards=relay_cards,
+        relays_available=relays_available,
+        relays_active_low=relays_active_low,
+        relay_manual_disabled=not relays_available,
     )
+
+
+@main_bp.route("/relays/<int:channel>/command", methods=["POST"])
+@login_required
+def relay_command(channel: int):
+    if current_user.role != "admin":
+        flash("Accès réservé à l’administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
+    command = (request.form.get("command") or "").strip().lower()
+    if not command:
+        flash("Commande invalide.", "danger")
+        return redirect(url_for("main.dashboard"))
+
+    result = set_relay_state(channel, command)
+    status = result.get("status")
+    message = result.get("message", "Commande exécutée.")
+
+    db.session.add(
+        JournalEntry(
+            level="info" if status == "ok" else "warning",
+            message=f"Commande relais ch{channel}",
+            details={
+                "channel": channel,
+                "command": command,
+                "result": result,
+                "issued_by": current_user.username,
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+    )
+    db.session.commit()
+
+    if status == "ok":
+        flash(message, "success")
+    elif status == "unavailable":
+        flash("Contrôle des relais indisponible sur cette plateforme.", "warning")
+    else:
+        flash(message, "danger")
+    return redirect(url_for("main.dashboard"))
 
 
 @main_bp.route("/automatisation", methods=["GET", "POST"])
 @login_required
 def automation():
     form = AutomationRuleForm()
+
+    sensor_registry = _build_sensor_registry()
+    relay_pins = get_configured_relay_pins()
+    _hydrate_rule_form(form, sensor_registry, relay_pins)
 
     search = request.args.get("q", "").strip()
     owner_id = request.args.get("owner", "")
@@ -157,10 +560,24 @@ def automation():
     filters_query = urlencode({k: v for k, v in filters.items() if v})
 
     if form.validate_on_submit():
+        cooldown = form.cooldown_seconds.data if form.cooldown_seconds.data is not None else 300
+        trigger_str = build_trigger_expression(
+            sensor_type=form.sensor_type.data,
+            metric=form.sensor_metric.data,
+            sensor_id=form.sensor_id.data,
+            operator=form.operator.data,
+            threshold=form.threshold.data,
+        )
+        action_str = build_action_expression(
+            channel=form.relay_channel.data,
+            command=form.relay_action.data,
+        )
         rule = AutomationRule(
             name=form.name.data,
-            trigger=form.trigger.data,
-            action=form.action.data,
+            trigger=trigger_str,
+            action=action_str,
+            cooldown_seconds=cooldown,
+            enabled=form.enabled.data,
             owner=current_user,
         )
         db.session.add(rule)
@@ -183,6 +600,7 @@ def automation():
         submit_label="Enregistrer",
         cancel_url=None,
         editing_rule_id=None,
+        sensor_registry_json=json.dumps(sensor_registry),
     )
 
 
@@ -194,7 +612,29 @@ def edit_rule(rule_id: int):
         flash("Accès refusé.", "danger")
         return redirect(url_for("main.automation"))
 
-    form = AutomationRuleForm(obj=rule)
+    form = AutomationRuleForm()
+
+    sensor_registry = _build_sensor_registry()
+    relay_pins = get_configured_relay_pins()
+
+    if request.method == "GET":
+        form.name.data = rule.name
+        form.cooldown_seconds.data = rule.cooldown_seconds
+        form.enabled.data = rule.enabled
+        trigger = parse_trigger(rule.trigger)
+        if trigger:
+            form.sensor_type.data = trigger.sensor_type
+            form.sensor_metric.data = trigger.metric
+            form.operator.data = trigger.operator
+            form.threshold.data = trigger.threshold
+            form.sensor_id.data = trigger.sensor_id or ""
+        action_channel, action_command = parse_relay_action(rule.action)
+        if action_channel:
+            form.relay_channel.data = action_channel
+        if action_command:
+            form.relay_action.data = action_command
+
+    _hydrate_rule_form(form, sensor_registry, relay_pins)
 
     search = request.args.get("q", "").strip()
     owner_id = request.args.get("owner", "")
@@ -223,17 +663,39 @@ def edit_rule(rule_id: int):
     filters_query = urlencode({k: v for k, v in filters.items() if v})
 
     if form.validate_on_submit():
-        original = {"name": rule.name, "trigger": rule.trigger, "action": rule.action}
+        cooldown = form.cooldown_seconds.data if form.cooldown_seconds.data is not None else 300
+        trigger_str = build_trigger_expression(
+            sensor_type=form.sensor_type.data,
+            metric=form.sensor_metric.data,
+            sensor_id=form.sensor_id.data,
+            operator=form.operator.data,
+            threshold=form.threshold.data,
+        )
+        action_str = build_action_expression(
+            channel=form.relay_channel.data,
+            command=form.relay_action.data,
+        )
+        original = {
+            "name": rule.name,
+            "trigger": rule.trigger,
+            "action": rule.action,
+            "cooldown_seconds": rule.cooldown_seconds,
+            "enabled": rule.enabled,
+        }
         updated = {
             "name": form.name.data,
-            "trigger": form.trigger.data,
-            "action": form.action.data,
+            "trigger": trigger_str,
+            "action": action_str,
+            "cooldown_seconds": cooldown,
+            "enabled": form.enabled.data,
         }
-        changes = build_changes(original, updated, ["name", "trigger", "action"])
+        changes = build_changes(original, updated, ["name", "trigger", "action", "cooldown_seconds", "enabled"])
 
         rule.name = updated["name"]
         rule.trigger = updated["trigger"]
         rule.action = updated["action"]
+        rule.cooldown_seconds = updated["cooldown_seconds"]
+        rule.enabled = updated["enabled"]
 
         if changes:
             db.session.add(
@@ -274,6 +736,7 @@ def edit_rule(rule_id: int):
         submit_label="Mettre à jour",
         cancel_url=cancel_url,
         editing_rule_id=rule.id,
+        sensor_registry_json=json.dumps(sensor_registry),
     )
 
 
@@ -311,6 +774,8 @@ def camera_feed():
 @login_required
 def settings():
     form = SettingForm()
+    form.key.validators = []
+    form.value.validators = []
     settings_list = Setting.query.order_by(Setting.key.asc()).all()
     settings_map = {setting.key: setting for setting in settings_list}
 
@@ -338,37 +803,66 @@ def settings():
         return redirect(url_for("main.settings"))
 
     if form.validate_on_submit():
-        setting = Setting.query.filter_by(key=form.key.data).first()
-        before_value = setting.value if setting else None
-        if not setting:
-            setting = Setting(key=form.key.data)
-            db.session.add(setting)
-        setting.value = form.value.data
-        db.session.add(
-            JournalEntry(
-                level="info",
-                message=f"Paramètre mis à jour : {setting.key}",
-                details={"before": before_value, "after": form.value.data},
-            )
-        )
-        db.session.commit()
-        flash("Paramètre enregistré.", "success")
-        return redirect(url_for("main.settings"))
+        submitted = request.form.to_dict(flat=True)
+        updated_items = []
+        for key, value in submitted.items():
+            if key in {"csrf_token", "refresh_hardware", "submit"} or not key.startswith("setting__"):
+                continue
+            setting_key = key.split("setting__", 1)[1]
+            setting = Setting.query.filter_by(key=setting_key).first()
+            before_value = setting.value if setting else None
+            if not setting:
+                setting = Setting(key=setting_key)
+                db.session.add(setting)
+            setting.value = value
+            updated_items.append((setting_key, before_value, value))
+
+        if updated_items:
+            for setting_key, before_value, after_value in updated_items:
+                db.session.add(
+                    JournalEntry(
+                        level="info",
+                        message=f"Paramètre mis à jour : {setting_key}",
+                        details={"before": before_value, "after": after_value},
+                    )
+                )
+            db.session.commit()
+            flash("Paramètres enregistrés.", "success")
+            return redirect(url_for("main.settings"))
 
     hardware_groups = []
     hardware_keys = set()
     for group in HARDWARE_SETTING_GROUPS:
         items = []
+        grouped_entries: dict[str, dict[str, object]] = {}
         for item in group["items"]:
             setting_obj = settings_map.get(item["key"])
-            items.append(
-                {
-                    **item,
-                    "value": setting_obj.value if setting_obj else item["default"],
-                    "updated_at": setting_obj.updated_at if setting_obj else None,
-                }
-            )
+            payload = {
+                **item,
+                "value": setting_obj.value if setting_obj else item["default"],
+                "updated_at": setting_obj.updated_at if setting_obj else None,
+            }
+            group_id = item.get("group")
+            if group_id:
+                bucket = grouped_entries.setdefault(
+                    group_id,
+                    {
+                        "group_id": group_id,
+                        "is_group": True,
+                        "title": item.get("group_title"),
+                        "subtitle": item.get("group_subtitle"),
+                        "entries": [],
+                    },
+                )
+                if not bucket.get("title") and item.get("group_title"):
+                    bucket["title"] = item.get("group_title")
+                if not bucket.get("subtitle") and item.get("group_subtitle"):
+                    bucket["subtitle"] = item.get("group_subtitle")
+                bucket["entries"].append(payload)
+            else:
+                items.append(payload)
             hardware_keys.add(item["key"])
+        items.extend(grouped_entries.values())
         hardware_groups.append(
             {
                 "id": group["id"],

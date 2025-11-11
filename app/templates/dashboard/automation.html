@@ -30,18 +30,70 @@
                 {% endfor %}
             </div>
             <div>
-                {{ form.trigger.label(class_='text-sm font-medium text-slate-600') }}
-                {{ form.trigger(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
-                {% for error in form.trigger.errors %}
-                <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
-                {% endfor %}
+                <div class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                    <div>
+                        {{ form.sensor_type.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.sensor_type(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        <select name="sensor_id" class="hidden" data-selected="{{ form.sensor_id.data or '' }}"></select>
+                    </div>
+                    <div class="grid gap-4 md:grid-cols-[120px,120px,1fr]">
+                        <div>
+                            {{ form.sensor_metric.label(class_='text-sm font-medium text-slate-600') }}
+                            {{ form.sensor_metric(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        </div>
+                        <div>
+                            {{ form.operator.label(class_='text-sm font-medium text-slate-600') }}
+                            {{ form.operator(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        </div>
+                        <div>
+                            {{ form.threshold.label(class_='text-sm font-medium text-slate-600') }}
+                            {{ form.threshold(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', step='0.1') }}
+                            {% for error in form.threshold.errors %}
+                            <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div>
-                {{ form.action.label(class_='text-sm font-medium text-slate-600') }}
-                {{ form.action(class_='mt-1 min-h-[140px] w-full rounded-lg border border-slate-200 bg-white text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
-                {% for error in form.action.errors %}
-                <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
-                {% endfor %}
+            <div class="grid gap-5 sm:grid-cols-2">
+                <div>
+                    {{ form.cooldown_seconds.label(class_='text-sm font-medium text-slate-600') }}
+                    <div class="mt-1 flex items-center gap-3">
+                        {{ form.cooldown_seconds(class_='w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        <span class="text-xs text-slate-400">0 pour aucun délai</span>
+                    </div>
+                    {% for error in form.cooldown_seconds.errors %}
+                    <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div class="flex items-center gap-3 pt-1">
+                    {{ form.enabled(class_='h-5 w-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500') }}
+                    <span class="text-sm text-slate-600">Activer cette règle</span>
+                </div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        {{ form.relay_channel.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.relay_channel(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                    </div>
+                    <div>
+                        {{ form.relay_action.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.relay_action(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                    </div>
+                </div>
+            </div>
+            {{ form.trigger() }}
+            {{ form.action() }}
+            <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600">
+                <p class="font-semibold text-slate-700">Aperçu de la règle</p>
+                <p class="mt-2 text-sm">
+                    Déclencheur&nbsp;: <code id="trigger-preview" class="rounded bg-white px-2 py-1 text-xs text-slate-700"></code><br>
+                    Action&nbsp;: <code id="action-preview" class="rounded bg-white px-2 py-1 text-xs text-slate-700"></code>
+                </p>
+                <p class="mt-2 text-xs text-slate-500">
+                    Les champs ci-dessus génèrent automatiquement l’expression d’automatisation.
+                </p>
             </div>
             <div class="flex justify-end">
                 <button type="submit" class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400">
@@ -101,7 +153,7 @@
                                 {% endif %}
                             </div>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
                             {% if editing_rule_id == rule.id %}
                             <span class="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-500/10 px-4 py-2 text-sm font-semibold text-teal-600">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -128,6 +180,25 @@
                                 </button>
                             </form>
                         </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold {{ 'bg-emerald-100 text-emerald-700' if rule.enabled else 'bg-slate-200 text-slate-500' }}">
+                            <span class="h-2.5 w-2.5 rounded-full {{ 'bg-emerald-500' if rule.enabled else 'bg-slate-400' }}"></span>
+                            {{ 'Active' if rule.enabled else 'Inactive' }}
+                        </span>
+                        <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                            Cooldown : {{ rule.cooldown_seconds or 0 }} s
+                        </span>
+                        {% if rule.last_triggered_at %}
+                        <span class="inline-flex items-center gap-2 rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-700">
+                            Dernier déclenchement : {{ rule.last_triggered_at.strftime('%d/%m/%Y %H:%M') }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                            Jamais déclenchée
+                        </span>
+                        {% endif %}
                     </div>
 
                     <div class="flex flex-col gap-4 md:flex-row">
@@ -201,4 +272,96 @@
     });
 </script>
 {% endif %}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const registry = {{ sensor_registry_json | safe }};
+        const form = document.getElementById("automation-create-form");
+        if (!form) return;
+
+        const sensorTypeSelect = form.querySelector("[name='sensor_type']");
+        const sensorIdSelect = form.querySelector("[name='sensor_id']");
+        const metricSelect = form.querySelector("[name='sensor_metric']");
+        const operatorSelect = form.querySelector("[name='operator']");
+        const thresholdInput = form.querySelector("[name='threshold']");
+        const relayChannelSelect = form.querySelector("[name='relay_channel']");
+        const relayActionSelect = form.querySelector("[name='relay_action']");
+        const triggerField = form.querySelector("[name='trigger']");
+        const actionField = form.querySelector("[name='action']");
+        const triggerPreview = document.getElementById("trigger-preview");
+        const actionPreview = document.getElementById("action-preview");
+
+        function hydrateForType(sensorType) {
+            const entry = registry[sensorType] || {};
+            const ids = [["", "Tous les capteurs"], ...((entry.ids || []).map(id => [id, id.toUpperCase()]))];
+            sensorIdSelect.innerHTML = "";
+            const storedId = sensorIdSelect.dataset.selected || "";
+            let matchedId = false;
+            ids.forEach(([value, label]) => {
+                const option = new Option(label, value);
+                if (value === storedId) {
+                    option.selected = true;
+                    matchedId = true;
+                }
+                sensorIdSelect.add(option);
+            });
+
+            if (!matchedId) {
+                sensorIdSelect.selectedIndex = 0;
+                sensorIdSelect.dataset.selected = sensorIdSelect.value;
+            }
+
+            const metrics = entry.metrics || [];
+            metricSelect.innerHTML = "";
+            metrics.forEach(metric => {
+                const label = {
+                    temperature: "Température",
+                    humidity: "Humidité",
+                }[metric] || metric;
+                const option = new Option(label, metric);
+                metricSelect.add(option);
+            });
+        }
+
+        function buildExpressions() {
+            const sensorType = sensorTypeSelect.value;
+            const sensorId = sensorIdSelect.value;
+            const metric = metricSelect.value;
+            const operator = operatorSelect.value;
+            const threshold = thresholdInput.value || "0";
+            const relayChannel = relayChannelSelect.value;
+            const relayAction = relayActionSelect.value;
+
+            let trigger = `sensor:${sensorType}.${metric}`;
+            if (sensorId) {
+                trigger += `@${sensorId}`;
+            }
+            trigger += ` ${operator} ${threshold}`;
+            const action = `relay:${relayChannel}=${relayAction}`;
+
+            sensorIdSelect.dataset.selected = sensorId;
+            triggerField.value = trigger;
+            actionField.value = action;
+
+            if (triggerPreview) triggerPreview.textContent = trigger;
+            if (actionPreview) actionPreview.textContent = action;
+        }
+
+        if (sensorTypeSelect) {
+            hydrateForType(sensorTypeSelect.value);
+            sensorTypeSelect.addEventListener("change", () => {
+                hydrateForType(sensorTypeSelect.value);
+                buildExpressions();
+            });
+        }
+
+        [sensorIdSelect, metricSelect, operatorSelect, thresholdInput, relayChannelSelect, relayActionSelect].forEach(el => {
+            if (!el) return;
+            el.addEventListener("change", buildExpressions);
+            el.addEventListener("input", buildExpressions);
+        });
+
+        buildExpressions();
+        form.addEventListener("submit", buildExpressions);
+    });
+</script>
 {% endblock %}

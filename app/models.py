@@ -48,6 +48,9 @@ class AutomationRule(db.Model):
     action = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    enabled = db.Column(db.Boolean, default=True)
+    cooldown_seconds = db.Column(db.Integer, default=300)
+    last_triggered_at = db.Column(db.DateTime, nullable=True)
 
     owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
@@ -65,6 +68,17 @@ class Setting(db.Model):
     key = db.Column(db.String(120), unique=True, nullable=False)
     value = db.Column(db.String(255), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SensorReading(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sensor_type = db.Column(db.String(50), nullable=False)
+    sensor_id = db.Column(db.String(120), nullable=True)
+    metric = db.Column(db.String(50), nullable=False)
+    value = db.Column(db.Float, nullable=True)
+    unit = db.Column(db.String(20), nullable=True)
+    extra = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
 class Notification(db.Model):

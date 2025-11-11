@@ -1,3 +1,4 @@
+import atexit
 import hashlib
 import os
 from datetime import datetime
@@ -8,6 +9,8 @@ from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from sqlalchemy import text
 from flask_cors import CORS
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 from config import Config
 
@@ -15,6 +18,7 @@ from config import Config
 db = SQLAlchemy()
 login_manager = LoginManager()
 csrf = CSRFProtect()
+scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "UTC"))
 
 
 def create_app():
@@ -41,6 +45,7 @@ def create_app():
     from .routes import main_bp
     from .auth import auth_bp
     from .admin import admin_bp
+    from .tasks import collect_sensor_readings
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -86,6 +91,32 @@ def create_app():
         return {"gradient": gradient, "accent": accent, "shadow": shadow}
 
     app.jinja_env.globals["avatar_palette"] = avatar_palette
+
+    def _start_scheduler():
+        if not app.config.get("SENSOR_POLL_ENABLED", True):
+            app.logger.info("Scheduler désactivé par configuration.")
+            return
+        if app.config.get("SCHEDULER_STARTED"):
+            return
+        interval = int(app.config.get("SENSOR_POLL_INTERVAL_MINUTES", 5))
+        job_id = "sensor_readings"
+        if scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+        scheduler.add_job(
+            func=lambda: collect_sensor_readings(app),
+            trigger=IntervalTrigger(minutes=interval),
+            id=job_id,
+            replace_existing=True,
+            max_instances=1,
+        )
+        if not scheduler.running:
+            scheduler.start()
+            atexit.register(lambda: scheduler.shutdown(wait=False))
+        app.config["SCHEDULER_STARTED"] = True
+        app.logger.info("Scheduler démarré (intervalle %s min).", interval)
+
+    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        _start_scheduler()
 
     with app.app_context():
         from . import seed
@@ -139,6 +170,26 @@ def create_app():
             if "twofa_trusted_created_at" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN twofa_trusted_created_at DATETIME")
+                )
+                db.session.commit()
+
+            automation_cols = {
+                row[1]
+                for row in db.session.execute(text("PRAGMA table_info(automation_rule)"))
+            }
+            if "enabled" not in automation_cols:
+                db.session.execute(
+                    text("ALTER TABLE automation_rule ADD COLUMN enabled BOOLEAN DEFAULT 1")
+                )
+                db.session.commit()
+            if "cooldown_seconds" not in automation_cols:
+                db.session.execute(
+                    text("ALTER TABLE automation_rule ADD COLUMN cooldown_seconds INTEGER DEFAULT 300")
+                )
+                db.session.commit()
+            if "last_triggered_at" not in automation_cols:
+                db.session.execute(
+                    text("ALTER TABLE automation_rule ADD COLUMN last_triggered_at DATETIME")
                 )
                 db.session.commit()
         except Exception as exc:  # pragma: no cover - dépend de l'état SQLite
