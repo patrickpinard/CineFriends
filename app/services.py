@@ -1,3 +1,13 @@
+"""
+Fichier : app/services.py
+Objectif : Fournir des helpers métiers partagés, principalement autour des
+           notifications envoyées aux utilisateurs/administrateurs.
+Fonctionnalités clés :
+    - Création standardisée d’objets `Notification`.
+    - Diffusion des notifications à tous les admins via `notify_admins`.
+Dépendances critiques : modèles `Notification` et `User`, base de données.
+"""
+
 from __future__ import annotations
 
 from flask import url_for

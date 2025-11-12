@@ -6,6 +6,18 @@
 # COPYRIGHT 2016 Robert Wolterman
 # MIT License, see LICENSE file for details
 
+"""
+Fichier : app/hardware/AM2315.py
+Objectif : Piloter le capteur AM2315 (température/humidité) via une implémentation
+           compatible SMBus adaptée au Raspberry Pi.
+Fonctionnalités clés :
+    - Gestion de l’alimentation et réveil du capteur.
+    - Lecture des registres et conversion en °C / %HR avec correction du bit de signe.
+    - Compilation des diagnostics et journalisation des erreurs matérielles.
+Utilisation prévue : instancier `AM2315` dans les tâches de collecte et appeler
+                     `read_temperature_humidity()` pour récupérer les mesures.
+"""
+
 from __future__ import annotations
 
 import time

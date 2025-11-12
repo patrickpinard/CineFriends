@@ -1,4 +1,13 @@
-"""I2C interface that mimics the Python SMBus API."""
+"""
+Fichier : app/hardware/adasmbus.py
+Objectif : Fournir une implémentation pure Python de l’interface SMBus/I²C utilisée
+           pour communiquer avec le capteur AM2315 sur Raspberry Pi.
+Fonctionnalités clés :
+    - Mappage des constantes et structures nécessaires aux appels ioctl I²C.
+    - Classes `I2CMessage` et `SMBus` reproduisant l’API adafruit/smbus-cffi.
+    - Gestion des lectures/écritures multi-octets et des erreurs système.
+Remarque : cette implémentation est adaptée depuis le projet GroveWeatherPi.
+"""
 
 from __future__ import annotations
 

@@ -18,11 +18,13 @@ Application web complète construite avec Flask pour piloter un tableau de bord 
 12. [PWA & expérience mobile](#pwa--expérience-mobile)
 13. [Envoi d’e-mails](#envoi-demails)
 14. [Développement & bonnes pratiques](#développement--bonnes-pratiques)
-15. [Dépannage](#dépannage)
+15. [Capteurs & relais](#capteurs--relais)
+16. [Documentation détaillée des fichiers](#documentation-détaillée-des-fichiers)
+17. [Dépannage](#dépannage)
 
 ## Fonctionnalités principales
 
-- **Dashboard** : vue synthétique des activités récentes avec graphique interactif (Chart.js), statut 2FA et alertes sécurité.
+- **Dashboard** : vue synthétique des activités récentes avec graphique interactif (ApexCharts), cartes capteurs (valeur courante + min/max 24h) et alertes sécurité.
 - **Automatisation** : création de règles, recherche/filtre/sort, confirmation de suppression, affichage structuré déclencheur/actions, responsive complet.
 - **Caméra USB** : flux vidéo intégré dans une carte responsive adaptée aux appareils iOS.
 - **Paramètres** : formulaire de configuration applicative harmonisé avec le design global.
@@ -34,7 +36,7 @@ Application web complète construite avec Flask pour piloter un tableau de bord 
 ## Architecture & technologies
 
 - **Backend** : Flask, Flask-Login, Flask-WTF, SQLAlchemy.
-- **Frontend** : Tailwind CSS (via CDN), composants responsive, toasts dynamiques, Chart.js.
+- **Frontend** : Tailwind CSS (via CDN), composants responsive, toasts dynamiques, ApexCharts pour les mesures climatiques.
 - **Auth** : sessions sécurisées, rôles, double authentification par e-mail, gestion des appareils de confiance.
 - **PWA** : `manifest.json`, `service-worker.js`, prise en charge iOS (icônes `icon-128.png`, `icon-512.png`).
 - **Base de données** : SQLite par défaut (`instance/dashboard.db`).
@@ -198,6 +200,64 @@ L’application écoute par défaut sur `http://127.0.0.1:8080`.
 | `binascii.Error: Incorrect padding` | Vérifier les pièces jointes base64 (souvent dû à un téléversement interrompu). |
 | `externally-managed-environment` (macOS) | Toujours utiliser un environnement virtuel (`python -m venv .venv`). |
 | Emails non envoyés | Vérifier login/pass SMTP, port TLS, whitelisting. Utiliser `MAIL_MONITOR_ADDRESS` pour audit. |
+
+## Capteurs & relais
+
+- **Collecte périodique** : déclenchée par APScheduler (`app/__init__.py`) selon `SENSOR_POLL_INTERVAL_MINUTES`.
+- **Sondes DS18B20** : détectées via `/sys/bus/w1/devices`, stockées dans `SensorReading` (type `ds18b20`, metric `temperature`).
+- **Sonde AM2315** : pilote `app/hardware/AM2315.py` utilisant `adasmbus` pour contourner les limitations SMBus sur le Pi.
+- **Agrégation graphique** : réalisée dans `app/routes.py` (`dashboard`) avec calcul de min/max dynamiques et séparation des valeurs négatives (<0°C).
+- **Relais** : contrôlés via `app/hardware/gpio_controller.py`, avec reconfiguration automatique du mode BCM et annotations d’état sur le graphique.
+- **Infos supplémentaires** : les cartes capteurs affichent le nombre total de mesures en base et le statut de fraîcheur des dernières lectures.
+
+## Documentation détaillée des fichiers
+
+### Racine
+
+- `run.py` : point d’entrée de développement ; instancie l’application et lance le serveur.
+- `config.py` : configuration Flask centralisée (base de données, SMTP, capteurs, uploads).
+- `requirements.txt` : dépendances Python nécessaires.
+- `README.md` : document courant détaillant installation, architecture, modules.
+
+### Package `app/`
+
+- `app/__init__.py` : fabrique Flask, initialisation des extensions et scheduler de collecte.
+- `app/routes.py` : routes principales (dashboard, paramètres, journal, API) et agrégation des données capteurs.
+- `app/admin.py` : back-office utilisateurs (création/édition, notifications, journalisation).
+- `app/auth.py` : routes d’authentification, inscription, gestion 2FA et journal des connexions.
+- `app/models.py` : modèles SQLAlchemy (`User`, `AutomationRule`, `JournalEntry`, `SensorReading`, `Notification`, `Setting`).
+- `app/forms.py` : formulaires Flask-WTF (auth, profil, paramètres, automatisation).
+- `app/utils.py` : helpers transverses (avatars, détection capteurs, formatage, analyse des changements).
+- `app/services.py` : création et diffusion de notifications applicatives.
+- `app/tasks.py` : collecte des mesures capteurs et déclenchement du moteur d’automatisation.
+- `app/automation_engine.py` : parsing/évaluation des règles et manipulation des relais.
+- `app/mailer.py` : envoi SMTP des emails transactionnels (activation, code 2FA, etc.).
+- `app/seed.py` : création de l’administrateur par défaut si absent.
+
+### Matériel (`app/hardware/`)
+
+- `AM2315.py` : pilote I²C du capteur AM2315 (température/humidité) avec gestion du bit de signe.
+- `adasmbus.py` : implémentation Python de l’API SMBus utilisée par le pilote AM2315.
+- `gpio_controller.py` : abstractions autour de RPi.GPIO (initialisation, lecture/écriture, détection active-low).
+- `__init__.py` : documentation du package matériel.
+
+### Templates & Frontend
+
+- `app/templates/base.html` : layout principal (sidebar, notifications, blocs de contenu).
+- `app/templates/dashboard/index.html` : tableau de bord avec cartes capteurs, carte relais et graphique ApexCharts.
+- `app/templates/dashboard/journal.html` : visualisation du journal avec pagination, détails JSON et purge.
+- `app/templates/dashboard/settings.html` : configuration applicative (SMTP, capteurs, scheduler).
+- `app/templates/dashboard/automation.html` : gestion des règles et formulaire contextualisé.
+- `app/templates/dashboard/users.html` & `user_form.html` : back-office utilisateurs (listing + modale formulaire).
+- `app/templates/auth/*.html` : pages d’authentification (login, register, 2FA).
+- `app/templates/email/*` : templates HTML/TXT pour les courriels transactionnels.
+- `app/static/js/filters.js` : helpers front pour la recherche/filtrage dynamique.
+- `app/static/js/pwa.js` & `service-worker.js` : support PWA (install, mise à jour, cache).
+
+### Base de données & données
+
+- `instance/dashboard.db` : base SQLite par défaut (peut être reconstruite via `flask shell`).
+- `app/static/uploads/` : avatars téléversés par les utilisateurs.
 
 ## Licence
 

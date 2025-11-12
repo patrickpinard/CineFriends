@@ -1,3 +1,14 @@
+"""
+Fichier : app/forms.py
+Objectif : Centraliser les formulaires WTForms utilisés dans l’application
+           (authentification, profil, automatisation, gestion des capteurs).
+Principales responsabilités :
+    - Définir les champs et validations propres à chaque fonctionnalité.
+    - Fournir des messages d’erreur cohérents avec l’UI.
+    - Encapsuler la logique de normalisation des données saisies par l’utilisateur.
+Dépendances critiques : WTForms, Flask-WTF, modèles pour les validations personnalisées.
+"""
+
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField
 from wtforms import (

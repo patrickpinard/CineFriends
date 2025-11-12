@@ -1,3 +1,17 @@
+"""
+Fichier : app/__init__.py
+Objectif : Initialiser l’application Flask, configurer les extensions (Base de données,
+           authentification, CSRF, CORS) et démarrer le planificateur des collectes de
+           capteurs. Fournit la fabrique `create_app` utilisée par les points d’entrée.
+Principales responsabilités :
+    - Création de l’objet Flask et chargement de la configuration.
+    - Enregistrement des blueprints publics, d’authentification et d’administration.
+    - Injection de variables globales Jinja (notifications, palettes d’avatar, etc.).
+    - Gestion du scheduler APScheduler pour lancer `collect_sensor_readings`.
+    - Migration légère de schéma SQLite lors du démarrage de l’application.
+Dépendances critiques : SQLAlchemy, Flask-Login, APScheduler, configuration locale.
+"""
+
 import atexit
 import hashlib
 import os

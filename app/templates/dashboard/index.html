@@ -1,3 +1,12 @@
+{# 
+  Template : dashboard/index.html
+  Objectif : Vue principale du tableau de bord affichant cartes capteurs, relais, graphique climatique et statistiques.
+  Données requises :
+      - `sensor_highlights`, `relay_cards`, `chart_series`, `relay_annotations`, `chart_period_links`, etc.
+  Spécificités :
+      - Interaction ApexCharts pour les capteurs et relais.
+      - Boutons de filtrage de période et agrandissement du graphique.
+#}
 {% extends 'base.html' %}
 {% block title %}Dashboard{% endblock %}
 {% block header_title %}Tableau de bord{% endblock %}
@@ -223,21 +232,24 @@
         </div>
     </div>
     <div class="px-4 pb-6 pt-2 sm:px-8">
-        <div class="flex flex-wrap items-center justify-between gap-2 pb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {% if relay_legend %}
-            <div class="flex flex-wrap items-center gap-2">
-                {% for item in relay_legend %}
-                <button type="button"
-                        class="relay-toggle inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:border-teal-200 hover:text-teal-600 transition"
-                        data-relay-channel="{{ item.channel }}"
-                        style="--relay-color: {{ item.color }};"
-                        data-active="true">
-                    <span class="inline-flex h-2 w-2 rounded-full" style="background-color: {{ item.color }};"></span>
-                    {{ item.name }}
-                </button>
-                {% endfor %}
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div class="flex flex-1 flex-wrap items-center gap-3">
+                <div id="sensorLegend" class="flex flex-wrap items-center gap-2"></div>
+                {% if relay_legend %}
+                <div id="relayLegend" class="flex flex-wrap items-center gap-2">
+                    {% for item in relay_legend %}
+                    <button type="button"
+                            class="relay-toggle inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:border-teal-200 hover:text-teal-600 transition"
+                            data-relay-channel="{{ item.channel }}"
+                            style="--relay-color: {{ item.color }};"
+                            data-active="true">
+                        <span class="inline-flex h-2 w-2 rounded-full" style="background-color: {{ item.color }};"></span>
+                        {{ item.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
             <button type="button" id="chart-expand-button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-teal-200 hover:text-teal-600">
                 Agrandir
             </button>
@@ -260,17 +272,155 @@
         const hasData = {{ 'true' if chart_has_data else 'false' }};
         if (!el || !hasData) return;
 
-        const series = {{ chart_series|tojson }};
-        const colors = {{ chart_colors|tojson }};
+        const originalSeries = {{ chart_series|tojson }};
+        const baseColors = {{ chart_colors|tojson }};
         const relayAnnotations = {{ relay_annotations|tojson }};
-        const seriesUnits = series.map((item) => item.unit || '');
-        const apexSeries = series.map(({ name, data, axis }) => ({
-            name,
-            data,
-            yAxisIndex: axis === 'humidity' ? 1 : 0,
-        }));
+
+        const adjustColor = (hex, amount) => {
+            const normalized = hex.replace('#', '');
+            const expanded = normalized.length === 3 ? normalized.split('').map((c) => c + c).join('') : normalized;
+            const num = parseInt(expanded, 16);
+            const clamp = (value) => Math.min(255, Math.max(0, value));
+            const r = clamp((num >> 16) + amount);
+            const g = clamp(((num >> 8) & 0xff) + amount);
+            const b = clamp((num & 0xff) + amount);
+            return `#${(1 << 24 | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+        };
+
+        const apexSeries = [];
+        const apexColors = [];
+        const seriesUnits = [];
+        const strokeDashArray = [];
+        const sensorsLegend = [];
+        let temperatureMin = Number.POSITIVE_INFINITY;
+        let temperatureMax = Number.NEGATIVE_INFINITY;
+
+        originalSeries.forEach((item, index) => {
+            const baseColor = baseColors[index % baseColors.length] || '#0ea5e9';
+            const legendEntry = {
+                name: item.name,
+                color: baseColor,
+                axis: item.axis,
+                seriesNames: [],
+            };
+            if (item.axis === 'temperature') {
+                const positive = [];
+                const negative = [];
+                item.data.forEach((point) => {
+                    const rawValue = point.y;
+                    const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+                    if (!Number.isFinite(value)) {
+                        positive.push({ x: point.x, y: null });
+                        negative.push({ x: point.x, y: null });
+                        return;
+                    }
+                    if (value >= 0) {
+                        temperatureMin = Math.min(temperatureMin, value);
+                        temperatureMax = Math.max(temperatureMax, value);
+                        positive.push({ x: point.x, y: value });
+                        negative.push({ x: point.x, y: null });
+                    } else {
+                        temperatureMin = Math.min(temperatureMin, value);
+                        temperatureMax = Math.max(temperatureMax, value);
+                        positive.push({ x: point.x, y: null });
+                        negative.push({ x: point.x, y: value });
+                    }
+                });
+                apexSeries.push({
+                    name: item.name,
+                    data: positive,
+                    yAxisIndex: 0,
+                    type: 'line',
+                });
+                apexColors.push(baseColor);
+                seriesUnits.push(item.unit || '');
+                strokeDashArray.push(0);
+                legendEntry.seriesNames.push(item.name);
+
+                apexSeries.push({
+                    name: `${item.name} (sous 0°C)`,
+                    data: negative,
+                    yAxisIndex: 0,
+                    showInLegend: false,
+                    type: 'line',
+                });
+                apexColors.push(adjustColor(baseColor, -60));
+                seriesUnits.push(item.unit || '');
+                strokeDashArray.push(0);
+                legendEntry.seriesNames.push(`${item.name} (sous 0°C)`);
+            } else {
+                const humidityData = item.data.map((point) => {
+                    const rawValue = point.y;
+                    const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+                    return {
+                        x: point.x,
+                        y: Number.isFinite(value) ? value : null,
+                        marker: { shape: 'square', size: 6 },
+                    };
+                });
+                apexSeries.push({
+                    name: item.name,
+                    data: humidityData,
+                    yAxisIndex: 1,
+                    type: 'line',
+                });
+                apexColors.push(baseColor);
+                seriesUnits.push(item.unit || '');
+                strokeDashArray.push(0);
+                legendEntry.seriesNames.push(item.name);
+            }
+            sensorsLegend.push(legendEntry);
+        });
+
+        if (Number.isFinite(temperatureMin) && Number.isFinite(temperatureMax) && temperatureMin === temperatureMax) {
+            temperatureMin -= 1;
+            temperatureMax += 1;
+        }
+
+        const resolvedTempMin = Number.isFinite(temperatureMin)
+            ? Math.floor(temperatureMin - 1)
+            : undefined;
+        const resolvedTempMax = Number.isFinite(temperatureMax)
+            ? Math.ceil(temperatureMax + 1)
+            : undefined;
 
         let chartInstance = null;
+        const relayState = {};
+        relayAnnotations.forEach((event) => {
+            const channel = Number(event.data?.channel);
+            if (Number.isInteger(channel)) {
+                relayState[channel] = true;
+            }
+        });
+
+        const refreshRelayAnnotations = () => {
+            if (!chartInstance) return;
+            chartInstance.clearAnnotations();
+            (relayAnnotations || []).forEach((event) => {
+                const channel = Number(event.data?.channel);
+                if (!Number.isInteger(channel) || relayState[channel] === false) {
+                    return;
+                }
+                const pointX = new Date(event.timestamp).getTime();
+                chartInstance.addXaxisAnnotation({
+                    x: pointX,
+                    borderColor: event.color,
+                    strokeDashArray: 4,
+                    label: {
+                        text: event.label,
+                        orientation: 'vertical',
+                        position: 'top',
+                        borderColor: event.color,
+                        style: {
+                            background: event.background || '#f8fafc',
+                            color: '#0f172a',
+                            fontWeight: 600,
+                            fontSize: '11px',
+                        },
+                    },
+                });
+            });
+        };
 
         const renderWithApex = () => {
             chartInstance = new ApexCharts(el, {
@@ -293,14 +443,21 @@
                         offsetY: -6,
                     },
                     fontFamily: 'Inter, system-ui, sans-serif',
+                    events: {
+                        mounted: () => refreshRelayAnnotations(),
+                        updated: () => refreshRelayAnnotations(),
+                    },
                 },
-                colors: colors.length ? colors : undefined,
+                colors: apexColors.length ? apexColors : undefined,
                 series: apexSeries,
                 stroke: {
                     show: true,
                     width: 4,
                     curve: 'smooth',
                     lineCap: 'round',
+                    colors: apexColors.length ? apexColors : undefined,
+                    dashArray: strokeDashArray,
+                    connectNulls: true,
                 },
                 dataLabels: {
                     enabled: false,
@@ -308,7 +465,7 @@
                 markers: {
                     size: 4,
                     colors: ['#fff'],
-                    strokeColors: colors.length ? colors : ['#0284c7'],
+                    strokeColors: apexColors.length ? apexColors : ['#0284c7'],
                     strokeWidth: 3,
                     hover: { sizeOffset: 3 },
                 },
@@ -337,8 +494,8 @@
                     {
                         labels: { style: { colors: '#94a3b8', fontSize: '11px' } },
                         title: { text: 'Température (°C)', style: { color: '#0284c7' } },
-                        min: -20,
-                        max: 50,
+                        min: resolvedTempMin,
+                        max: resolvedTempMax,
                     },
                     {
                         opposite: true,
@@ -348,12 +505,7 @@
                         max: 120,
                     },
                 ],
-                legend: {
-                    position: 'top',
-                    horizontalAlign: 'left',
-                    markers: { radius: 12 },
-                    labels: { colors: '#64748b', useSeriesColors: false },
-                },
+                legend: { show: false },
                 tooltip: {
                     theme: 'light',
                     x: { format: 'dd/MM/yyyy HH:mm' },
@@ -388,6 +540,38 @@
             console.warn('ApexCharts non chargé, aucune visualisation.');
         }
 
+        const sensorLegendContainer = document.getElementById('sensorLegend');
+        const sensorState = {};
+        if (sensorLegendContainer) {
+            const fragment = document.createDocumentFragment();
+            sensorsLegend.forEach((entry) => {
+                sensorState[entry.name] = true;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'sensor-toggle active';
+                button.style.setProperty('--sensor-color', entry.color);
+                button.innerHTML = `<span class="inline-flex h-2 w-2 rounded-full" style="background-color: ${entry.color};"></span>${entry.name}`;
+                button.addEventListener('click', () => {
+                    const nextState = !sensorState[entry.name];
+                    sensorState[entry.name] = nextState;
+                    button.classList.toggle('active', nextState);
+                    if (chartInstance) {
+                        entry.seriesNames.forEach((seriesName) => {
+                            if (!seriesName) return;
+                            if (nextState) {
+                                chartInstance.showSeries(seriesName);
+                            } else {
+                                chartInstance.hideSeries(seriesName);
+                            }
+                        });
+                        refreshRelayAnnotations();
+                    }
+                });
+                fragment.appendChild(button);
+            });
+            sensorLegendContainer.appendChild(fragment);
+        }
+
         const wrapper = document.getElementById('climateChartWrapper');
         const expandBtn = document.getElementById('chart-expand-button');
         if (wrapper && expandBtn) {
@@ -402,41 +586,6 @@
             });
         }
 
-        const refreshRelayAnnotations = () => {
-            if (!chartInstance) return;
-            chartInstance.clearAnnotations();
-            const annotations = relayAnnotations || [];
-            annotations.forEach((event) => {
-                const channel = Number(event.data?.channel);
-                if (!Number.isInteger(channel) || relayState[channel] === false) {
-                    return;
-                }
-                const pointX = new Date(event.timestamp).getTime();
-                chartInstance.addXaxisAnnotation({
-                    x: pointX,
-                    label: {
-                        borderColor: event.color,
-                        style: {
-                            background: event.background,
-                            color: '#0f172a',
-                            fontWeight: 600,
-                        },
-                        orientation: 'vertical',
-                        text: event.label,
-                        offsetY: 0,
-                    },
-                    borderColor: event.color,
-                    strokeDashArray: 4,
-                });
-            });
-        };
-        const relayState = {};
-        relayAnnotations.forEach((event) => {
-            const channel = Number(event.data?.channel);
-            if (Number.isInteger(channel)) {
-                relayState[channel] = true;
-            }
-        });
         const relayButtons = document.querySelectorAll('.relay-toggle');
         relayButtons.forEach((btn) => {
             const channel = Number(btn.dataset.relayChannel);
@@ -451,6 +600,7 @@
                 refreshRelayAnnotations();
             });
         });
+
         refreshRelayAnnotations();
     });
 </script>
@@ -462,6 +612,35 @@
     #climateChartWrapper.chart-expanded #climateChart {
         height: 520px;
     }
+
+    .apexcharts-legend {
+        flex-wrap: nowrap !important;
+    }
+
+.sensor-toggle,
+.relay-toggle {
+    transition: all 0.18s ease-in-out;
+}
+
+.sensor-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid #e2e8f0;
+    background-color: #ffffff;
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.sensor-toggle.active {
+    border-color: var(--sensor-color, #0ea5e9);
+    background: rgba(14, 165, 233, 0.12);
+    color: #0f172a;
+}
 
     .relay-toggle.active {
         border-color: var(--relay-color, #0ea5e9);

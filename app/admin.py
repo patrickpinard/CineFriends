@@ -1,3 +1,16 @@
+"""
+Fichier : app/admin.py
+Objectif : Fournir les vues et actions d’administration (gestion des utilisateurs,
+           notifications et journal) via le blueprint `/admin`.
+Principales responsabilités :
+    - Vérifier l’accès administrateur pour toutes les routes du module.
+    - Créer, modifier, activer/désactiver et supprimer des comptes utilisateurs.
+    - Envoyer des notifications et déclencher les emails d’approbation ou de suspension.
+    - Alimenter le journal applicatif lors d’actions clés.
+Dépendances critiques : formulaires `UserForm`, modèles `User` et `JournalEntry`,
+                        service d’emailing `send_email`, outils utilitaires avatar.
+"""
+
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 

@@ -1,3 +1,13 @@
+"""
+Fichier : config.py
+Objectif : Centraliser la configuration Flask de l’application Dashboard via la
+           classe `Config`.
+Contenu principal :
+    - Chargement des variables d’environnement (.env) et valeurs par défaut.
+    - Définition des paramètres de sécurité, base de données, email, capteurs.
+    - Exposition des chemins de travail (uploads, base SQLite locale).
+"""
+
 import os
 from pathlib import Path
 

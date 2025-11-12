@@ -1,3 +1,15 @@
+"""
+Fichier : app/routes.py
+Objectif : Regrouper les routes principales du Dashboard (vue d’ensemble, journal,
+           réglages, API JSON) via le blueprint `main`.
+Fonctionnalités clés :
+    - Agréger les données capteurs, états relais et statistiques pour les vues.
+    - Exposer les actions utilisateur (profil, réglages, commandes relais).
+    - Gérer la pagination du journal et les flux JSON pour le frontend.
+Dépendances critiques : SQLAlchemy, formulaires Flask-WTF, moteur d’automatisation,
+                        collecteur de capteurs, templates Jinja.
+"""
+
 from __future__ import annotations
 
 import json
@@ -350,7 +362,7 @@ def dashboard():
         icon: str,
     ) -> dict[str, object]:
         reading = (
-            SensorReading.query.filter(
+        SensorReading.query.filter(
                 SensorReading.sensor_type == sensor_type,
                 SensorReading.metric == metric,
             )
@@ -445,6 +457,12 @@ def dashboard():
     period_delta = period_map[selected_period]["delta"]
     period_start = now - period_delta
 
+    base_color_map = {
+        ("ds18b20", "temperature"): "#0ea5e9",
+        ("am2315", "temperature"): "#0f766e",
+        ("am2315", "humidity"): "#8b5cf6",
+    }
+
     climate_readings = (
         SensorReading.query.filter(
             SensorReading.metric.in_(["temperature", "humidity"]),
@@ -480,16 +498,27 @@ def dashboard():
                 continue
         else:
             continue
+        key = (reading.sensor_type, reading.metric)
+        base_color = base_color_map.get(key)
         series_entry = series_map.setdefault(
             series_name,
-            {"name": series_name, "unit": unit, "axis": axis, "data": []},
+            {
+                "name": series_name,
+                "unit": unit,
+                "axis": axis,
+                "data": [],
+                "color": base_color,
+                "meta": {"sensor_type": reading.sensor_type, "metric": reading.metric},
+            },
         )
         series_entry["data"].append({"x": timestamp, "y": value})
 
     chart_series: list[dict[str, object]] = list(series_map.values())
     chart_has_data = any(series["data"] for series in chart_series)
-    color_palette = ["#0284c7", "#0f766e", "#8b5cf6", "#f97316", "#ec4899", "#22c55e", "#0ea5e9"]
-    chart_colors = color_palette[: len(chart_series)]
+    chart_colors = [
+        series.get("color") or "#0ea5e9"
+        for series in chart_series
+    ]
     chart_period_options = [
         {"value": key, "label": label}
         for key, label, _ in period_definitions
@@ -502,7 +531,7 @@ def dashboard():
         chart_period_links.append(
             {
                 "value": key,
-                "label": label,
+                    "label": label,
                 "url": url_for("main.dashboard", **params),
                 "active": key == selected_period,
             }
@@ -1103,6 +1132,7 @@ def journal():
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     entries = pagination.items
+    query_args = request.args.to_dict()
     relay_label_map = get_relay_labels()
     sensor_alias_cache: dict[str, str] = {}
     detailed_entries = []
@@ -1185,6 +1215,18 @@ def journal():
             formatted["detail_pretty"] = None
 
         detailed_entries.append(formatted)
+
+    prev_url = None
+    next_url = None
+    if pagination.has_prev:
+        params = query_args.copy()
+        params["page"] = pagination.prev_num
+        prev_url = url_for("main.journal", **params)
+    if pagination.has_next:
+        params = query_args.copy()
+        params["page"] = pagination.next_num
+        next_url = url_for("main.journal", **params)
+
     return render_template(
         "dashboard/journal.html",
         entries=detailed_entries,
@@ -1198,6 +1240,8 @@ def journal():
             "has_next": pagination.has_next,
             "prev_num": pagination.prev_num,
             "next_num": pagination.next_num,
+            "prev_url": prev_url,
+            "next_url": next_url,
         },
     )
 

@@ -1,3 +1,14 @@
+"""
+Fichier : app/utils.py
+Objectif : Rassembler les fonctions utilitaires transverses (gestion d’avatars,
+           détection hardware, formatage de données, helpers de capteurs).
+Fonctionnalités clés :
+    - Sauvegarde/suppression d’avatars et gestion des chemins.
+    - Détection des capteurs DS18B20/AM2315 et formatage des réponses.
+    - Fonctions d’aide pour les formulaires et le paramétrage de l’application.
+Dépendances critiques : configuration Flask, accès au système de fichiers, modules matériels.
+"""
+
 from __future__ import annotations
 
 import os

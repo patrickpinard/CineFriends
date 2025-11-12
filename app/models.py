@@ -1,3 +1,15 @@
+"""
+Fichier : app/models.py
+Objectif : Définir les modèles de données SQLAlchemy utilisés par l’application
+           Dashboard (utilisateurs, règles, journal, paramètres, capteurs, notifications).
+Fonctionnalités clés :
+    - Gestion des mots de passe, rôles et informations de profil (`User`).
+    - Représentation des règles d’automatisation et de leurs métadonnées.
+    - Stockage des lectures capteurs via `SensorReading`.
+    - Support des notifications et paramètres configurables.
+Dépendances critiques : SQLAlchemy, Flask-Login, utilitaires de sécurité Werkzeug.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
