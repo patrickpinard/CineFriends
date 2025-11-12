@@ -7,6 +7,7 @@ from typing import Generator
 from flask import (Blueprint, Response, current_app, flash, jsonify, redirect,
                    render_template, request, url_for)
 from flask_login import current_user, login_required
+from sqlalchemy import func
 from urllib.parse import urlencode
 
 from . import db
@@ -339,96 +340,132 @@ def dashboard():
         .first()
     )
 
-    # Agrégation des données capteurs AM2315
-    start_window = now - timedelta(hours=24)
-    am_readings = (
+    def build_sensor_highlight(
+        *,
+        sensor_type: str,
+        metric: str,
+        title: str,
+        subtitle: str | None,
+        default_unit: str,
+        icon: str,
+    ) -> dict[str, object]:
+        reading = (
+            SensorReading.query.filter(
+                SensorReading.sensor_type == sensor_type,
+                SensorReading.metric == metric,
+            )
+            .order_by(SensorReading.created_at.desc())
+            .first()
+        )
+        card: dict[str, object] = {
+            "title": title,
+            "subtitle": subtitle,
+            "icon": icon,
+            "value": None,
+            "unit": default_unit,
+            "status": "error",
+            "message": "Sonde non détectée ou aucune mesure disponible.",
+            "last_seen_text": None,
+            "last_seen_iso": None,
+            "min_value": None,
+            "max_value": None,
+        }
+        if reading and reading.value is not None:
+            value = round(float(reading.value), 2)
+            card["value"] = value
+            card["unit"] = reading.unit or default_unit
+            card["status"] = "ok"
+            card["message"] = None
+            card["last_seen_text"] = reading.created_at.strftime("%d/%m/%Y %H:%M")
+            card["last_seen_iso"] = reading.created_at.isoformat()
+            if reading.sensor_id and not subtitle:
+                card["subtitle"] = f"ID {reading.sensor_id.upper()}"
+
+            window_start = datetime.utcnow() - timedelta(hours=24)
+            stats = (
+                db.session.query(
+                    func.min(SensorReading.value),
+                    func.max(SensorReading.value),
+                )
+                .filter(
+                    SensorReading.sensor_type == sensor_type,
+                    SensorReading.metric == metric,
+                    SensorReading.value.isnot(None),
+                    SensorReading.created_at >= window_start,
+                )
+                .first()
+            )
+            if stats:
+                min_value, max_value = stats
+                if min_value is not None:
+                    card["min_value"] = round(float(min_value), 2)
+                if max_value is not None:
+                    card["max_value"] = round(float(max_value), 2)
+        return card
+
+    sensor_highlights = [
+        build_sensor_highlight(
+            sensor_type="ds18b20",
+            metric="temperature",
+            title="Température DS18B20",
+            subtitle=get_sensor_display_name("ds18b20"),
+            default_unit="°C",
+            icon="temperature",
+        ),
+        build_sensor_highlight(
+            sensor_type="am2315",
+            metric="temperature",
+            title="Température AM2315",
+            subtitle=get_sensor_display_name("am2315"),
+            default_unit="°C",
+            icon="temperature",
+        ),
+        build_sensor_highlight(
+            sensor_type="am2315",
+            metric="humidity",
+            title="Humidité AM2315",
+            subtitle=get_sensor_display_name("am2315"),
+            default_unit="%",
+            icon="humidity",
+        ),
+    ]
+
+    # Agrégation des données climatiques (température / humidité)
+    window_days = 7
+    start_window = now - timedelta(days=window_days - 1)
+    climate_readings = (
         SensorReading.query.filter(
-            SensorReading.sensor_type == "am2315",
             SensorReading.metric.in_(["temperature", "humidity"]),
             SensorReading.created_at >= start_window,
         )
         .order_by(SensorReading.created_at.asc())
         .all()
     )
-    buckets: dict[datetime, dict[str, list[float]]] = {}
-    for reading in am_readings:
+    buckets: dict[date, dict[str, list[float]]] = {}
+    for reading in climate_readings:
         if reading.value is None:
             continue
-        bucket = reading.created_at.replace(minute=0, second=0, microsecond=0)
+        bucket = reading.created_at.date()
         bucket_data = buckets.setdefault(bucket, {"temperature": [], "humidity": []})
         bucket_data.setdefault(reading.metric, []).append(float(reading.value))
 
     chart_labels: list[str] = []
     chart_temperatures: list[float | None] = []
     chart_humidity: list[float | None] = []
-    for bucket in sorted(buckets.keys()):
-        slot = bucket.strftime("%H:%M")
-        data = buckets[bucket]
-        temp_values = data.get("temperature", [])
-        hum_values = data.get("humidity", [])
-        chart_labels.append(slot)
-        chart_temperatures.append(round(sum(temp_values) / len(temp_values), 2) if temp_values else None)
-        chart_humidity.append(round(sum(hum_values) / len(hum_values), 2) if hum_values else None)
-
-    if not chart_labels:
-        chart_labels = [(now - timedelta(hours=i)).strftime("%H:%M") for i in range(12, -1, -1)]
-        chart_labels.reverse()
-        chart_temperatures = [None] * len(chart_labels)
-        chart_humidity = [None] * len(chart_labels)
-
-    # Résumé des capteurs
-    recent_readings = (
-        SensorReading.query.order_by(SensorReading.created_at.desc()).limit(200).all()
-    )
-    sensor_map: dict[tuple[str, str], dict[str, object]] = {}
-    for reading in recent_readings:
-        key = (reading.sensor_type, (reading.sensor_id or "").lower())
-        entry = sensor_map.setdefault(
-            key,
-            {
-                "sensor_type": reading.sensor_type,
-                "sensor_id": reading.sensor_id,
-                "metrics": {},
-                "updated_at": reading.created_at,
-            },
-        )
-        if reading.metric not in entry["metrics"]:
-            entry["metrics"][reading.metric] = {
-                "value": round(reading.value, 2) if reading.value is not None else None,
-                "unit": reading.unit,
-            }
-        if reading.created_at > entry["updated_at"]:
-            entry["updated_at"] = reading.created_at
-
-    sensor_cards: list[dict[str, object]] = []
-    for key, data in sensor_map.items():
-        sensor_type, sensor_id = key
-        title = get_sensor_display_name(sensor_type)
-        subtitle = None
-        if sensor_type == "ds18b20" and sensor_id:
-            subtitle = f"ID {sensor_id.upper()}"
-        elif sensor_type == "am2315":
-            subtitle = "Capteur combiné (température & humidité)"
-        metrics = []
-        for metric_key, metric_data in data["metrics"].items():
-            label = "Température" if metric_key == "temperature" else "Humidité" if metric_key == "humidity" else metric_key.title()
-            metrics.append(
-                {
-                    "label": label,
-                    "value": metric_data["value"],
-                    "unit": metric_data.get("unit") or "",
-                }
-            )
-        sensor_cards.append(
-            {
-                "title": title,
-                "subtitle": subtitle,
-                "metrics": metrics,
-                "updated_at": data["updated_at"],
-                "updated_at_text": data["updated_at"].strftime("%d/%m/%Y %H:%M"),
-            }
-        )
-    sensor_cards.sort(key=lambda item: item["title"])
+    last_temp: float | None = None
+    last_humidity: float | None = None
+    for offset in range(window_days - 1, -1, -1):
+        current_day = (now - timedelta(days=offset)).date()
+        chart_labels.append(current_day.strftime("%d/%m"))
+        day_data = buckets.get(current_day, {})
+        temp_values = day_data.get("temperature", [])
+        hum_values = day_data.get("humidity", [])
+        if temp_values:
+            last_temp = round(sum(temp_values) / len(temp_values), 2)
+        chart_temperatures.append(last_temp)
+        if hum_values:
+            last_humidity = round(sum(hum_values) / len(hum_values), 2)
+        chart_humidity.append(last_humidity)
 
     # Relais
     relay_pins = get_configured_relay_pins()
@@ -476,7 +513,7 @@ def dashboard():
         chart_labels=chart_labels,
         chart_temperatures=chart_temperatures,
         chart_humidity=chart_humidity,
-        sensor_cards=sensor_cards,
+        sensor_highlights=sensor_highlights,
         relay_cards=relay_cards,
         relays_available=relays_available,
         relays_active_low=relays_active_low,
@@ -974,6 +1011,14 @@ def journal():
                 })
         if metadata_items:
             formatted["metadata"] = metadata_items
+
+        if detail:
+            try:
+                formatted["detail_pretty"] = json.dumps(detail, ensure_ascii=False, indent=2, sort_keys=True)
+            except (TypeError, ValueError):
+                formatted["detail_pretty"] = None
+        else:
+            formatted["detail_pretty"] = None
 
         detailed_entries.append(formatted)
     return render_template(

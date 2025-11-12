@@ -71,7 +71,7 @@
                         </svg>
                         Détails techniques
                     </summary>
-                    <pre class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 shadow-inner">{{ entry.detail | tojson(indent=2) }}</pre>
+                    <pre class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 shadow-inner">{{ (entry.detail_pretty or 'Aucune donnée détaillée') | e }}</pre>
                 </details>
             </div>
             {% endif %}
