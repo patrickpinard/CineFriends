@@ -10,11 +10,20 @@
 import time
 import traceback
 
-import adasmbus
-import RPi.GPIO as GPIO
+try:
+    import RPi.GPIO as GPIO
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+except ImportError:  # pragma: no cover - dépend du hardware
+    GPIO = None  # type: ignore
+
+try:
+    from smbus2 import SMBus, i2c_msg
+except ImportError as exc:  # pragma: no cover - dépend du hardware
+    raise ImportError(
+        "Le module smbus2 est requis pour utiliser AM2315. Installez-le via 'pip install smbus2'."
+    ) from exc
 # GLOBAL VARIABLES
 AM2315_I2CADDR = 0x5C
 AM2315_READREG = 0x03
@@ -38,7 +47,7 @@ class AM2315:
             GPIO.output(self.powerpin, True)
             time.sleep(1.0)
 
-        self._device = adasmbus.SMBus(1)
+        self._bus = SMBus(1)
 
         self.humidity = 0
         self.temperature = 0
@@ -78,21 +87,21 @@ class AM2315:
         # WAKE UP
         # self._device.write8(AM2315_READREG,0x00)
         try:
-            self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+            self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
             time.sleep(0.050)
         except:
-            self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+            self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
             time.sleep(0.050)
 
         # TELL THE DEVICE WE WANT 4 BYTES OF DATA
         # self._device.writeList(AM2315_READREG,[0x00, 0x04])
-        self._device.write_i2c_block_data(AM2315_I2CADDR, AM2315_READREG, [0x00, 0x04])
+        self._bus.write_i2c_block_data(AM2315_I2CADDR, AM2315_READREG, [0x00, 0x04])
 
         time.sleep(0.050)
         # use modified read_i2c_block_data for read from AM2315
-        tmp = self._device.am2315_read_i2c_block_data(AM2315_I2CADDR, AM2315_READREG, 8)
-        # tmp = self._device.readList(AM2315_READREG,8)
-        print(" ".join(map(str, tmp)))
+        read = i2c_msg.read(AM2315_I2CADDR, 8)
+        self._bus.i2c_rdwr(read)
+        tmp = list(read)
 
         self.temperature = (((tmp[4] & 0x7F) << 8) | tmp[5]) / 10.0
         self.humidity = ((tmp[2] << 8) | tmp[3]) / 10.0
@@ -124,13 +133,13 @@ class AM2315:
         while count <= MAXREADATTEMPT:
             try:
                 try:
-                    self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+                self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
                     time.sleep(0.050)
                 except:
                     if AM2315DEBUG == True:
                         print("Wake Byte Fail")
                     time.sleep(2.000)
-                    self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+                    self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
                     time.sleep(0.001)
                     # self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
                     # time.sleep(0.001)
@@ -138,15 +147,14 @@ class AM2315:
                     time.sleep(0.050)
 
                 # TELL THE DEVICE WE WANT 4 BYTES OF DATA
-                self._device.write_i2c_block_data(
+                self._bus.write_i2c_block_data(
                     AM2315_I2CADDR, AM2315_READREG, [0x00, 0x04]
                 )
                 # self._device.writeList(AM2315_READREG,[0x00, 0x04])
                 time.sleep(0.09)
-                tmp = self._device.am2315_read_i2c_block_data(
-                    AM2315_I2CADDR, AM2315_READREG, 8
-                )
-                # tmp = self._device.readList(AM2315_READREG,8)
+                read = i2c_msg.read(AM2315_I2CADDR, 8)
+                self._bus.i2c_rdwr(read)
+                tmp = list(read)
                 self.temperature = (((tmp[4] & 0x7F) << 8) | tmp[5]) / 10.0
                 self.humidity = ((tmp[2] << 8) | tmp[3]) / 10.0
                 # check for > 10.0 degrees higher
@@ -260,7 +268,7 @@ class AM2315:
         )
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - outil de débogage
     am2315 = AM2315()
     print(am2315.read_temperature())
     print(am2315.read_humidity())
