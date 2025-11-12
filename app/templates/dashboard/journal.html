@@ -77,6 +77,27 @@
             {% endif %}
         </article>
         {% endfor %}
+    {% if pagination.pages > 1 %}
+    <nav class="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4 text-sm text-slate-500">
+        <div>
+            Page {{ pagination.page }} / {{ pagination.pages }} — {{ pagination.total }} entrées
+        </div>
+        <div class="flex items-center gap-2">
+            {% if pagination.has_prev %}
+            <a href="{{ url_for('main.journal', **request.args.to_dict(), page=pagination.prev_num) }}"
+               class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:border-teal-200 hover:text-teal-600">
+                Précédent
+            </a>
+            {% endif %}
+            {% if pagination.has_next %}
+            <a href="{{ url_for('main.journal', **request.args.to_dict(), page=pagination.next_num) }}"
+               class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:border-teal-200 hover:text-teal-600">
+                Suivant
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
         {% else %}
         <div class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 py-16 text-center text-sm text-slate-500">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">

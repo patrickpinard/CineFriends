@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Generator
 
 from flask import (Blueprint, Response, current_app, flash, jsonify, redirect,
@@ -141,7 +141,7 @@ def _hydrate_rule_form(form: AutomationRuleForm, sensor_registry: dict[str, dict
 
     relay_labels = get_relay_labels()
     relay_choices = [
-        (channel, f"{relay_labels.get(channel, f'Relais {channel}')} • GPIO {pin}")
+        (channel, relay_labels.get(channel, f"Relais {channel}"))
         for channel, pin in sorted(relay_pins.items())
     ]
     if not relay_choices:
@@ -430,42 +430,150 @@ def dashboard():
         ),
     ]
 
-    # Agrégation des données climatiques (température / humidité)
-    window_days = 7
-    start_window = now - timedelta(days=window_days - 1)
+    # Préparation du graphique climatique
+    period_definitions = [
+        ("1h", "1h", timedelta(hours=1)),
+        ("24h", "24h", timedelta(hours=24)),
+        ("48h", "48h", timedelta(hours=48)),
+        ("7d", "7j", timedelta(days=7)),
+        ("30d", "30j", timedelta(days=30)),
+    ]
+    period_map = {key: {"label": label, "delta": delta} for key, label, delta in period_definitions}
+    selected_period = request.args.get("period", "24h")
+    if selected_period not in period_map:
+        selected_period = "24h"
+    period_delta = period_map[selected_period]["delta"]
+    period_start = now - period_delta
+
     climate_readings = (
         SensorReading.query.filter(
             SensorReading.metric.in_(["temperature", "humidity"]),
-            SensorReading.created_at >= start_window,
+            SensorReading.created_at >= period_start,
         )
         .order_by(SensorReading.created_at.asc())
         .all()
     )
-    buckets: dict[date, dict[str, list[float]]] = {}
+
+    series_map: dict[str, dict[str, object]] = {}
     for reading in climate_readings:
         if reading.value is None:
             continue
-        bucket = reading.created_at.date()
-        bucket_data = buckets.setdefault(bucket, {"temperature": [], "humidity": []})
-        bucket_data.setdefault(reading.metric, []).append(float(reading.value))
+        timestamp = reading.created_at.isoformat()
+        value = round(float(reading.value), 2)
+        if reading.sensor_type == "ds18b20":
+            alias = get_sensor_display_name("ds18b20")
+            series_name = alias or "Température DS18B20"
+            unit = "°C"
+            axis = "temperature"
+        elif reading.sensor_type == "am2315":
+            if reading.metric == "temperature":
+                alias = get_sensor_display_name("am2315")
+                series_name = alias or "Température AM2315"
+                unit = "°C"
+                axis = "temperature"
+            elif reading.metric == "humidity":
+                alias = get_sensor_display_name("am2315")
+                series_name = f"Humidité {alias}" if alias else "Humidité AM2315"
+                unit = "%"
+                axis = "humidity"
+            else:
+                continue
+        else:
+            continue
+        series_entry = series_map.setdefault(
+            series_name,
+            {"name": series_name, "unit": unit, "axis": axis, "data": []},
+        )
+        series_entry["data"].append({"x": timestamp, "y": value})
 
-    chart_labels: list[str] = []
-    chart_temperatures: list[float | None] = []
-    chart_humidity: list[float | None] = []
-    last_temp: float | None = None
-    last_humidity: float | None = None
-    for offset in range(window_days - 1, -1, -1):
-        current_day = (now - timedelta(days=offset)).date()
-        chart_labels.append(current_day.strftime("%d/%m"))
-        day_data = buckets.get(current_day, {})
-        temp_values = day_data.get("temperature", [])
-        hum_values = day_data.get("humidity", [])
-        if temp_values:
-            last_temp = round(sum(temp_values) / len(temp_values), 2)
-        chart_temperatures.append(last_temp)
-        if hum_values:
-            last_humidity = round(sum(hum_values) / len(hum_values), 2)
-        chart_humidity.append(last_humidity)
+    chart_series: list[dict[str, object]] = list(series_map.values())
+    chart_has_data = any(series["data"] for series in chart_series)
+    color_palette = ["#0284c7", "#0f766e", "#8b5cf6", "#f97316", "#ec4899", "#22c55e", "#0ea5e9"]
+    chart_colors = color_palette[: len(chart_series)]
+    chart_period_options = [
+        {"value": key, "label": label}
+        for key, label, _ in period_definitions
+    ]
+    current_query = request.args.to_dict()
+    chart_period_links: list[dict[str, object]] = []
+    for key, label, _ in period_definitions:
+        params = current_query.copy()
+        params["period"] = key
+        chart_period_links.append(
+            {
+                "value": key,
+                "label": label,
+                "url": url_for("main.dashboard", **params),
+                "active": key == selected_period,
+            }
+        )
+
+    relay_entries = (
+        JournalEntry.query.filter(
+            JournalEntry.message.like("Commande relais ch%"),
+            JournalEntry.created_at >= period_start,
+        )
+        .order_by(JournalEntry.created_at.asc())
+        .all()
+    )
+
+    relay_channel_colors = {
+        1: {"border": "#f97316", "background": "rgba(249, 115, 22, 0.15)"},
+        2: {"border": "#8b5cf6", "background": "rgba(139, 92, 246, 0.18)"},
+        3: {"border": "#14b8a6", "background": "rgba(20, 184, 166, 0.18)"},
+    }
+    relay_annotations: list[dict[str, object]] = []
+    relay_legend_map: dict[int, dict[str, object]] = {}
+    for entry in relay_entries:
+        details = entry.details or {}
+        channel = details.get("channel")
+        if channel is None:
+            try:
+                channel = int(entry.message.split("ch")[1])
+            except Exception:
+                channel = None
+        command = details.get("command", "").strip().lower()
+        if channel is None or not command:
+            continue
+        colors = relay_channel_colors.get(
+            channel,
+            {"border": "#f97316", "background": "rgba(249, 115, 22, 0.15)"},
+        )
+        command_lower = command.lower()
+        relay_labels_map = get_relay_labels()
+        relay_name = relay_labels_map.get(channel, f"Relais {channel}")
+        if command_lower == "on":
+            label_text = f"▲ {relay_name} ON"
+        elif command_lower == "off":
+            label_text = f"▼ {relay_name} OFF"
+        else:
+            label_text = f"{relay_name} → {command_lower}"
+        details_text = []
+        issued_by = details.get("issued_by")
+        if issued_by:
+            details_text.append(f"Par : {issued_by}")
+        if details.get("result"):
+            status = details["result"].get("status")
+            if status:
+                details_text.append(f"Résultat : {status}")
+        relay_data = {"channel": channel, "command": command_lower, "details": details_text}
+        relay_annotations.append(
+            {
+                "timestamp": entry.created_at.isoformat(),
+                "label": label_text,
+                "color": colors["border"],
+                "background": colors["background"],
+                "data": relay_data,
+            }
+        )
+        if channel not in relay_legend_map:
+            relay_legend_map[channel] = {
+                "channel": channel,
+                "name": relay_name,
+                "color": colors["border"],
+            }
+
+    relay_legend = sorted(relay_legend_map.values(), key=lambda item: item["name"])
 
     # Relais
     relay_pins = get_configured_relay_pins()
@@ -510,14 +618,19 @@ def dashboard():
         journal_count=journal_count,
         journal_last_24h=journal_last_24h,
         last_automation_event=last_automation_event,
-        chart_labels=chart_labels,
-        chart_temperatures=chart_temperatures,
-        chart_humidity=chart_humidity,
+        chart_series=chart_series,
+        chart_colors=chart_colors,
+        chart_has_data=chart_has_data,
+        chart_period_options=chart_period_options,
+        chart_selected_period=selected_period,
+        chart_period_links=chart_period_links,
+        relay_annotations=relay_annotations,
         sensor_highlights=sensor_highlights,
         relay_cards=relay_cards,
         relays_available=relays_available,
         relays_active_low=relays_active_low,
         relay_manual_disabled=not relays_available,
+        relay_legend=relay_legend,
     )
 
 
@@ -955,6 +1068,8 @@ def journal():
     search = request.args.get("q", "").strip()
     level = request.args.get("level", "")
     sort = request.args.get("sort", "recent")
+    page = max(int(request.args.get("page", 1)), 1)
+    per_page = max(min(int(request.args.get("per_page", 20)), 100), 5)
     from_date = request.args.get("from", "")
     to_date = request.args.get("to", "")
 
@@ -986,14 +1101,27 @@ def journal():
     else:
         query = query.order_by(JournalEntry.created_at.desc())
 
-    entries = query.all()
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    entries = pagination.items
+    relay_label_map = get_relay_labels()
+    sensor_alias_cache: dict[str, str] = {}
     detailed_entries = []
     for entry in entries:
         detail = entry.details or {}
 
+        message = entry.message
+        if message.lower().startswith("commande relais ch"):
+            try:
+                channel_part = message.split("ch", 1)[1].strip()
+                channel = int("".join(filter(str.isdigit, channel_part)))
+                relay_name = relay_label_map.get(channel, f"Relais {channel}")
+                message = f"Commande relais • {relay_name}"
+            except Exception:
+                pass
+
         formatted = {
             "level": entry.level,
-            "message": entry.message,
+            "message": message,
             "timestamp": entry.created_at,
             "detail": detail,
             "actors": detail.get("actors") if isinstance(detail.get("actors"), list) else None,
@@ -1005,9 +1133,45 @@ def journal():
             for key, value in detail.items():
                 if key == "actors":
                     continue
+                label = key.replace("_", " ").title()
+                display_value = value
+                if key == "channel":
+                    try:
+                        channel_int = int(value)
+                    except (TypeError, ValueError):
+                        channel_int = None
+                    if channel_int is not None:
+                        display_value = relay_label_map.get(channel_int, f"Relais {channel_int}")
+                    label = "Relais"
+                elif key == "sensor_type":
+                    sensor_key = str(value).lower()
+                    if sensor_key not in sensor_alias_cache:
+                        sensor_alias_cache[sensor_key] = get_sensor_display_name(sensor_key)
+                    alias = sensor_alias_cache.get(sensor_key) or sensor_key.upper()
+                    display_value = alias
+                    label = "Capteur"
+                elif key == "sensor_id":
+                    display_value = str(value).upper()
+                    label = "Identifiant Capteur"
+                elif key == "sensor_metric":
+                    display_value = METRIC_LABELS.get(str(value), str(value).title())
+                    label = "Mesure"
+                elif key == "result" and isinstance(value, dict):
+                    status = value.get("status")
+                    info_parts = []
+                    if status:
+                        info_parts.append(f"Statut : {status}")
+                    message_result = value.get("message")
+                    if message_result:
+                        info_parts.append(message_result)
+                    display_value = " | ".join(info_parts) if info_parts else json.dumps(value, ensure_ascii=False)
+                    label = "Résultat"
+                elif isinstance(value, dict):
+                    display_value = json.dumps(value, ensure_ascii=False)
+
                 metadata_items.append({
-                    "label": key.replace("_", " ").title(),
-                    "value": value,
+                    "label": label,
+                    "value": display_value,
                 })
         if metadata_items:
             formatted["metadata"] = metadata_items
@@ -1025,6 +1189,16 @@ def journal():
         "dashboard/journal.html",
         entries=detailed_entries,
         filters={"q": search, "level": level, "from": from_date, "to": to_date},
+        pagination={
+            "page": pagination.page,
+            "pages": pagination.pages,
+            "total": pagination.total,
+            "per_page": pagination.per_page,
+            "has_prev": pagination.has_prev,
+            "has_next": pagination.has_next,
+            "prev_num": pagination.prev_num,
+            "next_num": pagination.next_num,
+        },
     )
 
 

@@ -1,14 +1,14 @@
 #!usr/bin/python
 # modified for GroveWeatherPi to return CRC information
 # SwitchDoc Labs, 2019
-# added more reliablity functions including GrovePower Save
+# Adaptation pour le Dashboard utilisant le driver d’origine (adasmbus)
 
 # COPYRIGHT 2016 Robert Wolterman
 # MIT License, see LICENSE file for details
 
-# MODULE IMPORTS
+from __future__ import annotations
+
 import time
-import traceback
 
 try:
     import RPi.GPIO as GPIO
@@ -18,13 +18,8 @@ try:
 except ImportError:  # pragma: no cover - dépend du hardware
     GPIO = None  # type: ignore
 
-try:
-    from smbus2 import SMBus, i2c_msg
-except ImportError as exc:  # pragma: no cover - dépend du hardware
-    raise ImportError(
-        "Le module smbus2 est requis pour utiliser AM2315. Installez-le via 'pip install smbus2'."
-    ) from exc
-# GLOBAL VARIABLES
+from . import adasmbus
+
 AM2315_I2CADDR = 0x5C
 AM2315_READREG = 0x03
 MAXREADATTEMPT = 10
@@ -36,18 +31,18 @@ class AM2315:
     """Base functionality for AM2315 humidity and temperature sensor."""
 
     def __init__(self, address=AM2315_I2CADDR, i2c=None, powerpin=0, **kwargs):
-        # if i2c is None:
-        #    import Adafruit_GPIO.I2C as I2C
-        #    i2c = I2C
-
         self.powerpin = powerpin
-        # for Grove PowerSave
         if self.powerpin != 0:
+            if GPIO is None:
+                raise RuntimeError(
+                    "RPi.GPIO n’est pas disponible : impossible de contrôler powerpin."
+                )
             GPIO.setup(self.powerpin, GPIO.OUT)
             GPIO.output(self.powerpin, True)
             time.sleep(1.0)
 
-        self._bus = SMBus(1)
+        bus_number = kwargs.get("bus", 1)
+        self._device = adasmbus.SMBus(bus_number)
 
         self.humidity = 0
         self.temperature = 0
@@ -60,7 +55,9 @@ class AM2315:
         self.powercycles = 0
 
     def powerCycleAM2315(self):
-        if AM2315DEBUG == True:
+        if self.powerpin == 0 or GPIO is None:
+            return
+        if AM2315DEBUG:
             print("power cycling AM2315")
         GPIO.output(self.powerpin, False)
         time.sleep(10.50)
@@ -68,12 +65,13 @@ class AM2315:
         time.sleep(1.50)
         self.powercycles += 1
 
-    def verify_crc(self, char):
-        """Returns the 16-bit CRC of sensor data"""
+    @staticmethod
+    def verify_crc(char: bytes | bytearray) -> int:
+        """Returns the 16-bit CRC of sensor data."""
         crc = 0xFFFF
         for l in char:
             crc = crc ^ l
-            for i in range(1, 9):
+            for _ in range(1, 9):
                 if crc & 0x01:
                     crc = crc >> 1
                     crc = crc ^ 0xA001
@@ -81,50 +79,34 @@ class AM2315:
                     crc = crc >> 1
         return crc
 
-    # fast read for device detection without faults
     def _fast_read_data(self):
-
-        # WAKE UP
-        # self._device.write8(AM2315_READREG,0x00)
         try:
-            self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+            self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
             time.sleep(0.050)
-        except:
-            self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+        except Exception:
+            self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
             time.sleep(0.050)
 
-        # TELL THE DEVICE WE WANT 4 BYTES OF DATA
-        # self._device.writeList(AM2315_READREG,[0x00, 0x04])
-        self._bus.write_i2c_block_data(AM2315_I2CADDR, AM2315_READREG, [0x00, 0x04])
-
+        self._device.write_i2c_block_data(AM2315_I2CADDR, AM2315_READREG, [0x00, 0x04])
         time.sleep(0.050)
-        # use modified read_i2c_block_data for read from AM2315
-        read = i2c_msg.read(AM2315_I2CADDR, 8)
-        self._bus.i2c_rdwr(read)
-        tmp = list(read)
+        tmp = self._device.am2315_read_i2c_block_data(AM2315_I2CADDR, AM2315_READREG, 8)
 
         self.temperature = (((tmp[4] & 0x7F) << 8) | tmp[5]) / 10.0
         self.humidity = ((tmp[2] << 8) | tmp[3]) / 10.0
 
         self.crc = (tmp[7] << 8) | tmp[6]
-        # Verify CRC here
-        # force CRC error with the next line
-        # tmp[0] = tmp[0]+1
         t = bytearray([tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5]])
         c = self.verify_crc(t)
 
         if (self.crc != c) or (c == 0):
-            # if (self.crc != c):
-            if AM2315DEBUG == True:
+            if AM2315DEBUG:
                 print("AM2314 BAD CRC")
             self.crc = -1
-        else:
-
-            if AM2315DEBUG == True:
-                print("Fast Read AM2315temperature=", self.temperature)
-                print("Fast Read AM2315humdity=", self.humidity)
-                print("Fast Read AM2315crc=", self.crc)
-                print("Fast Read AM2315c=", c)
+        elif AM2315DEBUG:
+            print("Fast Read AM2315temperature=", self.temperature)
+            print("Fast Read AM2315humdity=", self.humidity)
+            print("Fast Read AM2315crc=", self.crc)
+            print("Fast Read AM2315c=", c)
 
     def _read_data(self):
         count = 0
@@ -133,106 +115,84 @@ class AM2315:
         while count <= MAXREADATTEMPT:
             try:
                 try:
-                self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+                    self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
                     time.sleep(0.050)
-                except:
-                    if AM2315DEBUG == True:
+                except Exception:
+                    if AM2315DEBUG:
                         print("Wake Byte Fail")
                     time.sleep(2.000)
-                    self._bus.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+                    self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
                     time.sleep(0.001)
-                    # self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
-                    # time.sleep(0.001)
-                    # self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
                     time.sleep(0.050)
 
-                # TELL THE DEVICE WE WANT 4 BYTES OF DATA
-                self._bus.write_i2c_block_data(
+                self._device.write_i2c_block_data(
                     AM2315_I2CADDR, AM2315_READREG, [0x00, 0x04]
                 )
-                # self._device.writeList(AM2315_READREG,[0x00, 0x04])
                 time.sleep(0.09)
-                read = i2c_msg.read(AM2315_I2CADDR, 8)
-                self._bus.i2c_rdwr(read)
-                tmp = list(read)
+                tmp = self._device.am2315_read_i2c_block_data(
+                    AM2315_I2CADDR, AM2315_READREG, 8
+                )
                 self.temperature = (((tmp[4] & 0x7F) << 8) | tmp[5]) / 10.0
                 self.humidity = ((tmp[2] << 8) | tmp[3]) / 10.0
-                # check for > 10.0 degrees higher
-                if self.AM2315PreviousTemp != -1000:  # ignore first time
+                if self.AM2315PreviousTemp != -1000:
                     if self.humidity < 0.01 or self.humidity > 100.0:
-                        # OK, humidity is bad.  Ignore
-                        if AM2315DEBUG == True:
+                        if AM2315DEBUG:
                             print(">>>>>>>>>>>>>")
                             print("Bad AM2315 Humidity = ", self.temperature)
                             print(">>>>>>>>>>>>>")
-                            self.badreadings = self.badreadings + 1
-                            tmp = None
+                        self.badreadings += 1
+                        tmp = None
+                    elif abs(self.temperature - self.AM2315PreviousTemp) > 10.0:
+                        if AM2315DEBUG:
+                            print(">>>>>>>>>>>>>")
+                            print("Bad AM2315 Temperature = ", self.temperature)
+                            print(">>>>>>>>>>>>>")
+                        self.badreadings += 1
+                        tmp = None
                     else:
-                        if abs(self.temperature - self.AM2315PreviousTemp) > 10.0:
-                            # OK, temp is bad.  Ignore
-                            if AM2315DEBUG == True:
-                                print(">>>>>>>>>>>>>")
-                                print("Bad AM2315 Temperature = ", self.temperature)
-                                print(">>>>>>>>>>>>>")
-                                self.badreadings = self.badreadings + 1
-                                tmp = None
-                        else:
-                            # Good Temperature
-                            self.AM2315PreviousTemp = self.temperature
+                        self.AM2315PreviousTemp = self.temperature
                 else:
-                    # assume first is good temperature
                     self.AM2315PreviousTemp = self.temperature
-                # IF WE HAVE DATA, LETS EXIT THIS LOOP
-                if tmp != None:
+                if tmp is not None:
                     break
-            except Exception as ex:
-                if AM2315DEBUG == True:
-                    # template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                    # message = template.format(type(ex).__name__, ex.args)
-                    # print message
-                    # print traceback.format_exc()
+            except Exception:
+                if AM2315DEBUG:
                     print("AM2315readCount = ", count)
             count += 1
             self.retrys += 1
             time.sleep(0.10)
-            # only do three power cycle attempts
-            if self.powerpin != 0:
+            if self.powerpin != 0 and GPIO is not None:
                 if count > MAXREADATTEMPT:
                     self.powerCycleAM2315()
                     if powercyclecount <= 2:
                         powercyclecount + 1
                         count = 0
 
-        if AM2315DEBUG == True:
-            print("--->looking at good data")
+        if tmp is None:
+            raise RuntimeError("Impossible de lire des données AM2315.")
 
-        # GET THE DATA OUT OF THE LIST WE READ
         self.humidity = ((tmp[2] << 8) | tmp[3]) / 10.0
         self.temperature = (((tmp[4] & 0x7F) << 8) | tmp[5]) / 10.0
         if tmp[4] & 0x80:
             self.temperature = -self.temperature
 
         self.crc = (tmp[7] << 8) | tmp[6]
-        # Verify CRC here
-        # force CRC error with the next line
-        # tmp[0] = tmp[0]+1
         t = bytearray([tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5]])
         c = self.verify_crc(t)
 
-        if AM2315DEBUG == True:
+        if AM2315DEBUG:
             print("AM2315temperature=", self.temperature)
             print("AM2315humdity=", self.humidity)
             print("AM2315crc=", self.crc)
             print("AM2315c=", c)
 
         if (self.crc != c) or (c == 0):
-            # if self.crc != c:
-            if AM2315DEBUG == True:
+            if AM2315DEBUG:
                 print("AM2314 BAD CRC")
-            self.badcrcs = self.badcrcs + 1
+            self.badcrcs += 1
             self.crc = -1
         else:
-            self.goodreads = self.goodreads + 1
+            self.goodreads += 1
 
     def fast_read_temperature(self):
         self._fast_read_data()
@@ -252,10 +212,6 @@ class AM2315:
 
     def read_humidity_temperature_crc(self):
         self._read_data()
-        return (self.humidity, self.temperature, self.crc)
-
-    def fast_read_humidity_temperature_crc(self):
-        self._fast_read_data()
         return (self.humidity, self.temperature, self.crc)
 
     def read_status_info(self):

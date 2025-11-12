@@ -67,7 +67,8 @@ def _ensure_setup() -> Tuple[bool, Dict[int, int]]:
         return False, {}
 
     pins = _get_relay_pins()
-    if not _INITIALIZED:
+    current_mode = GPIO.getmode() if GPIO else None  # type: ignore[attr-defined]
+    if not _INITIALIZED or current_mode is None:
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
         _ACTIVE_LOW = _load_active_low()

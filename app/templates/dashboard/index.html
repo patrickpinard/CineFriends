@@ -205,21 +205,50 @@
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="space-y-1">
                 <h3 class="text-lg font-semibold text-slate-800">Suivi climatique</h3>
-                <p class="text-sm text-slate-500">Température et humidité moyennes observées sur les sept derniers jours.</p>
+                <p class="text-sm text-slate-500">Évolution des capteurs et des changements d’état des relais.</p>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="inline-flex items-center gap-2 rounded-full bg-sky-100/80 px-3 py-1 text-xs font-medium text-sky-600">
-                    <span class="h-2.5 w-2.5 rounded-full bg-sky-500"></span> Température
-                </span>
-                <span class="inline-flex items-center gap-2 rounded-full bg-emerald-100/80 px-3 py-1 text-xs font-medium text-emerald-600">
-                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span> Humidité
-                </span>
-            </div>
+            <form method="get" class="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {% for key, value in request.args.items() if key != 'period' %}
+                <input type="hidden" name="{{ key }}" value="{{ value }}">
+                {% endfor %}
+                {% for link in chart_period_links %}
+                <button type="submit"
+                        name="period"
+                        value="{{ link.value }}"
+                        class="inline-flex items-center gap-2 rounded-full border {% if link.active %}border-teal-300 bg-teal-50 text-teal-600{% else %}border-slate-200 bg-white text-slate-500 hover:border-teal-200 hover:text-teal-600{% endif %} px-3 py-1 transition">
+                    {{ link.label }}
+                </button>
+                {% endfor %}
+            </form>
         </div>
     </div>
     <div class="px-4 pb-6 pt-2 sm:px-8">
-        <div class="relative w-full overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 p-4 shadow-inner">
-            <div id="climateChart" class="h-[320px] w-full"></div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {% if relay_legend %}
+            <div class="flex flex-wrap items-center gap-2">
+                {% for item in relay_legend %}
+                <button type="button"
+                        class="relay-toggle inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:border-teal-200 hover:text-teal-600 transition"
+                        data-relay-channel="{{ item.channel }}"
+                        style="--relay-color: {{ item.color }};"
+                        data-active="true">
+                    <span class="inline-flex h-2 w-2 rounded-full" style="background-color: {{ item.color }};"></span>
+                    {{ item.name }}
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <button type="button" id="chart-expand-button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-teal-200 hover:text-teal-600">
+                Agrandir
+            </button>
+        </div>
+        <div id="climateChartWrapper" class="relative w-full overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 p-4 shadow-inner transition-all duration-300">
+            <div id="climateChart" class="h-[320px] w-full{% if not chart_has_data %} hidden{% endif %}"></div>
+            {% if not chart_has_data %}
+            <div class="flex h-[320px] w-full items-center justify-center text-sm font-medium text-slate-500">
+                Aucune donnée disponible pour la période sélectionnée.
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -228,14 +257,23 @@
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const el = document.getElementById('climateChart');
-        if (!el) return;
+        const hasData = {{ 'true' if chart_has_data else 'false' }};
+        if (!el || !hasData) return;
 
-        const labels = {{ chart_labels|tojson }};
-        const temperatures = {{ chart_temperatures|tojson }};
-        const humidity = {{ chart_humidity|tojson }};
+        const series = {{ chart_series|tojson }};
+        const colors = {{ chart_colors|tojson }};
+        const relayAnnotations = {{ relay_annotations|tojson }};
+        const seriesUnits = series.map((item) => item.unit || '');
+        const apexSeries = series.map(({ name, data, axis }) => ({
+            name,
+            data,
+            yAxisIndex: axis === 'humidity' ? 1 : 0,
+        }));
+
+        let chartInstance = null;
 
         const renderWithApex = () => {
-            const chart = new ApexCharts(el, {
+            chartInstance = new ApexCharts(el, {
                 chart: {
                     type: 'line',
                     stacked: false,
@@ -244,11 +282,11 @@
                         show: true,
                         tools: {
                             download: true,
-                            selection: true,
+                            selection: false,
                             zoom: true,
                             zoomin: true,
                             zoomout: true,
-                            pan: false,
+                            pan: true,
                             reset: true,
                         },
                         offsetX: 0,
@@ -256,34 +294,26 @@
                     },
                     fontFamily: 'Inter, system-ui, sans-serif',
                 },
-                colors: ['#0284c7', '#0f766e'],
-                series: [
-                    { name: 'Température (°C)', data: temperatures },
-                    { name: 'Humidité (%)', data: humidity },
-                ],
+                colors: colors.length ? colors : undefined,
+                series: apexSeries,
                 stroke: {
                     show: true,
-                    width: 3,
+                    width: 4,
                     curve: 'smooth',
-                    colors: ['#0284c7', '#0f766e'],
+                    lineCap: 'round',
                 },
                 dataLabels: {
-                    enabled: true,
-                    style: { colors: ['#475569'], fontSize: '12px' },
-                    formatter: (val, opts) => {
-                        if (val === null || typeof val === 'undefined') {
-                            return '—';
-                        }
-                        return opts.seriesIndex === 0 ? `${Number(val).toFixed(1)}°` : `${val}%`;
-                    },
-                    offsetY: -4,
+                    enabled: false,
                 },
                 markers: {
-                    size: 5,
+                    size: 4,
                     colors: ['#fff'],
-                    strokeColors: ['#0284c7', '#0f766e'],
-                    strokeWidth: 2,
-                    hover: { sizeOffset: 2 },
+                    strokeColors: colors.length ? colors : ['#0284c7'],
+                    strokeWidth: 3,
+                    hover: { sizeOffset: 3 },
+                },
+                annotations: {
+                    xaxis: [],
                 },
                 fill: {
                     type: 'gradient',
@@ -295,22 +325,27 @@
                     },
                 },
                 xaxis: {
-                    categories: labels,
+                    type: 'datetime',
                     axisTicks: { show: false },
                     axisBorder: { show: false },
                     labels: {
                         style: { colors: '#94a3b8', fontSize: '11px', fontWeight: 500 },
+                        datetimeUTC: false,
                     },
                 },
                 yaxis: [
                     {
                         labels: { style: { colors: '#94a3b8', fontSize: '11px' } },
-                        title: { text: 'Température (°C)', style: { color: '#0ea5e9' } },
+                        title: { text: 'Température (°C)', style: { color: '#0284c7' } },
+                        min: -20,
+                        max: 50,
                     },
                     {
                         opposite: true,
                         labels: { style: { colors: '#94a3b8', fontSize: '11px' } },
-                        title: { text: 'Humidité (%)', style: { color: '#10b981' } },
+                        title: { text: 'Humidité (%)', style: { color: '#0f766e' } },
+                        min: 0,
+                        max: 120,
                     },
                 ],
                 legend: {
@@ -321,12 +356,17 @@
                 },
                 tooltip: {
                     theme: 'light',
+                    x: { format: 'dd/MM/yyyy HH:mm' },
                     y: {
                         formatter: (value, { seriesIndex }) => {
-                            if (value === null || typeof value === 'undefined') {
-                                return 'Donnée indisponible';
+                            if (value === null || typeof value === 'undefined') return 'Donnée indisponible';
+                            const numeric = Number(value);
+                            if (Number.isNaN(numeric)) return 'Donnée indisponible';
+                            const unit = seriesUnits[seriesIndex] || '';
+                            if (unit.trim() === '%') {
+                                return `${numeric.toFixed(1)} %`;
                             }
-                            return seriesIndex === 0 ? `${Number(value).toFixed(1)} °C` : `${value}%`;
+                            return `${numeric.toFixed(1)} ${unit}`.trim();
                         },
                     },
                 },
@@ -339,7 +379,7 @@
                     { breakpoint: 640, options: { dataLabels: { enabled: false } } },
                 ],
             });
-            chart.render();
+            chartInstance.render();
         };
 
         if (typeof ApexCharts !== 'undefined') {
@@ -347,6 +387,87 @@
         } else {
             console.warn('ApexCharts non chargé, aucune visualisation.');
         }
+
+        const wrapper = document.getElementById('climateChartWrapper');
+        const expandBtn = document.getElementById('chart-expand-button');
+        if (wrapper && expandBtn) {
+            let expanded = false;
+            expandBtn.addEventListener('click', () => {
+                expanded = !expanded;
+                wrapper.classList.toggle('chart-expanded', expanded);
+                expandBtn.textContent = expanded ? 'Réduire' : 'Agrandir';
+                if (chartInstance) {
+                    setTimeout(() => chartInstance.resize(), 50);
+                }
+            });
+        }
+
+        const refreshRelayAnnotations = () => {
+            if (!chartInstance) return;
+            chartInstance.clearAnnotations();
+            const annotations = relayAnnotations || [];
+            annotations.forEach((event) => {
+                const channel = Number(event.data?.channel);
+                if (!Number.isInteger(channel) || relayState[channel] === false) {
+                    return;
+                }
+                const pointX = new Date(event.timestamp).getTime();
+                chartInstance.addXaxisAnnotation({
+                    x: pointX,
+                    label: {
+                        borderColor: event.color,
+                        style: {
+                            background: event.background,
+                            color: '#0f172a',
+                            fontWeight: 600,
+                        },
+                        orientation: 'vertical',
+                        text: event.label,
+                        offsetY: 0,
+                    },
+                    borderColor: event.color,
+                    strokeDashArray: 4,
+                });
+            });
+        };
+        const relayState = {};
+        relayAnnotations.forEach((event) => {
+            const channel = Number(event.data?.channel);
+            if (Number.isInteger(channel)) {
+                relayState[channel] = true;
+            }
+        });
+        const relayButtons = document.querySelectorAll('.relay-toggle');
+        relayButtons.forEach((btn) => {
+            const channel = Number(btn.dataset.relayChannel);
+            if (!Number.isInteger(channel)) return;
+            if (!(channel in relayState)) {
+                relayState[channel] = true;
+            }
+            btn.classList.toggle('active', relayState[channel]);
+            btn.addEventListener('click', () => {
+                relayState[channel] = !relayState[channel];
+                btn.classList.toggle('active', relayState[channel]);
+                refreshRelayAnnotations();
+            });
+        });
+        refreshRelayAnnotations();
     });
 </script>
+<style>
+    #climateChartWrapper.chart-expanded {
+        min-height: 560px;
+    }
+
+    #climateChartWrapper.chart-expanded #climateChart {
+        height: 520px;
+    }
+
+    .relay-toggle.active {
+        border-color: var(--relay-color, #0ea5e9);
+        background: rgba(14, 165, 233, 0.12);
+        color: #0f172a;
+    }
+</style>
 {% endblock %}
+
