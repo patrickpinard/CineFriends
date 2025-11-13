@@ -59,14 +59,24 @@ def _compare(value: float, operator: str, threshold: float) -> bool:
 def _build_reading_map(readings: Iterable[SensorReading]) -> Dict[Tuple[str, str, Optional[str]], SensorReading]:
     reading_map: Dict[Tuple[str, str, Optional[str]], SensorReading] = {}
     for reading in readings:
-        key = (reading.sensor_type.lower(), reading.metric.lower(), (reading.sensor_id or "").lower() or None)
+        sensor_type = (reading.sensor_type or "").lower()
+        metric = (reading.metric or "").lower()
+        sensor_id = (reading.sensor_id or "").lower() or None
+        timestamp = reading.created_at or datetime.utcnow()
+
+        key = (sensor_type, metric, sensor_id)
         existing = reading_map.get(key)
-        if existing is None or reading.created_at > existing.created_at:
+        if existing is None or (existing.created_at or datetime.min) < timestamp:
             reading_map[key] = reading
+
+        fallback_key = (sensor_type, metric, None)
+        fallback = reading_map.get(fallback_key)
+        if fallback is None or (fallback.created_at or datetime.min) < timestamp:
+            reading_map[fallback_key] = reading
     return reading_map
 
 
-def _execute_actions(actions: str) -> List[Dict[str, str]]:
+def _execute_actions(actions: str, *, rule: Optional[AutomationRule] = None) -> List[Dict[str, str]]:
     outcome: List[Dict[str, str]] = []
     for raw_line in actions.splitlines():
         line = raw_line.strip()
@@ -78,7 +88,26 @@ def _execute_actions(actions: str) -> List[Dict[str, str]]:
                 channel_part, state_part = command.split("=", 1)
                 channel = int(channel_part.strip())
                 state = state_part.strip()
-                outcome.append(set_relay_state(channel, state))
+                result = set_relay_state(channel, state)
+                outcome.append({
+                    "channel": channel,
+                    "state": state,
+                    **result,
+                })
+                db.session.add(
+                    JournalEntry(
+                        level="info" if result.get("status") == "ok" else "warning",
+                        message=f"Commande relais ch{channel}",
+                        details={
+                            "channel": channel,
+                            "command": state,
+                            "result": result,
+                            "issued_by": (rule.name if rule else "Automatisation"),
+                            "rule_id": rule.id if rule else None,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        },
+                    )
+                )
             except Exception as exc:  # pragma: no cover - parsing robuste
                 outcome.append({"status": "error", "message": f"Action invalide '{line}': {exc}"})
         else:
@@ -120,7 +149,7 @@ def evaluate_rules_with_readings(readings: Iterable[SensorReading]) -> None:
         if not _compare(float(reading.value), trigger.operator, trigger.threshold):
             continue
 
-        results = _execute_actions(rule.action)
+        results = _execute_actions(rule.action, rule=rule)
         rule.last_triggered_at = now
         triggered.append(
             {

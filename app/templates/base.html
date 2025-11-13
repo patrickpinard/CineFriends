@@ -10,6 +10,9 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/180.png') }}" />
     <meta name="theme-color" content="#0ea5e9" />
     <title>{% block title %}Dashboard{% endblock %}</title>
+    <script>
+        document.documentElement.classList.add('is-loading');
+    </script>
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
     <script>
         tailwind.config = {
@@ -131,13 +134,49 @@
             z-index: 60;
             background: rgba(244, 249, 251, 0.94);
             backdrop-filter: blur(6px);
-            display: grid;
-            place-items: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             transition: opacity .3s ease;
-        }
-        #page-skeleton.hidden {
             opacity: 0;
             pointer-events: none;
+        }
+        html.is-loading #page-skeleton {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .loading-shell {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 2.5rem 3rem;
+            border-radius: 1.75rem;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 22px 60px -28px rgba(14, 165, 233, 0.35);
+        }
+        .loading-spinner {
+            width: 3.75rem;
+            height: 3.75rem;
+            border-radius: 9999px;
+            border: 5px solid rgba(14, 165, 233, 0.18);
+            border-top-color: #0ea5e9;
+            animation: spin 0.8s linear infinite;
+        }
+        .loading-label {
+            font-size: 0.95rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #0f172a;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
     <script defer src="{{ url_for('static', filename='js/pwa.js') }}"></script>
@@ -145,15 +184,15 @@
 </head>
 <body class="h-full bg-gradient-to-br from-slate-100 via-white to-sky-50 antialiased">
     <div id="toast-container" class="pointer-events-none fixed inset-x-4 z-50 flex flex-col gap-3 md:items-end" style="top: calc(var(--safe-area-top, 0px) + 1rem);"></div>
-    <div id="page-skeleton">
-        <div class="w-full max-w-lg space-y-6 rounded-3xl border border-slate-200/60 bg-white/80 p-8 shadow-card">
-            <div class="skeleton-animate h-4 w-24 rounded-full"></div>
-            <div class="skeleton-animate h-8 w-3/4 rounded-full"></div>
-            <div class="space-y-3 pt-4">
-                <div class="skeleton-animate h-10 rounded-2xl"></div>
-                <div class="skeleton-animate h-10 rounded-2xl"></div>
-                <div class="skeleton-animate h-10 rounded-2xl"></div>
-            </div>
+    <div id="page-skeleton" role="status" aria-live="polite">
+        <div class="loading-shell">
+            <div class="loading-spinner"></div>
+            <p class="loading-label">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6A2.25 2.25 0 0 0 14.25 3.75h-4.5A2.25 2.25 0 0 0 7.5 6v12A2.25 2.25 0 0 0 9.75 20.25h4.5A2.25 2.25 0 0 0 16.5 18v-4.5m3 0-3-3m0 0-3 3m3-3V15" />
+                </svg>
+                Chargement de l’interface…
+            </p>
         </div>
     </div>
     <div class="flex min-h-screen">
@@ -575,8 +614,35 @@
         const CSRF_TOKEN = "{{ csrf_token() }}";
 
         document.addEventListener('DOMContentLoaded', function () {
+            document.documentElement.classList.remove('is-loading');
             const skeleton = document.getElementById('page-skeleton');
-            skeleton?.classList.add('hidden');
+            if (skeleton) {
+                skeleton.setAttribute('aria-hidden', 'true');
+            }
+
+            const showLoadingOverlay = () => {
+                document.documentElement.classList.add('is-loading');
+                if (skeleton) {
+                    skeleton.removeAttribute('aria-hidden');
+                }
+            };
+
+            document.querySelectorAll('a[href]').forEach((anchor) => {
+                anchor.addEventListener('click', (event) => {
+                    const href = anchor.getAttribute('href') || '';
+                    if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+                    if (href.startsWith('#') || href.startsWith('javascript:')) return;
+                    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                    showLoadingOverlay();
+                });
+            });
+
+            document.querySelectorAll('form').forEach((form) => {
+                form.addEventListener('submit', () => {
+                    showLoadingOverlay();
+                });
+            });
+
             const mobileToggle = document.querySelector('[data-mobile-nav-toggle]');
             const mobileNav = document.querySelector('[data-mobile-nav]');
             const mobileBackdrop = document.querySelector('[data-mobile-nav-backdrop]');

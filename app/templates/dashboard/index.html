@@ -144,9 +144,17 @@
             {% if relay.rules %}
             <div class="mt-3 rounded-xl bg-teal-50/80 p-3 text-xs text-teal-700">
                 <p class="font-semibold uppercase tracking-wide">Contrôlé par l’automatisation</p>
-                <ul class="mt-1 list-inside list-disc space-y-1">
-                    {% for name in relay.rules %}
-                    <li>{{ name }}</li>
+                <ul class="mt-1 space-y-2">
+                    {% for rule in relay.rules %}
+                    <li class="space-y-1">
+                        <p class="font-semibold text-teal-800">{{ rule.name }}</p>
+                        {% if rule.condition %}
+                        <p class="flex items-start gap-1 text-[11px] text-teal-700"><span class="mt-1 inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full bg-teal-500"></span><span>Si {{ rule.condition }}</span></p>
+                        {% endif %}
+                        {% if rule.action %}
+                        <p class="flex items-start gap-1 text-[11px] text-teal-700"><span class="mt-1 inline-flex h-1.5 w-1.5 flex-shrink-0 rounded-full bg-teal-500"></span><span>Alors {{ rule.action }}</span></p>
+                        {% endif %}
+                    </li>
                     {% endfor %}
                 </ul>
             </div>
@@ -210,25 +218,38 @@
 
 <div class="mt-8 overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-soft">
     <div class="relative px-6 py-5 sm:px-8">
-        <div class="absolute inset-y-0 right-0 h-full w-1/2 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.12),transparent_60%)]"></div>
+        <div class="absolute inset-y-0 right-0 h-full w-1/2 pointer-events-none bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.12),transparent_60%)]"></div>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="space-y-1">
                 <h3 class="text-lg font-semibold text-slate-800">Suivi climatique</h3>
                 <p class="text-sm text-slate-500">Évolution des capteurs et des changements d’état des relais.</p>
             </div>
-            <form method="get" class="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {% for key, value in request.args.items() if key != 'period' %}
-                <input type="hidden" name="{{ key }}" value="{{ value }}">
-                {% endfor %}
-                {% for link in chart_period_links %}
-                <button type="submit"
-                        name="period"
-                        value="{{ link.value }}"
-                        class="inline-flex items-center gap-2 rounded-full border {% if link.active %}border-teal-300 bg-teal-50 text-teal-600{% else %}border-slate-200 bg-white text-slate-500 hover:border-teal-200 hover:text-teal-600{% endif %} px-3 py-1 transition">
-                    {{ link.label }}
-                </button>
-                {% endfor %}
-            </form>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                {% if current_user.role == 'admin' %}
+                <form method="post" action="{{ url_for('main.manual_sensor_collect') }}" class="flex justify-end">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 active:scale-[0.97]">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        Déclencher la collecte
+                    </button>
+                </form>
+                {% endif %}
+                <form method="get" class="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {% for key, value in request.args.items() if key != 'period' %}
+                    <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endfor %}
+                    {% for link in chart_period_links %}
+                    <button type="submit"
+                            name="period"
+                            value="{{ link.value }}"
+                            class="inline-flex items-center gap-2 rounded-full border {% if link.active %}border-teal-300 bg-teal-50 text-teal-600{% else %}border-slate-200 bg-white text-slate-500 hover:border-teal-200 hover:text-teal-600{% endif %} px-3 py-1 transition">
+                        {{ link.label }}
+                    </button>
+                    {% endfor %}
+                </form>
+            </div>
         </div>
     </div>
     <div class="px-4 pb-6 pt-2 sm:px-8">
@@ -276,17 +297,6 @@
         const baseColors = {{ chart_colors|tojson }};
         const relayAnnotations = {{ relay_annotations|tojson }};
 
-        const adjustColor = (hex, amount) => {
-            const normalized = hex.replace('#', '');
-            const expanded = normalized.length === 3 ? normalized.split('').map((c) => c + c).join('') : normalized;
-            const num = parseInt(expanded, 16);
-            const clamp = (value) => Math.min(255, Math.max(0, value));
-            const r = clamp((num >> 16) + amount);
-            const g = clamp(((num >> 8) & 0xff) + amount);
-            const b = clamp((num & 0xff) + amount);
-            return `#${(1 << 24 | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
-        };
-
         const apexSeries = [];
         const apexColors = [];
         const seriesUnits = [];
@@ -297,78 +307,44 @@
 
         originalSeries.forEach((item, index) => {
             const baseColor = baseColors[index % baseColors.length] || '#0ea5e9';
+            const meta = item.meta || {};
+            const metricHint = typeof meta.metric === 'string' ? meta.metric.toLowerCase().trim() : '';
+            const axisHint = typeof item.axis === 'string' ? item.axis.toLowerCase().trim() : '';
+            const unitHint = typeof item.unit === 'string' ? item.unit : '';
+            const sensorHint = typeof meta.sensor_type === 'string' ? meta.sensor_type.toLowerCase().trim() : '';
+            const isTemperature =
+                metricHint === 'temperature' ||
+                axisHint === 'temperature' ||
+                unitHint.includes('°') ||
+                (sensorHint === 'am2315' && metricHint !== 'humidity');
             const legendEntry = {
                 name: item.name,
                 color: baseColor,
-                axis: item.axis,
+                axis: isTemperature ? 'temperature' : 'humidity',
                 seriesNames: [],
             };
-            if (item.axis === 'temperature') {
-                const positive = [];
-                const negative = [];
-                item.data.forEach((point) => {
-                    const rawValue = point.y;
-                    const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
-                    if (!Number.isFinite(value)) {
-                        positive.push({ x: point.x, y: null });
-                        negative.push({ x: point.x, y: null });
-                        return;
-                    }
-                    if (value >= 0) {
-                        temperatureMin = Math.min(temperatureMin, value);
-                        temperatureMax = Math.max(temperatureMax, value);
-                        positive.push({ x: point.x, y: value });
-                        negative.push({ x: point.x, y: null });
-                    } else {
-                        temperatureMin = Math.min(temperatureMin, value);
-                        temperatureMax = Math.max(temperatureMax, value);
-                        positive.push({ x: point.x, y: null });
-                        negative.push({ x: point.x, y: value });
-                    }
-                });
-                apexSeries.push({
-                    name: item.name,
-                    data: positive,
-                    yAxisIndex: 0,
-                    type: 'line',
-                });
-                apexColors.push(baseColor);
-                seriesUnits.push(item.unit || '');
-                strokeDashArray.push(0);
-                legendEntry.seriesNames.push(item.name);
+            const seriesData = item.data.map((point) => {
+                const value = Number(point.y);
+                if (isTemperature && Number.isFinite(value)) {
+                    temperatureMin = Math.min(temperatureMin, value);
+                    temperatureMax = Math.max(temperatureMax, value);
+                }
+                return {
+                    x: point.x,
+                    y: Number.isFinite(value) ? value : null,
+                };
+            });
 
-                apexSeries.push({
-                    name: `${item.name} (sous 0°C)`,
-                    data: negative,
-                    yAxisIndex: 0,
-                    showInLegend: false,
-                    type: 'line',
-                });
-                apexColors.push(adjustColor(baseColor, -60));
-                seriesUnits.push(item.unit || '');
-                strokeDashArray.push(0);
-                legendEntry.seriesNames.push(`${item.name} (sous 0°C)`);
-            } else {
-                const humidityData = item.data.map((point) => {
-                    const rawValue = point.y;
-                    const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
-                    return {
-                        x: point.x,
-                        y: Number.isFinite(value) ? value : null,
-                        marker: { shape: 'square', size: 6 },
-                    };
-                });
-                apexSeries.push({
-                    name: item.name,
-                    data: humidityData,
-                    yAxisIndex: 1,
-                    type: 'line',
-                });
-                apexColors.push(baseColor);
-                seriesUnits.push(item.unit || '');
-                strokeDashArray.push(0);
-                legendEntry.seriesNames.push(item.name);
-            }
+            apexSeries.push({
+                name: item.name,
+                data: seriesData,
+                yAxisIndex: isTemperature ? 0 : 1,
+                type: 'line',
+            });
+            apexColors.push(baseColor);
+            seriesUnits.push(item.unit || '');
+            strokeDashArray.push(0);
+            legendEntry.seriesNames.push(item.name);
             sensorsLegend.push(legendEntry);
         });
 
@@ -452,7 +428,7 @@
                 series: apexSeries,
                 stroke: {
                     show: true,
-                    width: 4,
+                    width: 3,
                     curve: 'smooth',
                     lineCap: 'round',
                     colors: apexColors.length ? apexColors : undefined,
@@ -463,23 +439,14 @@
                     enabled: false,
                 },
                 markers: {
-                    size: 4,
-                    colors: ['#fff'],
-                    strokeColors: apexColors.length ? apexColors : ['#0284c7'],
-                    strokeWidth: 3,
-                    hover: { sizeOffset: 3 },
+                    size: 0,
+                    hover: { sizeOffset: 0 },
                 },
                 annotations: {
                     xaxis: [],
                 },
                 fill: {
-                    type: 'gradient',
-                    gradient: {
-                        shadeIntensity: 1,
-                        opacityFrom: 0.35,
-                        opacityTo: 0.05,
-                        stops: [0, 95, 100],
-                    },
+                    type: 'solid',
                 },
                 xaxis: {
                     type: 'datetime',

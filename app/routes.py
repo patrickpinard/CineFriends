@@ -14,6 +14,7 @@ from . import db
 from .forms import AutomationRuleForm, ProfileForm, SettingForm
 from .models import AutomationRule, JournalEntry, Notification, SensorReading, Setting, User
 from .services import create_notification
+from .tasks import collect_sensor_readings
 from .utils import build_changes, build_hardware_overview, delete_avatar, save_avatar
 from .automation_engine import parse_trigger
 SENSOR_LABELS = {
@@ -51,6 +52,19 @@ def get_sensor_display_name(sensor_type: str) -> str:
     if not key:
         return default
     return get_setting_value(key, default)
+
+
+def _extract_relay_action_description(line: str) -> str:
+    try:
+        _, command = line.split(":", 1)
+        channel_part, state_part = command.split("=", 1)
+        channel = channel_part.strip()
+        state = state_part.strip().lower()
+        state_map = {"on": "Allumer", "off": "Éteindre", "toggle": "Basculer"}
+        label = state_map.get(state, state.upper())
+        return f"Relais {channel} → {label}"
+    except Exception:
+        return line.strip()
 
 
 def _build_sensor_registry() -> dict[str, dict[str, object]]:
@@ -447,8 +461,8 @@ def dashboard():
 
     base_color_map = {
         ("ds18b20", "temperature"): "#0ea5e9",
-        ("am2315", "temperature"): "#0f766e",
-        ("am2315", "humidity"): "#8b5cf6",
+        ("am2315", "temperature"): "#1e3a8a",
+        ("am2315", "humidity"): "#16a34a",
     }
 
     climate_readings = (
@@ -559,13 +573,18 @@ def dashboard():
         command_lower = command.lower()
         relay_labels_map = get_relay_labels()
         relay_name = relay_labels_map.get(channel, f"Relais {channel}")
+        details_text = []
         if command_lower == "on":
             label_text = f"▲ {relay_name} ON"
+            details_text.append("État cible : ON")
         elif command_lower == "off":
             label_text = f"▼ {relay_name} OFF"
+            details_text.append("État cible : OFF")
+        elif command_lower == "toggle":
+            label_text = f"⇄ {relay_name} Toggle"
+            details_text.append("Commande : bascule")
         else:
             label_text = f"{relay_name} → {command_lower}"
-        details_text = []
         issued_by = details.get("issued_by")
         if issued_by:
             details_text.append(f"Par : {issued_by}")
@@ -599,7 +618,7 @@ def dashboard():
     relays_available = hardware_available() and bool(relay_pins)
     relays_active_low = is_active_low()
     relay_cards = []
-    channel_rule_map: dict[int, list[str]] = {}
+    channel_rule_map: dict[int, list[dict[str, str]]] = {}
     for rule in AutomationRule.query.filter(AutomationRule.enabled.is_(True)).all():
         trigger = parse_trigger(rule.trigger)
         if not trigger:
@@ -614,7 +633,19 @@ def dashboard():
                 channel_value = int(channel_part.strip())
             except Exception:
                 continue
-            channel_rule_map.setdefault(channel_value, []).append(rule.name)
+            condition = None
+            if trigger:
+                metric_label = METRIC_LABELS.get(trigger.metric, trigger.metric.title())
+                sensor_name = get_sensor_display_name(trigger.sensor_type)
+                condition = f"{sensor_name} {metric_label.lower()} {trigger.operator} {trigger.threshold}"
+            action_label = _extract_relay_action_description(line)
+            channel_rule_map.setdefault(channel_value, []).append(
+                {
+                    "name": rule.name,
+                    "condition": condition,
+                    "action": action_label,
+                }
+            )
 
     for channel in sorted(relay_pins.keys()):
         relay_cards.append(
@@ -1274,6 +1305,49 @@ def journal_purge():
     db.session.commit()
     flash(f"{count} entrée(s) supprimée(s) du journal.", "success")
     return redirect(url_for("main.journal"))
+
+
+@main_bp.route("/actions/collecte-manuelle", methods=["POST"])
+@login_required
+def manual_sensor_collect():
+    if current_user.role != "admin":
+        flash("Accès réservé à l’administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
+
+    trigger_time = datetime.utcnow().isoformat()
+    try:
+        collect_sensor_readings(current_app._get_current_object())
+        db.session.add(
+            JournalEntry(
+                level="info",
+                message="Collecte manuelle des capteurs",
+                details={
+                    "triggered_by": current_user.username,
+                    "source": "dashboard_manual_trigger",
+                    "timestamp": trigger_time,
+                },
+            )
+        )
+        db.session.commit()
+        flash("Collecte des sondes et évaluation des règles lancées.", "success")
+    except Exception as exc:  # pragma: no cover - dépend matériel
+        current_app.logger.exception("Collecte manuelle échouée: %s", exc)
+        db.session.rollback()
+        db.session.add(
+            JournalEntry(
+                level="danger",
+                message="Échec collecte manuelle des capteurs",
+                details={
+                    "error": str(exc),
+                    "triggered_by": current_user.username,
+                    "timestamp": trigger_time,
+                },
+            )
+        )
+        db.session.commit()
+        flash("Impossible de lancer la collecte. Consultez le journal.", "danger")
+
+    return redirect(url_for("main.dashboard"))
 
 
 @main_bp.route("/profil", methods=["GET", "POST"])
