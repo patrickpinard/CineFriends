@@ -1,14 +1,3 @@
-"""
-Fichier : app/mailer.py
-Objectif : Fournir une fonction `send_email` centralisée pour expédier les notifications
-           transactionnelles de l’application via SMTP sécurisé.
-Fonctionnalités clés :
-    - Construction d’emails texte/HTML avec gestion des destinataires et BCC.
-    - Initialisation de la connexion TLS/SSL selon la configuration Flask.
-    - Journalisation des erreurs réseau ou crédentielles.
-Dépendances critiques : configuration `MAIL_*` de Flask, module standard `smtplib`.
-"""
-
 from __future__ import annotations
 
 import smtplib

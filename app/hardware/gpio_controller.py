@@ -1,14 +1,3 @@
-"""
-Fichier : app/hardware/gpio_controller.py
-Objectif : Gérer l’initialisation et le pilotage des relais connectés aux broches
-           GPIO du Raspberry Pi.
-Fonctionnalités clés :
-    - Déterminer la disponibilité des relais et leur mode actif haut/bas.
-    - Positionner/relire l’état des relais en garantissant la configuration BCM.
-    - Journaliser les erreurs matérielles et s’adapter aux environnements hors Pi.
-Dépendances critiques : module `Setting` (configuration), RPi.GPIO, utilitaire `_is_linux_arm`.
-"""
-
 from __future__ import annotations
 
 import logging

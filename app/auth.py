@@ -1,18 +1,5 @@
 import random
 import secrets
-"""
-Fichier : app/auth.py
-Objectif : Gérer l’authentification, l’inscription, la double authentification et
-           les sessions utilisateur via le blueprint `auth`.
-Principales responsabilités :
-    - Authentifier les utilisateurs (login/logout) et enregistrer les nouveaux comptes.
-    - Implémenter la validation 2FA (codes temporaires, confiance appareil).
-    - Piloter l’activation/suspension des comptes et journaliser les événements.
-    - Servir les vues et formulaires associés à l’authentification.
-Dépendances critiques : modèles `User` et `JournalEntry`, formulaires d’authentification,
-                        utilitaires `send_email`, `generate_password_hash`, cookies Flask.
-"""
-
 from datetime import datetime, timedelta
 
 from flask import (Blueprint, current_app, flash, make_response, redirect,

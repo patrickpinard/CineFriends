@@ -1,11 +1,3 @@
-{#
-  Template : dashboard/journal.html
-  Objectif : Visualiser le journal applicatif avec filtres, pagination et purge.
-  Données requises :
-      - `entries`, `filters`, `pagination`, `current_user`.
-  Spécificités :
-      - Détails JSON formatés, modal de purge réservée à l’administrateur.
-#}
 {% extends 'base.html' %}
 {% block title %}Journal{% endblock %}
 {% block header_title %}Journal des activités{% endblock %}

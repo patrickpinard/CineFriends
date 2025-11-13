@@ -1,15 +1,3 @@
-"""
-Fichier : app/automation_engine.py
-Objectif : Implémenter le moteur d’automatisation pour exécuter des règles basées
-           sur les lectures de capteurs et commander les relais.
-Principales responsabilités :
-    - Parser les règles textuelles et évaluer les déclencheurs.
-    - Appliquer des politiques de cooldown et consigner les actions réalisées.
-    - Déclencher l’écriture dans `JournalEntry` et la mise à jour des relais.
-Dépendances critiques : modèles SQLAlchemy (`AutomationRule`, `SensorReading`),
-                        contrôleur GPIO, base de données.
-"""
-
 from __future__ import annotations
 
 import re

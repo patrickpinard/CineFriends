@@ -1,14 +1,3 @@
-"""
-Fichier : app/tasks.py
-Objectif : Définir les tâches planifiées et helpers associés à la collecte de mesures
-           capteurs puis à l’évaluation des règles d’automatisation.
-Fonctionnalités clés :
-    - Détection des capteurs DS18B20/AM2315 et création de `SensorReading`.
-    - Journalisation des succès/erreurs pendant les collectes.
-    - Déclenchement du moteur d’automatisation après chaque collecte.
-Dépendances critiques : utilitaires matériels (`detect_*`), `SensorReading`, scheduler.
-"""
-
 from __future__ import annotations
 
 from datetime import datetime

@@ -1,15 +1,3 @@
-"""
-Fichier : app/routes.py
-Objectif : Regrouper les routes principales du Dashboard (vue d’ensemble, journal,
-           réglages, API JSON) via le blueprint `main`.
-Fonctionnalités clés :
-    - Agréger les données capteurs, états relais et statistiques pour les vues.
-    - Exposer les actions utilisateur (profil, réglages, commandes relais).
-    - Gérer la pagination du journal et les flux JSON pour le frontend.
-Dépendances critiques : SQLAlchemy, formulaires Flask-WTF, moteur d’automatisation,
-                        collecteur de capteurs, templates Jinja.
-"""
-
 from __future__ import annotations
 
 import json
