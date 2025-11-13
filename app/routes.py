@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Generator
+from typing import Generator, Tuple
 
 from flask import (Blueprint, Response, current_app, flash, jsonify, redirect,
                    render_template, request, url_for)
@@ -450,181 +450,6 @@ def dashboard():
         ),
     ]
 
-    # Préparation du graphique climatique
-    period_definitions = [
-        ("1h", "1h", timedelta(hours=1)),
-        ("24h", "24h", timedelta(hours=24)),
-        ("48h", "48h", timedelta(hours=48)),
-        ("7d", "7j", timedelta(days=7)),
-        ("30d", "30j", timedelta(days=30)),
-    ]
-    period_map = {key: {"label": label, "delta": delta} for key, label, delta in period_definitions}
-    selected_period = request.args.get("period", "24h")
-    if selected_period not in period_map:
-        selected_period = "24h"
-    period_delta = period_map[selected_period]["delta"]
-    period_start = now - period_delta
-
-    base_color_map = {
-        ("ds18b20", "temperature"): "#0ea5e9",
-        ("am2315", "temperature"): "#1e3a8a",
-        ("am2315", "humidity"): "#16a34a",
-    }
-
-    climate_readings = (
-        SensorReading.query.filter(
-            SensorReading.metric.in_(["temperature", "humidity"]),
-            SensorReading.created_at >= period_start,
-        )
-        .order_by(SensorReading.created_at.asc())
-        .all()
-    )
-
-    series_map: dict[str, dict[str, object]] = {}
-    for reading in climate_readings:
-        if reading.value is None:
-            continue
-        timestamp = reading.created_at.isoformat()
-        value = round(float(reading.value), 2)
-        if reading.sensor_type == "ds18b20":
-            alias = get_sensor_display_name("ds18b20")
-            series_name = alias or "Température DS18B20"
-            unit = "°C"
-            axis = "temperature"
-        elif reading.sensor_type == "am2315":
-            if reading.metric == "temperature":
-                alias = get_sensor_display_name("am2315")
-                series_name = alias or "Température AM2315"
-                unit = "°C"
-                axis = "temperature"
-            elif reading.metric == "humidity":
-                alias = get_sensor_display_name("am2315")
-                series_name = f"Humidité {alias}" if alias else "Humidité AM2315"
-                unit = "%"
-                axis = "humidity"
-            else:
-                continue
-        else:
-            continue
-        key = (reading.sensor_type, reading.metric)
-        base_color = base_color_map.get(key)
-        series_entry = series_map.setdefault(
-            series_name,
-            {
-                "name": series_name,
-                "unit": unit,
-                "axis": axis,
-                "data": [],
-                "color": base_color,
-                "meta": {"sensor_type": reading.sensor_type, "metric": reading.metric},
-            },
-        )
-        series_entry["data"].append({"x": timestamp, "y": value})
-
-    chart_series: list[dict[str, object]] = list(series_map.values())
-    chart_has_data = any(series["data"] for series in chart_series)
-    chart_colors = [
-        series.get("color") or "#0ea5e9"
-        for series in chart_series
-    ]
-    chart_period_options = [
-        {"value": key, "label": label}
-        for key, label, _ in period_definitions
-    ]
-    current_query = request.args.to_dict()
-    chart_period_links: list[dict[str, object]] = []
-    for key, label, _ in period_definitions:
-        params = current_query.copy()
-        params["period"] = key
-        chart_period_links.append(
-            {
-                "value": key,
-                    "label": label,
-                "url": url_for("main.dashboard", **params),
-                "active": key == selected_period,
-            }
-        )
-
-    relay_entries = (
-        JournalEntry.query.filter(
-            JournalEntry.message.like("Commande relais ch%"),
-            JournalEntry.created_at >= period_start,
-        )
-        .order_by(JournalEntry.created_at.asc())
-        .all()
-    )
-
-    relay_channel_colors = {
-        1: {"border": "#f97316", "background": "rgba(249, 115, 22, 0.15)"},
-        2: {"border": "#8b5cf6", "background": "rgba(139, 92, 246, 0.18)"},
-        3: {"border": "#14b8a6", "background": "rgba(20, 184, 166, 0.18)"},
-    }
-    relay_annotations = []
-    relay_last_command: dict[int, str] = {}
-    relay_legend_map: dict[int, dict[str, object]] = {}
-    for entry in relay_entries:
-        details = entry.details or {}
-        channel = details.get("channel")
-        if channel is None:
-            try:
-                channel = int(entry.message.split("ch")[1])
-            except Exception:
-                channel = None
-        command = details.get("command", "").strip().lower()
-        if channel is None or not command:
-            continue
-        colors = relay_channel_colors.get(
-            channel,
-            {"border": "#f97316", "background": "rgba(249, 115, 22, 0.15)"},
-        )
-        command_lower = command.lower()
-        relay_labels_map = get_relay_labels()
-        relay_name = relay_labels_map.get(channel, f"Relais {channel}")
-        details_text = []
-        if command_lower in {"on", "off"}:
-            if relay_last_command.get(channel) == command_lower:
-                continue
-            relay_last_command[channel] = command_lower
-        else:
-            relay_last_command[channel] = command_lower
-
-        if command_lower == "on":
-            label_text = f"▲ {relay_name} ON"
-            details_text.append("État cible : ON")
-        elif command_lower == "off":
-            label_text = f"▼ {relay_name} OFF"
-            details_text.append("État cible : OFF")
-        elif command_lower == "toggle":
-            label_text = f"⇄ {relay_name} Toggle"
-            details_text.append("Commande : bascule")
-        else:
-            label_text = f"{relay_name} → {command_lower}"
-        issued_by = details.get("issued_by")
-        if issued_by:
-            details_text.append(f"Par : {issued_by}")
-        if details.get("result"):
-            status = details["result"].get("status")
-            if status:
-                details_text.append(f"Résultat : {status}")
-        relay_data = {"channel": channel, "command": command_lower, "details": details_text}
-        relay_annotations.append(
-            {
-                "timestamp": entry.created_at.isoformat(),
-                "label": label_text,
-                "color": colors["border"],
-                "background": colors["background"],
-                "data": relay_data,
-            }
-        )
-        if channel not in relay_legend_map:
-            relay_legend_map[channel] = {
-                "channel": channel,
-                "name": relay_name,
-                "color": colors["border"],
-            }
-
-    relay_legend = sorted(relay_legend_map.values(), key=lambda item: item["name"])
-
     # Relais
     relay_pins = get_configured_relay_pins()
     relay_labels = get_relay_labels()
@@ -680,19 +505,333 @@ def dashboard():
         journal_count=journal_count,
         journal_last_24h=journal_last_24h,
         last_automation_event=last_automation_event,
-        chart_series=chart_series,
-        chart_colors=chart_colors,
-        chart_has_data=chart_has_data,
-        chart_period_options=chart_period_options,
-        chart_selected_period=selected_period,
-        chart_period_links=chart_period_links,
-        relay_annotations=relay_annotations,
         sensor_highlights=sensor_highlights,
         relay_cards=relay_cards,
         relays_available=relays_available,
         relays_active_low=relays_active_low,
         relay_manual_disabled=not relays_available,
+    )
+
+
+@main_bp.route("/graphiques", methods=["GET"])
+@login_required
+def charts():
+    now = datetime.utcnow()
+
+    period_definitions = [
+        ("1h", "1h", timedelta(hours=1)),
+        ("24h", "24h", timedelta(hours=24)),
+        ("48h", "48h", timedelta(hours=48)),
+        ("7d", "7j", timedelta(days=7)),
+        ("30d", "30j", timedelta(days=30)),
+    ]
+    period_map = {key: {"label": label, "delta": delta} for key, label, delta in period_definitions}
+    selected_period = request.args.get("period", "24h")
+    if selected_period not in period_map:
+        selected_period = "24h"
+    period_delta = period_map[selected_period]["delta"]
+    period_start = now - period_delta
+
+    base_color_map = {
+        ("ds18b20", "temperature"): "#0f5dd7",
+        ("am2315", "temperature"): "#7c3aed",
+        ("am2315", "humidity"): "#047857",
+    }
+
+    climate_readings = (
+        SensorReading.query.filter(
+            SensorReading.metric.in_(["temperature", "humidity"]),
+            SensorReading.created_at >= period_start,
+        )
+        .order_by(SensorReading.created_at.asc())
+        .all()
+    )
+
+    series_map: dict[str, dict[str, object]] = {}
+    for reading in climate_readings:
+        if reading.value is None:
+            continue
+        timestamp = reading.created_at.isoformat()
+        value = round(float(reading.value), 2)
+        if reading.sensor_type == "ds18b20":
+            alias = get_sensor_display_name("ds18b20")
+            series_name = alias or "Température DS18B20"
+            unit = "°C"
+            axis = "temperature"
+        elif reading.sensor_type == "am2315":
+            if reading.metric == "temperature":
+                alias = get_sensor_display_name("am2315")
+                series_name = alias or "Température AM2315"
+                unit = "°C"
+                axis = "temperature"
+            elif reading.metric == "humidity":
+                alias = get_sensor_display_name("am2315")
+                series_name = f"Humidité {alias}" if alias else "Humidité AM2315"
+                unit = "%"
+                axis = "humidity"
+            else:
+                continue
+        else:
+            continue
+        key = (reading.sensor_type, reading.metric)
+        base_color = base_color_map.get(key)
+        series_entry = series_map.setdefault(
+            series_name,
+            {
+                "name": series_name,
+                "unit": unit,
+                "axis": axis,
+                "data": [],
+                "color": base_color,
+                "meta": {"sensor_type": reading.sensor_type, "metric": reading.metric},
+            },
+        )
+        series_entry["data"].append({"x": timestamp, "y": value})
+
+    chart_series: list[dict[str, object]] = list(series_map.values())
+    def _split_series_by_axis(target_axis: str) -> Tuple[list[dict[str, object]], list[str]]:
+        subset: list[dict[str, object]] = []
+        colors: list[str] = []
+        for series in chart_series:
+            axis = series.get("axis")
+            if axis != target_axis:
+                continue
+            subset.append(series)
+            color_value = series.get("color")
+            if isinstance(color_value, str) and color_value:
+                colors.append(color_value)
+            else:
+                fallback = "#0f5dd7" if target_axis == "temperature" else "#047857"
+                colors.append(fallback)
+        return subset, colors
+
+    def _summarize_series(series_subset: list[dict[str, object]], unit: str, title: str) -> dict[str, object]:
+        values: list[float] = []
+        last_point: tuple[str, float] | None = None
+        for series in series_subset:
+            for point in series.get("data", []):
+                y_value = point.get("y")
+                if y_value is None:
+                    continue
+                try:
+                    numeric_value = float(y_value)
+                except (TypeError, ValueError):
+                    continue
+                values.append(numeric_value)
+                x_value = point.get("x")
+                if x_value:
+                    if last_point is None or x_value > last_point[0]:
+                        last_point = (x_value, numeric_value)
+        decimals = 1
+        if not values:
+            return {
+                "title": title,
+                "unit": unit,
+                "min": None,
+                "max": None,
+                "avg": None,
+                "last": last_point[1] if last_point else None,
+                "last_at": last_point[0] if last_point else None,
+                "count": 0,
+                "decimals": decimals,
+            }
+        avg_value = sum(values) / len(values)
+        if last_point is None:
+            last_point = ("", values[-1])
+        return {
+            "title": title,
+            "unit": unit,
+            "min": min(values),
+            "max": max(values),
+            "avg": avg_value,
+            "last": last_point[1],
+            "last_at": last_point[0] or None,
+            "count": len(values),
+            "decimals": decimals,
+        }
+
+    temperature_series, temperature_colors = _split_series_by_axis("temperature")
+    humidity_series, humidity_colors = _split_series_by_axis("humidity")
+    temperature_summary = _summarize_series(temperature_series, "°C", "Température")
+    humidity_summary = _summarize_series(humidity_series, "%", "Humidité")
+    temperature_has_data = temperature_summary["count"] > 0
+    humidity_has_data = humidity_summary["count"] > 0
+    chart_has_data = bool(temperature_has_data or humidity_has_data)
+
+    current_query = request.args.to_dict()
+    chart_period_links: list[dict[str, object]] = []
+    for key, label, _ in period_definitions:
+        params = current_query.copy()
+        params["period"] = key
+        chart_period_links.append(
+            {
+                "value": key,
+                "label": label,
+                "active": key == selected_period,
+            }
+        )
+
+    relay_entries = (
+        JournalEntry.query.filter(
+            JournalEntry.message.like("Commande relais ch%"),
+            JournalEntry.created_at >= period_start,
+        )
+        .order_by(JournalEntry.created_at.asc())
+        .all()
+    )
+
+    relay_channel_colors = {
+        1: {"border": "#f97316", "background": "rgba(249, 115, 22, 0.15)"},
+        2: {"border": "#8b5cf6", "background": "rgba(139, 92, 246, 0.18)"},
+        3: {"border": "#14b8a6", "background": "rgba(20, 184, 166, 0.18)"},
+    }
+    relay_annotations = []
+    relay_last_command: dict[int, str] = {}
+    relay_legend_map: dict[int, dict[str, object]] = {}
+    relay_labels_map = get_relay_labels()
+    for entry in relay_entries:
+        details = entry.details or {}
+        channel = details.get("channel")
+        if channel is None:
+            try:
+                channel = int(entry.message.split("ch")[1])
+            except Exception:
+                channel = None
+        command = details.get("command", "").strip().lower()
+        if channel is None or not command:
+            continue
+        colors = relay_channel_colors.get(
+            channel,
+            {"border": "#f97316", "background": "rgba(249, 115, 22, 0.15)"},
+        )
+        command_lower = command.lower()
+        relay_name = relay_labels_map.get(channel, f"Relais {channel}")
+        details_text = []
+        if command_lower in {"on", "off"}:
+            if relay_last_command.get(channel) == command_lower:
+                continue
+            relay_last_command[channel] = command_lower
+        else:
+            relay_last_command[channel] = command_lower
+
+        if command_lower == "on":
+            label_text = f"▲ {relay_name} ON"
+            details_text.append("État cible : ON")
+        elif command_lower == "off":
+            label_text = f"▼ {relay_name} OFF"
+            details_text.append("État cible : OFF")
+        elif command_lower == "toggle":
+            label_text = f"⇄ {relay_name} Toggle"
+            details_text.append("Commande : bascule")
+        else:
+            label_text = f"{relay_name} → {command_lower}"
+        issued_by = details.get("issued_by")
+        if issued_by:
+            details_text.append(f"Par : {issued_by}")
+        if details.get("result"):
+            status = details["result"].get("status")
+            if status:
+                details_text.append(f"Résultat : {status}")
+        relay_data = {"channel": channel, "command": command_lower, "details": details_text}
+        relay_annotations.append(
+            {
+                "timestamp": entry.created_at.isoformat(),
+                "label": label_text,
+                "color": colors["border"],
+                "background": colors["background"],
+                "data": relay_data,
+            }
+        )
+        if channel not in relay_legend_map:
+            relay_legend_map[channel] = {
+                "channel": channel,
+                "name": relay_name,
+                "color": colors["border"],
+            }
+
+    relay_legend = sorted(relay_legend_map.values(), key=lambda item: item["name"])
+
+    measurements_total = (temperature_summary["count"] or 0) + (humidity_summary["count"] or 0)
+
+    relay_event_count = len(relay_entries)
+    period_end = now
+    relay_state_series: list[dict[str, object]] = []
+    relay_state_colors: list[str] = []
+    channel_state: dict[int, int] = {}
+    channel_points: dict[int, list[dict[str, object]]] = {}
+
+    for channel in sorted(relay_channel_colors.keys()):
+        channel_state[channel] = 0
+        channel_points[channel] = [
+            {"x": period_start.isoformat(), "y": 0},
+        ]
+
+    for entry in relay_entries:
+        details = entry.details or {}
+        channel = details.get("channel")
+        if channel is None:
+            try:
+                channel = int(entry.message.split("ch")[1])
+            except Exception:
+                continue
+        if channel not in channel_points:
+            channel_state[channel] = 0
+            channel_points[channel] = [
+                {"x": period_start.isoformat(), "y": 0},
+            ]
+
+        command = (details.get("command") or "").strip().lower()
+        if not command:
+            continue
+
+        current_state = channel_state.get(channel, 0)
+        if command == "on":
+            new_state = 1
+        elif command == "off":
+            new_state = 0
+        elif command == "toggle":
+            new_state = 0 if current_state else 1
+        else:
+            continue
+
+        timestamp_iso = entry.created_at.isoformat()
+        points = channel_points[channel]
+        # Évite les doublons successifs sur la même valeur
+        if points and points[-1]["y"] == new_state:
+            continue
+        points.append({"x": timestamp_iso, "y": new_state})
+        channel_state[channel] = new_state
+
+    for channel, points in channel_points.items():
+        points.append({"x": period_end.isoformat(), "y": channel_state.get(channel, 0)})
+        relay_state_series.append(
+            {
+                "name": relay_labels_map.get(channel, f"Relais {channel}"),
+                "data": points,
+                "meta": {"channel": channel},
+            }
+        )
+        relay_state_colors.append(relay_channel_colors.get(channel, {}).get("border", "#0ea5e9"))
+
+    return render_template(
+        "dashboard/charts.html",
+        chart_has_data=chart_has_data,
+        chart_period_links=chart_period_links,
+        chart_selected_period=selected_period,
+        relay_annotations=relay_annotations,
         relay_legend=relay_legend,
+        temperature_series=temperature_series,
+        temperature_colors=temperature_colors,
+        temperature_summary=temperature_summary,
+        humidity_series=humidity_series,
+        humidity_colors=humidity_colors,
+        humidity_summary=humidity_summary,
+        temperature_has_data=temperature_has_data,
+        humidity_has_data=humidity_has_data,
+        measurements_total=measurements_total,
+        relay_state_series=relay_state_series,
+        relay_state_colors=relay_state_colors,
+        relay_event_count=relay_event_count,
     )
 
 
@@ -1346,6 +1485,12 @@ def manual_sensor_collect():
         flash("Accès réservé à l’administrateur.", "danger")
         return redirect(url_for("main.dashboard"))
 
+    next_page = request.form.get("next") or "dashboard"
+    if next_page == "charts":
+        redirect_endpoint = "main.charts"
+    else:
+        redirect_endpoint = "main.dashboard"
+
     trigger_time = datetime.utcnow().isoformat()
     try:
         collect_sensor_readings(current_app._get_current_object())
@@ -1379,7 +1524,7 @@ def manual_sensor_collect():
         db.session.commit()
         flash("Impossible de lancer la collecte. Consultez le journal.", "danger")
 
-    return redirect(url_for("main.dashboard"))
+    return redirect(url_for(redirect_endpoint))
 
 
 @main_bp.route("/profil", methods=["GET", "POST"])

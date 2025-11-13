@@ -1,0 +1,623 @@
+{% extends 'base.html' %}
+{% block title %}Graphiques{% endblock %}
+{% block header_title %}Graphiques{% endblock %}
+{% block content %}
+<div class="graph-page-container mx-auto w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl px-3 sm:px-0">
+    <div class="relative overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-soft">
+        <div class="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.15),transparent_60%)] sm:block"></div>
+        <div class="relative px-5 pt-5 sm:px-8 sm:pt-6">
+            <div class="flex flex-col gap-5">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-800">Suivi climatique</h3>
+                        <p class="text-sm text-slate-500">Analysez les mesures collectées sur votre installation.</p>
+                        <p class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ measurements_total }} mesures enregistrées au total</p>
+                    </div>
+                    <div class="-mx-1 max-w-full overflow-x-auto pb-1 sm:mx-0 sm:overflow-visible">
+                        <form method="get" class="flex flex-nowrap items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:flex-wrap sm:gap-2 sm:px-0">
+                            {% for key, value in request.args.items() if key != 'period' %}
+                            <input type="hidden" name="{{ key }}" value="{{ value }}">
+                            {% endfor %}
+                            {% for link in chart_period_links %}
+                            <button type="submit"
+                                    name="period"
+                                    value="{{ link.value }}"
+                                    class="inline-flex min-w-[72px] items-center justify-center gap-2 whitespace-nowrap rounded-full border {% if link.active %}border-teal-300 bg-teal-50 text-teal-600{% else %}border-slate-200 bg-white text-slate-500 hover:border-teal-200 hover:text-teal-600{% endif %} px-3 py-1 transition">
+                                {{ link.label }}
+                            </button>
+                            {% endfor %}
+                        </form>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="inline-flex w-full overflow-hidden rounded-full border border-slate-200 bg-white p-1 text-xs font-semibold text-slate-500 sm:w-auto">
+                        <button type="button" class="chart-toggle-btn chart-toggle-btn--active" data-chart-toggle="temperature">Température</button>
+                        <button type="button" class="chart-toggle-btn" data-chart-toggle="humidity">Humidité</button>
+                    </div>
+                    <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+                        <span class="inline-flex items-center justify-center rounded-full bg-teal-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-600" data-summary-count>0 mesure</span>
+                        <button type="button" id="chart-expand-button" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-teal-200 hover:text-teal-600">
+                            Agrandir
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <div id="climateChartWrapper" class="relative w-full overflow-hidden rounded-2xl border border-slate-200/70 bg-white/90 p-3 shadow-inner transition-all duration-300 sm:p-4">
+                        <div id="climateChart" class="h-[260px] w-full{% if not chart_has_data %} hidden{% endif %}"></div>
+                        <div id="chartEmptyMessage" class="{% if chart_has_data %}hidden{% endif %} flex h-[260px] w-full items-center justify-center text-center text-sm font-medium text-slate-500">
+                            Aucune donnée disponible pour cette métrique.
+                        </div>
+                    </div>
+                    <p class="mt-2 text-[11px] font-medium text-slate-400">Les annotations signalent les changements d’état des relais enregistrés.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="graph-page-container mx-auto mt-6 w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl px-3 sm:px-0">
+    <div class="overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-soft">
+        <div class="relative px-5 py-5 sm:px-8 sm:py-6">
+            <div class="flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-800">Changements d’état des relais</h3>
+                        <p class="text-sm text-slate-500">Visualisez les actions ON/OFF déclenchées pendant la période sélectionnée.</p>
+                    </div>
+                    <span class="inline-flex items-center justify-center rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600" data-relay-count>0 action</span>
+                </div>
+                <div>
+                    <div id="relayChartWrapper" class="relative w-full overflow-hidden rounded-2xl border border-slate-200/70 bg-white/90 p-3 shadow-inner transition-all duration-300 sm:p-4">
+                        <div id="relayChart" class="h-[220px] w-full"></div>
+                        <div id="relayEmptyMessage" class="hidden h-[220px] w-full items-center justify-center text-center text-sm font-medium text-slate-500">
+                            Aucun changement de relais enregistré sur cette période.
+                        </div>
+                    </div>
+                    <p class="mt-2 text-[11px] font-medium text-slate-400">Les courbes affichent l’état ON/OFF (1 / 0) de chaque relais dans le temps.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const chartElement = document.getElementById('climateChart');
+        const wrapper = document.getElementById('climateChartWrapper');
+        const emptyMessage = document.getElementById('chartEmptyMessage');
+        const expandBtn = document.getElementById('chart-expand-button');
+        const toggleButtons = Array.from(document.querySelectorAll('[data-chart-toggle]'));
+
+        const summaryEls = {
+            count: document.querySelector('[data-summary-count]'),
+        };
+
+        const datasets = {
+            temperature: {
+                key: 'temperature',
+                label: 'Température',
+                unit: '°C',
+                axisColor: '#2563eb',
+                decimals: {{ temperature_summary.decimals | default(1) }},
+                series: {{ temperature_series|tojson }},
+                colors: {{ temperature_colors|tojson }},
+                summary: {{ temperature_summary|tojson }},
+                annotations: {{ relay_annotations|tojson }},
+                emptyMessage: "Aucune donnée de température pour la période sélectionnée."
+            },
+            humidity: {
+                key: 'humidity',
+                label: 'Humidité',
+                unit: '%',
+                axisColor: '#047857',
+                decimals: {{ humidity_summary.decimals | default(1) }},
+                series: {{ humidity_series|tojson }},
+                colors: {{ humidity_colors|tojson }},
+                summary: {{ humidity_summary|tojson }},
+                annotations: [],
+                emptyMessage: "Aucune donnée d'humidité pour la période sélectionnée."
+            },
+        };
+
+        const relayChartElement = document.getElementById('relayChart');
+        const relayWrapper = document.getElementById('relayChartWrapper');
+        const relayEmptyMessage = document.getElementById('relayEmptyMessage');
+        const relayCountEl = document.querySelector('[data-relay-count]');
+        const relaySeries = {{ relay_state_series|tojson }};
+        const relayColors = {{ relay_state_colors|tojson }};
+        const relayEventCount = {{ relay_event_count }};
+        if (relayCountEl) {
+            relayCountEl.textContent = relayEventCount === 1 ? '1 action' : `${relayEventCount} actions`;
+        }
+
+        let relayChartInstance = null;
+
+        let chartInstance = null;
+        let activeDataset = null;
+
+        const fmtCount = (count) => {
+            if (!count) return '0 mesure';
+            return count === 1 ? '1 mesure' : `${count} mesures`;
+        };
+
+        const formatValue = (value, unit, decimals) => {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                return '--';
+            }
+            const fixed = Number(value).toFixed(decimals ?? 1);
+            return unit ? `${fixed} ${unit}` : fixed;
+        };
+
+        const toggleEmptyState = (isEmpty, messageText) => {
+            if (!emptyMessage || !chartElement) return;
+            if (isEmpty) {
+                chartElement.classList.add('hidden');
+                emptyMessage.classList.remove('hidden');
+                emptyMessage.textContent = messageText || 'Aucune donnée disponible.';
+            } else {
+                chartElement.classList.remove('hidden');
+                emptyMessage.classList.add('hidden');
+            }
+        };
+
+        const updateSummary = (dataset) => {
+            const { summary, label } = dataset;
+            if (summaryEls.count) {
+                summaryEls.count.textContent = `${fmtCount(summary.count || 0)} • ${label}`;
+            }
+        };
+
+        const buildAnnotations = (dataset) => {
+            const entries = dataset.annotations || [];
+            return entries.map((event) => {
+                const timestamp = new Date(event.timestamp).getTime();
+                return {
+                    x: timestamp,
+                    borderColor: event.color || '#0ea5e9',
+                    strokeDashArray: 4,
+                    label: {
+                        text: event.label,
+                        orientation: 'vertical',
+                        position: 'top',
+                        borderColor: event.color || '#0ea5e9',
+                        style: {
+                            background: event.background || '#f8fafc',
+                            color: '#0f172a',
+                            fontWeight: 600,
+                            fontSize: '11px',
+                        },
+                    },
+                };
+            });
+        };
+
+        const buildChartOptions = (datasetKey) => {
+            const dataset = datasets[datasetKey];
+            const decimals = dataset.decimals ?? dataset.summary.decimals ?? 1;
+            const unit = dataset.summary.unit || dataset.unit || '';
+            const axisLabel = dataset.summary.title || dataset.label;
+
+            const formatForAxis = (value) => {
+                if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                    return 'N/A';
+                }
+                const numeric = Number(value).toFixed(decimals);
+                return unit ? `${numeric} ${unit}` : numeric;
+            };
+
+            const baseHeight = wrapper.classList.contains('chart-expanded') ? 460 : 260;
+
+            return {
+                chart: {
+                    type: 'line',
+                    height: baseHeight,
+                    toolbar: {
+                        show: true,
+                        tools: {
+                            download: true,
+                            selection: true,
+                            zoom: true,
+                            zoomin: true,
+                            zoomout: true,
+                            pan: false,
+                            reset: true,
+                        },
+                        autoSelected: 'zoom',
+                    },
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 650,
+                    },
+                    foreColor: '#1f2937',
+                    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+                },
+                series: dataset.series,
+                colors: dataset.colors && dataset.colors.length ? dataset.colors : ['#0f5dd7', '#0ea5e9', '#14b8a6'],
+                stroke: {
+                    curve: 'smooth',
+                    width: wrapper.classList.contains('chart-expanded') ? 5 : 4,
+                    lineCap: 'round',
+                },
+                markers: {
+                    size: 0,
+                    strokeWidth: 0,
+                    hover: {
+                        sizeOffset: 0,
+                    },
+                },
+                dataLabels: {
+                    enabled: false,
+                },
+                legend: {
+                    show: dataset.series.length > 1,
+                    position: 'bottom',
+                    horizontalAlign: 'center',
+                    fontSize: '12px',
+                    markers: {
+                        width: 10,
+                        height: 10,
+                        radius: 8,
+                    },
+                },
+                grid: {
+                    borderColor: '#e2e8f0',
+                    strokeDashArray: 4,
+                    padding: {
+                        left: 12,
+                        right: 12,
+                    },
+                },
+                xaxis: {
+                    type: 'datetime',
+                    title: {
+                        text: 'Date / heure',
+                        style: {
+                            color: '#0f172a',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                        },
+                    },
+                    labels: {
+                        style: {
+                            colors: '#1f2937',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                        },
+                    },
+                    axisBorder: {
+                        color: '#cbd5f5',
+                    },
+                    axisTicks: {
+                        color: '#cbd5f5',
+                    },
+                },
+                yaxis: [
+                    {
+                        decimalsInFloat: decimals,
+                        title: {
+                            text: unit ? `${axisLabel} (${unit})` : axisLabel,
+                            style: {
+                                color: dataset.axisColor,
+                                fontSize: '12px',
+                                fontWeight: 600,
+                            },
+                        },
+                        labels: {
+                            formatter: (value) => formatForAxis(value),
+                            style: {
+                                colors: dataset.axisColor,
+                                fontSize: '11px',
+                                fontWeight: 600,
+                            },
+                        },
+                        axisBorder: {
+                            show: true,
+                            color: dataset.axisColor,
+                        },
+                        axisTicks: {
+                            show: true,
+                            color: dataset.axisColor,
+                        },
+                    },
+                ],
+                tooltip: {
+                    shared: dataset.series.length > 1,
+                    intersect: false,
+                    x: {
+                        format: 'dd/MM HH:mm',
+                    },
+                    y: {
+                        formatter: (value) => formatForAxis(value),
+                    },
+                },
+                annotations: {
+                    xaxis: buildAnnotations(dataset),
+                },
+                responsive: [
+                    {
+                        breakpoint: 1024,
+                        options: {
+                            chart: { height: 300 },
+                        },
+                    },
+                    {
+                        breakpoint: 768,
+                        options: {
+                            chart: { height: 260 },
+                            legend: { position: 'bottom' },
+                        },
+                    },
+                    {
+                        breakpoint: 480,
+                        options: {
+                            chart: { height: wrapper.classList.contains('chart-expanded') ? 420 : 230 },
+                            stroke: { width: wrapper.classList.contains('chart-expanded') ? 4 : 3 },
+                            grid: { padding: { left: 6, right: 6 } },
+                            xaxis: {
+                                labels: { style: { fontSize: '10px' } },
+                                title: { style: { fontSize: '10px' } },
+                            },
+                            yaxis: [{
+                                labels: { style: { fontSize: '10px' } },
+                                title: { style: { fontSize: '10px' } },
+                            }],
+                        },
+                    },
+                ],
+            };
+        };
+
+        const scheduleResize = (delay = 80) => {
+            if (!chartInstance) return;
+            setTimeout(() => {
+                if (!chartInstance || !activeDataset) return;
+                const options = buildChartOptions(activeDataset);
+                chartInstance.updateOptions({
+                    chart: { height: options.chart.height },
+                    stroke: options.stroke,
+                    markers: options.markers,
+                }, false, true);
+            }, delay);
+        };
+
+        const renderRelayChart = () => {
+            if (!relayChartElement) return;
+            if (relayChartInstance) {
+                relayChartInstance.destroy();
+                relayChartInstance = null;
+            }
+
+            const hasRelayData = Array.isArray(relaySeries) && relaySeries.some((serie) => (serie.data || []).length > 1);
+            if (!hasRelayData) {
+                relayChartElement.classList.add('hidden');
+                if (relayEmptyMessage) {
+                    relayEmptyMessage.classList.remove('hidden');
+                }
+                return;
+            }
+
+            relayChartElement.classList.remove('hidden');
+            if (relayEmptyMessage) {
+                relayEmptyMessage.classList.add('hidden');
+            }
+
+            relayChartInstance = new ApexCharts(relayChartElement, {
+                chart: {
+                    type: 'line',
+                    height: 220,
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 600,
+                    },
+                    foreColor: '#1f2937',
+                    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+                },
+                series: relaySeries,
+                colors: relayColors && relayColors.length ? relayColors : ['#f97316', '#8b5cf6', '#14b8a6'],
+                stroke: {
+                    curve: 'stepline',
+                    width: 3,
+                },
+                markers: {
+                    size: 0,
+                    strokeWidth: 0,
+                    hover: { sizeOffset: 0 },
+                },
+                dataLabels: { enabled: false },
+                grid: {
+                    borderColor: '#e2e8f0',
+                    strokeDashArray: 4,
+                    padding: { left: 12, right: 12 },
+                },
+                legend: {
+                    show: true,
+                    position: 'bottom',
+                    horizontalAlign: 'center',
+                    fontSize: '12px',
+                },
+                xaxis: {
+                    type: 'datetime',
+                    title: {
+                        text: 'Date / heure',
+                        style: { color: '#0f172a', fontSize: '12px', fontWeight: 600 },
+                    },
+                    labels: {
+                        style: { color: '#1f2937', fontSize: '11px', fontWeight: 600 },
+                    },
+                    axisBorder: { color: '#cbd5f5' },
+                    axisTicks: { color: '#cbd5f5' },
+                },
+                yaxis: {
+                    min: -0.1,
+                    max: 1.1,
+                    tickAmount: 2,
+                    labels: {
+                        formatter: (value) => (value >= 0.5 ? 'ON' : 'OFF'),
+                        style: { color: '#0f172a', fontSize: '11px', fontWeight: 600 },
+                    },
+                    axisBorder: { show: true, color: '#0f172a' },
+                    axisTicks: { show: true, color: '#0f172a' },
+                },
+                tooltip: {
+                    shared: false,
+                    intersect: false,
+                    x: { format: 'dd/MM HH:mm' },
+                    y: {
+                        formatter: (value) => (value >= 0.5 ? 'ON' : 'OFF'),
+                    },
+                },
+                responsive: [
+                    {
+                        breakpoint: 768,
+                        options: {
+                            chart: { height: 200 },
+                        },
+                    },
+                    {
+                        breakpoint: 480,
+                        options: {
+                            chart: { height: 190 },
+                            xaxis: {
+                                labels: { style: { fontSize: '10px' } },
+                            },
+                            yaxis: {
+                                labels: { style: { fontSize: '10px' } },
+                            },
+                        },
+                    },
+                ],
+            });
+
+            relayChartInstance.render();
+            scheduleRelayResize(60);
+        };
+
+        const setActiveButton = (datasetKey) => {
+            toggleButtons.forEach((button) => {
+                const isActive = button.dataset.chartToggle === datasetKey;
+                button.classList.toggle('chart-toggle-btn--active', isActive);
+            });
+        };
+
+        const renderDataset = (datasetKey) => {
+            const dataset = datasets[datasetKey];
+            if (!dataset) {
+                return;
+            }
+            activeDataset = datasetKey;
+            setActiveButton(datasetKey);
+            updateSummary(dataset);
+
+            const hasData = dataset.summary.count > 0;
+            expandBtn.disabled = !hasData;
+            expandBtn.classList.toggle('opacity-50', !hasData);
+            expandBtn.classList.toggle('cursor-not-allowed', !hasData);
+
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartInstance = null;
+            }
+
+            toggleEmptyState(!hasData, dataset.emptyMessage);
+
+            if (!hasData) {
+                return;
+            }
+
+            const options = buildChartOptions(datasetKey);
+            chartInstance = new ApexCharts(chartElement, options);
+            chartInstance.render();
+            requestAnimationFrame(() => scheduleResize(60));
+        };
+
+        toggleButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const datasetKey = button.dataset.chartToggle;
+                if (datasetKey === activeDataset) return;
+                renderDataset(datasetKey);
+            });
+        });
+
+        if (expandBtn) {
+            expandBtn.addEventListener('click', () => {
+                const expanded = wrapper.classList.toggle('chart-expanded');
+                expandBtn.textContent = expanded ? 'Réduire' : 'Agrandir';
+                if (chartInstance) {
+                    const options = buildChartOptions(activeDataset);
+                    chartInstance.updateOptions({ chart: { height: options.chart.height } }, false, true);
+                    scheduleResize(80);
+                }
+                scheduleRelayResize(expanded ? 160 : 120);
+            });
+        }
+
+        const defaultDatasetKey = datasets.temperature.summary.count
+            ? 'temperature'
+            : (datasets.humidity.summary.count ? 'humidity' : 'temperature');
+
+        renderDataset(defaultDatasetKey);
+        renderRelayChart();
+
+        function scheduleRelayResize(delay = 120) {
+            if (!relayChartInstance) return;
+            setTimeout(() => {
+                if (!relayChartInstance) return;
+                const targetHeight = window.innerWidth < 480 ? 190 : 220;
+                relayChartInstance.updateOptions({ chart: { height: targetHeight } }, false, true);
+            }, delay);
+        }
+
+        window.addEventListener('resize', () => {
+            scheduleResize(100);
+            scheduleRelayResize(160);
+        });
+        window.addEventListener('orientationchange', () => {
+            scheduleResize(160);
+            scheduleRelayResize(220);
+        });
+    });
+</script>
+
+<style>
+    .chart-toggle-btn {
+        flex: 1 1 0;
+        border-radius: 9999px;
+        padding: 0.5rem 1rem;
+        color: inherit;
+        transition: all 0.18s ease-in-out;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .chart-toggle-btn--active {
+        background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
+        color: #fff;
+        box-shadow: 0 12px 28px -18px rgba(14, 165, 233, 0.8);
+    }
+
+    .chart-toggle-btn:not(.chart-toggle-btn--active):hover {
+        background: rgba(14, 165, 233, 0.12);
+        color: #0f172a;
+    }
+
+    @media (max-width: 480px) {
+        .graph-page-container {
+            max-width: 335px;
+        }
+
+        #chart-expand-button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        #climateChartWrapper {
+            border-radius: 22px;
+        }
+    }
+</style>
+{% endblock %}

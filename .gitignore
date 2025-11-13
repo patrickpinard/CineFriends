@@ -1,10 +1,8 @@
-*** Begin Patch
-*** Add File: .gitignore
-+.DS_Store
-+.env
-+.venv/
-+env/
-+venv/
+.DS_Store
+.env
+.venv/
+env/
+venv/
 
 __pycache__/
 *.py[cod]
@@ -17,4 +15,3 @@ dashboard.db
 app/static/uploads/
 
 .vscode/
-*** End Patch
