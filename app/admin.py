@@ -153,9 +153,16 @@ def edit_user(user_id: int):
                 "role": user.role,
                 "active": user.active,
                 "twofa_enabled": user.twofa_enabled,
+                "avatar_filename": user.avatar_filename,
             }
             was_active = user.active
             twofa_before = user.twofa_enabled
+            if form.remove_avatar.data:
+                delete_avatar(user.avatar_filename)
+                user.avatar_filename = None
+            elif form.avatar.data:
+                delete_avatar(user.avatar_filename)
+                user.avatar_filename = save_avatar(form.avatar.data)
             user.username = form.username.data
             user.email = form.email.data
             user.role = form.role.data
@@ -183,6 +190,7 @@ def edit_user(user_id: int):
                 "role": user.role,
                 "active": user.active,
                 "twofa_enabled": user.twofa_enabled,
+                "avatar_filename": user.avatar_filename,
             }
             changes = build_changes(original_state, updated_state, list(original_state.keys()))
             if changes:

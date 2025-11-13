@@ -21,6 +21,33 @@ csrf = CSRFProtect()
 scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "UTC"))
 
 
+def schedule_sensor_poll(app: Flask, minutes: int) -> None:
+    minutes = max(1, int(minutes))
+    job_id = "sensor_readings"
+    trigger = IntervalTrigger(minutes=minutes)
+
+    if scheduler.get_job(job_id):
+        scheduler.reschedule_job(job_id, trigger=trigger)
+    else:
+        scheduler.add_job(
+            func=lambda: collect_sensor_readings(app),
+            trigger=trigger,
+            id=job_id,
+            replace_existing=True,
+            max_instances=1,
+        )
+
+    if not scheduler.running:
+        scheduler.start()
+        if not app.config.get("SCHEDULER_SHUTDOWN_REGISTERED"):
+            atexit.register(lambda: scheduler.shutdown(wait=False))
+            app.config["SCHEDULER_SHUTDOWN_REGISTERED"] = True
+
+    app.config["SCHEDULER_STARTED"] = True
+    app.config["SENSOR_POLL_INTERVAL_MINUTES"] = minutes
+    app.logger.info("Scheduler capteurs configuré (%s min).", minutes)
+
+
 def create_app():
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.config.from_object(Config)
@@ -98,22 +125,18 @@ def create_app():
             return
         if app.config.get("SCHEDULER_STARTED"):
             return
-        interval = int(app.config.get("SENSOR_POLL_INTERVAL_MINUTES", 5))
-        job_id = "sensor_readings"
-        if scheduler.get_job(job_id):
-            scheduler.remove_job(job_id)
-        scheduler.add_job(
-            func=lambda: collect_sensor_readings(app),
-            trigger=IntervalTrigger(minutes=interval),
-            id=job_id,
-            replace_existing=True,
-            max_instances=1,
-        )
-        if not scheduler.running:
-            scheduler.start()
-            atexit.register(lambda: scheduler.shutdown(wait=False))
-        app.config["SCHEDULER_STARTED"] = True
-        app.logger.info("Scheduler démarré (intervalle %s min).", interval)
+        interval = int(app.config.get("SENSOR_POLL_INTERVAL_MINUTES", 30))
+        try:
+            with app.app_context():
+                from .models import Setting
+
+                stored = Setting.query.filter_by(key="Sensor_Poll_Interval_Minutes").first()
+                if stored and stored.value:
+                    interval = int(str(stored.value).strip())
+        except Exception as exc:  # pragma: no cover - lecture optionnelle
+            app.logger.warning("Impossible de lire Sensor_Poll_Interval_Minutes: %s", exc)
+
+        schedule_sensor_poll(app, interval)
 
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         _start_scheduler()

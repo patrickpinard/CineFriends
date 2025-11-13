@@ -56,20 +56,25 @@
                 </div>
             </div>
             <div class="grid gap-5 sm:grid-cols-2">
-                <div>
-                    {{ form.cooldown_seconds.label(class_='text-sm font-medium text-slate-600') }}
-                    <div class="mt-1 flex items-center gap-3">
-                        {{ form.cooldown_seconds(class_='w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
-                        <span class="text-xs text-slate-400">0 pour aucun délai</span>
-                    </div>
+                <div class="max-w-[14rem]">
+                    <label for="cooldown_seconds" class="text-sm font-medium text-slate-600">
+                        Délai entre mesures (s)
+                        <span class="group relative inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-slate-300 text-[11px] font-semibold text-slate-500 align-middle">
+                            i
+                            <span class="pointer-events-none absolute right-0 top-full z-10 mt-2 w-60 translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                                Temps minimum à respecter avant un nouveau déclenchement de cette règle après une mesure. Valeur par défaut définie dans les paramètres de l’application.
+                            </span>
+                        </span>
+                    </label>
+                    {{ form.cooldown_seconds(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
                     {% for error in form.cooldown_seconds.errors %}
-                    <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                    <p class="automation-error">{{ error }}</p>
                     {% endfor %}
                 </div>
-                <div class="flex items-center gap-3 pt-1">
-                    {{ form.enabled(class_='h-5 w-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500') }}
-                    <span class="text-sm text-slate-600">Activer cette règle</span>
-                </div>
+                <label class="automation-toggle">
+                    {{ form.enabled(class_='automation-toggle__input') }}
+                    <span class="automation-toggle__label">Activer cette règle</span>
+                </label>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                 <div class="grid gap-4 md:grid-cols-2">
@@ -188,7 +193,7 @@
                             {{ 'Active' if rule.enabled else 'Inactive' }}
                         </span>
                         <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                            Cooldown : {{ rule.cooldown_seconds or 0 }} s
+                            <span class="automation-badge automation-badge--pill">Délai min. : {{ rule.cooldown_seconds or 0 }} s</span>
                         </span>
                         {% if rule.last_triggered_at %}
                         <span class="inline-flex items-center gap-2 rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-700">

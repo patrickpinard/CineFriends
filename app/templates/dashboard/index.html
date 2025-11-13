@@ -398,12 +398,27 @@
             });
         };
 
+        let chartResizeTimer = null;
+
+        const scheduleResize = (delay = 80) => {
+            if (!chartInstance) return;
+            if (chartResizeTimer) window.clearTimeout(chartResizeTimer);
+            chartResizeTimer = window.setTimeout(() => {
+                if (chartInstance) {
+                    chartInstance.resize();
+                }
+            }, delay);
+        };
+
         const renderWithApex = () => {
             chartInstance = new ApexCharts(el, {
                 chart: {
                     type: 'line',
                     stacked: false,
                     height: '100%',
+                    offsetX: 0,
+                    offsetY: 0,
+                    parentHeightOffset: 0,
                     toolbar: {
                         show: true,
                         tools: {
@@ -493,12 +508,19 @@
                     borderColor: 'rgba(148, 163, 184, 0.18)',
                     strokeDashArray: 5,
                     yaxis: { lines: { show: true } },
+                    padding: {
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                    },
                 },
                 responsive: [
                     { breakpoint: 640, options: { dataLabels: { enabled: false } } },
                 ],
             });
             chartInstance.render();
+            requestAnimationFrame(() => scheduleResize(30));
         };
 
         if (typeof ApexCharts !== 'undefined') {
@@ -506,6 +528,9 @@
         } else {
             console.warn('ApexCharts non chargé, aucune visualisation.');
         }
+
+        window.addEventListener('resize', () => scheduleResize(60));
+        window.addEventListener('orientationchange', () => scheduleResize(120));
 
         const sensorLegendContainer = document.getElementById('sensorLegend');
         const sensorState = {};
@@ -548,7 +573,7 @@
                 wrapper.classList.toggle('chart-expanded', expanded);
                 expandBtn.textContent = expanded ? 'Réduire' : 'Agrandir';
                 if (chartInstance) {
-                    setTimeout(() => chartInstance.resize(), 50);
+                    scheduleResize(80);
                 }
             });
         }

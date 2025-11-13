@@ -10,7 +10,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import func
 from urllib.parse import urlencode
 
-from . import db
+from . import db, schedule_sensor_poll
 from .forms import AutomationRuleForm, ProfileForm, SettingForm
 from .models import AutomationRule, JournalEntry, Notification, SensorReading, Setting, User
 from .services import create_notification
@@ -308,6 +308,12 @@ HARDWARE_SETTING_GROUPS = [
                 "description": "Alias utilisé dans l’interface et les règles.",
                 "group": "sensor_am2315",
             },
+            {
+                "key": "Sensor_Poll_Interval_Minutes",
+                "label": "Intervalle de collecte (minutes)",
+                "default": "30",
+                "description": "Fréquence d’échantillonnage des capteurs (1 à 1440 minutes).",
+            },
         ],
     },
 ]
@@ -553,7 +559,8 @@ def dashboard():
         2: {"border": "#8b5cf6", "background": "rgba(139, 92, 246, 0.18)"},
         3: {"border": "#14b8a6", "background": "rgba(20, 184, 166, 0.18)"},
     }
-    relay_annotations: list[dict[str, object]] = []
+    relay_annotations = []
+    relay_last_command: dict[int, str] = {}
     relay_legend_map: dict[int, dict[str, object]] = {}
     for entry in relay_entries:
         details = entry.details or {}
@@ -574,6 +581,13 @@ def dashboard():
         relay_labels_map = get_relay_labels()
         relay_name = relay_labels_map.get(channel, f"Relais {channel}")
         details_text = []
+        if command_lower in {"on", "off"}:
+            if relay_last_command.get(channel) == command_lower:
+                continue
+            relay_last_command[channel] = command_lower
+        else:
+            relay_last_command[channel] = command_lower
+
         if command_lower == "on":
             label_text = f"▲ {relay_name} ON"
             details_text.append("État cible : ON")
@@ -1003,6 +1017,7 @@ def settings():
     if form.validate_on_submit():
         submitted = request.form.to_dict(flat=True)
         updated_items = []
+        new_poll_interval = None
         for key, value in submitted.items():
             if key in {"csrf_token", "refresh_hardware", "submit"} or not key.startswith("setting__"):
                 continue
@@ -1012,8 +1027,19 @@ def settings():
             if not setting:
                 setting = Setting(key=setting_key)
                 db.session.add(setting)
-            setting.value = value
-            updated_items.append((setting_key, before_value, value))
+            cleaned_value = value
+            if setting_key == "Sensor_Poll_Interval_Minutes":
+                try:
+                    interval_candidate = int(str(value).strip())
+                    if interval_candidate < 1 or interval_candidate > 1440:
+                        raise ValueError
+                    cleaned_value = str(interval_candidate)
+                    new_poll_interval = interval_candidate
+                except ValueError:
+                    flash("Intervalle de collecte invalide (entier entre 1 et 1440 minutes).", "danger")
+                    return redirect(url_for("main.settings"))
+            setting.value = cleaned_value
+            updated_items.append((setting_key, before_value, cleaned_value))
 
         if updated_items:
             for setting_key, before_value, after_value in updated_items:
@@ -1025,6 +1051,12 @@ def settings():
                     )
                 )
             db.session.commit()
+            if new_poll_interval is not None:
+                app_obj = current_app._get_current_object()
+                if app_obj.config.get("SENSOR_POLL_ENABLED", True):
+                    schedule_sensor_poll(app_obj, new_poll_interval)
+                else:
+                    app_obj.config["SENSOR_POLL_INTERVAL_MINUTES"] = new_poll_interval
             flash("Paramètres enregistrés.", "success")
             return redirect(url_for("main.settings"))
 

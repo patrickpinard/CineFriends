@@ -41,7 +41,7 @@ class AutomationRuleForm(FlaskForm):
     trigger = HiddenField()
     action = HiddenField()
     cooldown_seconds = IntegerField(
-        "Temps de repos (secondes)",
+        "Délai entre mesures (s)",
         validators=[Optional(), NumberRange(min=0, max=86400)],
         default=300,
     )

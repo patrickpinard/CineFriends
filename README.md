@@ -5,6 +5,7 @@ Application web complète construite avec Flask pour piloter un tableau de bord 
 ## Notes de version · V3.0-MVP
 
 - Collecte manuelle : bouton administrateur depuis le dashboard pour lancer immédiatement la lecture des sondes et l’évaluation des règles.
+- Collecte planifiée réglable : fréquence par défaut toutes les 30 minutes, ajustable depuis la page Paramètres (avec reprogrammation instantanée du scheduler).
 - Automatisation renforcée : journalisation détaillée des actions relais, mises à jour en temps réel des descriptions de règles dans les cartes relais et corrections d’axes pour la sonde AM2315.
 - UX mobile/desktop : spinner global affiché dès le changement de page, filtres de période accessibles au clavier/souris, graphiques ApexCharts nettoyés (lignes pleines, légendes interactives).
 - Palette & cohérence : couleurs homogénéisées (températures AM2315 en bleu foncé, humidité en vert), résumés relais enrichis, micro-interactions généralisées (focus-visible, :active).
@@ -32,6 +33,7 @@ Application web complète construite avec Flask pour piloter un tableau de bord 
 
 - **Dashboard** : vue synthétique des activités récentes avec graphique interactif (ApexCharts), statut 2FA, alertes sécurité et bouton administrateur « Déclencher la collecte ».
 - **Automatisation** : création de règles, recherche/filtre/sort, confirmation de suppression, affichage structuré déclencheur/actions, responsive complet, déclenchement manuel de la collecte et journalisation des actions relais.
+- **Collecte capteurs planifiée** : fréquence par défaut toutes les 30 minutes, modifiable dans les paramètres matériels.
 - **Caméra USB** : flux vidéo intégré dans une carte responsive adaptée aux appareils iOS.
 - **Paramètres** : formulaire de configuration applicative harmonisé avec le design global.
 - **Gestion des utilisateurs** : création, édition, validation des inscriptions, avatars, 2FA, filtres contextuels, vue mobile optimisée.
@@ -64,6 +66,8 @@ Créer un fichier `.env` à la racine (exemple minimal) :
 FLASK_ENV=development
 SECRET_KEY=change-me
 SQLALCHEMY_DATABASE_URI=sqlite:///instance/dashboard.db
+
+SENSOR_POLL_INTERVAL_MINUTES=30
 
 MAIL_SERVER=smtp.example.com
 MAIL_PORT=587
