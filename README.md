@@ -2,6 +2,14 @@
 
 Application web complète construite avec Flask pour piloter un tableau de bord d’automatisation. Elle intègre une Progressive Web App optimisée iPhone, une gestion avancée des utilisateurs (rôles, 2FA, avatars, notifications), un module d’automatisation, le streaming caméra, des paramètres centralisés et un journal d’audit détaillé.
 
+## Notes de version · V3.0-MVP
+
+- Collecte manuelle : bouton administrateur depuis le dashboard pour lancer immédiatement la lecture des sondes et l’évaluation des règles.
+- Automatisation renforcée : journalisation détaillée des actions relais, mises à jour en temps réel des descriptions de règles dans les cartes relais et corrections d’axes pour la sonde AM2315.
+- UX mobile/desktop : spinner global affiché dès le changement de page, filtres de période accessibles au clavier/souris, graphiques ApexCharts nettoyés (lignes pleines, légendes interactives).
+- Palette & cohérence : couleurs homogénéisées (températures AM2315 en bleu foncé, humidité en vert), résumés relais enrichis, micro-interactions généralisées (focus-visible, :active).
+- Correctifs : bascule chauffage visible sur le graphique climatique, axes température/humidité recalibrés, bouton “Déclencher la collecte” responsive.
+
 ## Sommaire
 
 1. [Fonctionnalités principales](#fonctionnalités-principales)
@@ -22,8 +30,8 @@ Application web complète construite avec Flask pour piloter un tableau de bord 
 
 ## Fonctionnalités principales
 
-- **Dashboard** : vue synthétique des activités récentes avec graphique interactif (Chart.js), statut 2FA et alertes sécurité.
-- **Automatisation** : création de règles, recherche/filtre/sort, confirmation de suppression, affichage structuré déclencheur/actions, responsive complet.
+- **Dashboard** : vue synthétique des activités récentes avec graphique interactif (ApexCharts), statut 2FA, alertes sécurité et bouton administrateur « Déclencher la collecte ».
+- **Automatisation** : création de règles, recherche/filtre/sort, confirmation de suppression, affichage structuré déclencheur/actions, responsive complet, déclenchement manuel de la collecte et journalisation des actions relais.
 - **Caméra USB** : flux vidéo intégré dans une carte responsive adaptée aux appareils iOS.
 - **Paramètres** : formulaire de configuration applicative harmonisé avec le design global.
 - **Gestion des utilisateurs** : création, édition, validation des inscriptions, avatars, 2FA, filtres contextuels, vue mobile optimisée.
@@ -34,7 +42,7 @@ Application web complète construite avec Flask pour piloter un tableau de bord 
 ## Architecture & technologies
 
 - **Backend** : Flask, Flask-Login, Flask-WTF, SQLAlchemy.
-- **Frontend** : Tailwind CSS (via CDN), composants responsive, toasts dynamiques, Chart.js.
+- **Frontend** : Tailwind CSS (via CDN), composants responsive, toasts dynamiques, ApexCharts.
 - **Auth** : sessions sécurisées, rôles, double authentification par e-mail, gestion des appareils de confiance.
 - **PWA** : `manifest.json`, `service-worker.js`, prise en charge iOS (icônes `icon-128.png`, `icon-512.png`).
 - **Base de données** : SQLite par défaut (`instance/dashboard.db`).
