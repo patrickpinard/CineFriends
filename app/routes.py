@@ -533,9 +533,9 @@ def charts():
     period_start = now - period_delta
 
     base_color_map = {
-        ("ds18b20", "temperature"): "#0f5dd7",
-        ("am2315", "temperature"): "#7c3aed",
-        ("am2315", "humidity"): "#047857",
+        ("ds18b20", "temperature"): "#0284c7",  # sky-600
+        ("am2315", "temperature"): "#38bdf8",  # sky-300
+        ("am2315", "humidity"): "#0f766e",     # teal-600
     }
 
     climate_readings = (
@@ -601,7 +601,7 @@ def charts():
             if isinstance(color_value, str) and color_value:
                 colors.append(color_value)
             else:
-                fallback = "#0f5dd7" if target_axis == "temperature" else "#047857"
+                fallback = "#0284c7" if target_axis == "temperature" else "#0f766e"
                 colors.append(fallback)
         return subset, colors
 
@@ -753,73 +753,11 @@ def charts():
 
     measurements_total = (temperature_summary["count"] or 0) + (humidity_summary["count"] or 0)
 
-    relay_event_count = len(relay_entries)
-    period_end = now
-    relay_state_series: list[dict[str, object]] = []
-    relay_state_colors: list[str] = []
-    channel_state: dict[int, int] = {}
-    channel_points: dict[int, list[dict[str, object]]] = {}
-
-    for channel in sorted(relay_channel_colors.keys()):
-        channel_state[channel] = 0
-        channel_points[channel] = [
-            {"x": period_start.isoformat(), "y": 0},
-        ]
-
-    for entry in relay_entries:
-        details = entry.details or {}
-        channel = details.get("channel")
-        if channel is None:
-            try:
-                channel = int(entry.message.split("ch")[1])
-            except Exception:
-                continue
-        if channel not in channel_points:
-            channel_state[channel] = 0
-            channel_points[channel] = [
-                {"x": period_start.isoformat(), "y": 0},
-            ]
-
-        command = (details.get("command") or "").strip().lower()
-        if not command:
-            continue
-
-        current_state = channel_state.get(channel, 0)
-        if command == "on":
-            new_state = 1
-        elif command == "off":
-            new_state = 0
-        elif command == "toggle":
-            new_state = 0 if current_state else 1
-        else:
-            continue
-
-        timestamp_iso = entry.created_at.isoformat()
-        points = channel_points[channel]
-        # Évite les doublons successifs sur la même valeur
-        if points and points[-1]["y"] == new_state:
-            continue
-        points.append({"x": timestamp_iso, "y": new_state})
-        channel_state[channel] = new_state
-
-    for channel, points in channel_points.items():
-        points.append({"x": period_end.isoformat(), "y": channel_state.get(channel, 0)})
-        relay_state_series.append(
-            {
-                "name": relay_labels_map.get(channel, f"Relais {channel}"),
-                "data": points,
-                "meta": {"channel": channel},
-            }
-        )
-        relay_state_colors.append(relay_channel_colors.get(channel, {}).get("border", "#0ea5e9"))
-
     return render_template(
         "dashboard/charts.html",
         chart_has_data=chart_has_data,
         chart_period_links=chart_period_links,
         chart_selected_period=selected_period,
-        relay_annotations=relay_annotations,
-        relay_legend=relay_legend,
         temperature_series=temperature_series,
         temperature_colors=temperature_colors,
         temperature_summary=temperature_summary,
@@ -828,10 +766,15 @@ def charts():
         humidity_summary=humidity_summary,
         temperature_has_data=temperature_has_data,
         humidity_has_data=humidity_has_data,
+        relay_legend=relay_legend,
         measurements_total=measurements_total,
-        relay_state_series=relay_state_series,
-        relay_state_colors=relay_state_colors,
-        relay_event_count=relay_event_count,
+    )
+
+    return render_template(
+        "dashboard/charts.html",
+        chart_has_data=chart_has_data,
+        chart_period_links=chart_period_links,
+        chart_selected_period=selected_period,
     )
 
 
