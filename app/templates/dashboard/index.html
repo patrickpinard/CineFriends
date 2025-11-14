@@ -32,7 +32,7 @@
         <p class="mt-2 text-4xl font-semibold text-slate-900">{{ journal_last_24h }}</p>
         <p class="mt-2 text-sm text-slate-600">Événements sur les dernières 24&nbsp;heures</p>
     </div>
-</div>
+            </div>
 
 {% if sensor_highlights %}
 <div class="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -231,7 +231,7 @@
         <div>
             <h3 class="text-lg font-semibold text-slate-800">Collecte manuelle</h3>
             <p class="mt-1 text-sm text-slate-500">Met à jour immédiatement les capteurs et réévalue les règles actives.</p>
-        </div>
+    </div>
         <form method="post" action="{{ url_for('main.manual_sensor_collect') }}" class="flex justify-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="next" value="dashboard">

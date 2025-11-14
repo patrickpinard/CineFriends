@@ -108,11 +108,17 @@ def set_relay_state(channel: int, state: str) -> Dict[str, str]:
             elif not _ACTIVE_LOW and state_lower == "off":
                 desired_level = GPIO.LOW
         GPIO.output(pin, desired_level)
+        is_on = (
+            desired_level == GPIO.LOW
+            if _ACTIVE_LOW
+            else desired_level == GPIO.HIGH
+        )
         return {
             "status": "ok",
             "message": f"Relais {channel} -> {state_lower}",
             "pin": str(pin),
             "active_low": str(_ACTIVE_LOW),
+            "state": "on" if is_on else "off",
         }
     except Exception as exc:  # pragma: no cover - hardware spécifique
         logging.exception("Erreur lors du pilotage du relais %s", channel)

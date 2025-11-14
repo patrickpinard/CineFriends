@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 
 from . import db, schedule_sensor_poll
 from .forms import AutomationRuleForm, ProfileForm, SettingForm
-from .models import AutomationRule, JournalEntry, Notification, SensorReading, Setting, User
+from .models import AutomationRule, JournalEntry, Notification, RelayState, SensorReading, Setting, User
 from .services import create_notification
 from .tasks import collect_sensor_readings
 from .utils import build_changes, build_hardware_overview, delete_avatar, save_avatar
@@ -703,12 +703,9 @@ def charts():
             }
         )
 
-    relay_entries = (
-        JournalEntry.query.filter(
-            JournalEntry.message.like("Commande relais ch%"),
-            JournalEntry.created_at >= period_start,
-        )
-        .order_by(JournalEntry.created_at.asc())
+    relay_history = (
+        RelayState.query.filter(RelayState.created_at >= period_start)
+        .order_by(RelayState.created_at.asc())
         .all()
     )
 
@@ -717,61 +714,32 @@ def charts():
         2: {"border": "#8b5cf6", "background": "rgba(139, 92, 246, 0.18)"},
         3: {"border": "#14b8a6", "background": "rgba(20, 184, 166, 0.18)"},
     }
-    relay_annotations = []
-    relay_last_command: dict[int, str] = {}
-    relay_legend_map: dict[int, dict[str, object]] = {}
     relay_labels_map = get_relay_labels()
-    for entry in relay_entries:
-        details = entry.details or {}
-        channel = details.get("channel")
-        if channel is None:
-            try:
-                channel = int(entry.message.split("ch")[1])
-            except Exception:
-                channel = None
-        command = details.get("command", "").strip().lower()
-        if channel is None or not command:
-            continue
+    relay_annotations = []
+    relay_legend_map: dict[int, dict[str, object]] = {}
+
+    for entry in relay_history:
+        channel = entry.channel
         colors = relay_channel_colors.get(
             channel,
             {"border": "#f97316", "background": "rgba(249, 115, 22, 0.15)"},
         )
-        command_lower = command.lower()
         relay_name = relay_labels_map.get(channel, f"Relais {channel}")
-        details_text = []
-        if command_lower in {"on", "off"}:
-            if relay_last_command.get(channel) == command_lower:
-                continue
-            relay_last_command[channel] = command_lower
-        else:
-            relay_last_command[channel] = command_lower
-
-        if command_lower == "on":
+        state_lower = (entry.state or "").lower()
+        if state_lower == "on":
             label_text = f"▲ {relay_name} ON"
-            details_text.append("État cible : ON")
-        elif command_lower == "off":
+        elif state_lower == "off":
             label_text = f"▼ {relay_name} OFF"
-            details_text.append("État cible : OFF")
-        elif command_lower == "toggle":
-            label_text = f"⇄ {relay_name} Toggle"
-            details_text.append("Commande : bascule")
         else:
-            label_text = f"{relay_name} → {command_lower}"
-        issued_by = details.get("issued_by")
-        if issued_by:
-            details_text.append(f"Par : {issued_by}")
-        if details.get("result"):
-            status = details["result"].get("status")
-            if status:
-                details_text.append(f"Résultat : {status}")
-        relay_data = {"channel": channel, "command": command_lower, "details": details_text}
+            label_text = f"{relay_name} → {entry.state}"
+        details_text = [f"Source : {entry.source or 'N/A'}"]
         relay_annotations.append(
             {
                 "timestamp": entry.created_at.isoformat(),
                 "label": label_text,
                 "color": colors["border"],
                 "background": colors["background"],
-                "data": relay_data,
+                "data": {"channel": channel, "state": state_lower, "details": details_text},
             }
         )
         if channel not in relay_legend_map:
@@ -785,34 +753,13 @@ def charts():
 
     relay_state_series_map: dict[int, dict[str, object]] = {}
     relay_state_colors = []
-    relay_state_counts = 0
+    relay_state_counts = len(relay_history)
 
     relay_series_entries: dict[int, list[dict[str, object]]] = {}
-    for entry in relay_entries:
-        details = entry.details or {}
-        channel = details.get("channel")
-        if channel is None:
-            try:
-                channel = int(entry.message.split("ch")[1])
-            except Exception:
-                continue
-        command = (details.get("command") or "").strip().lower()
-        if not command:
-            continue
-
-        target_state: int | None = None
-        if command == "on":
-            target_state = 1
-        elif command == "off":
-            target_state = 0
-        elif command == "toggle":
-            current_state = relay_last_command.get(channel, "off")
-            target_state = 0 if current_state == "on" else 1
-        if target_state is None:
-            continue
-
-        relay_last_command[channel] = "on" if target_state == 1 else "off"
-        relay_state_counts += 1
+    for entry in relay_history:
+        channel = entry.channel
+        state_lower = (entry.state or "").lower()
+        target_state = 1 if state_lower == "on" else 0
         relay_series_entries.setdefault(channel, []).append(
             {"x": entry.created_at.isoformat(), "y": target_state}
         )
@@ -887,6 +834,12 @@ def relay_command(channel: int):
         )
     )
     db.session.commit()
+
+    if status == "ok":
+        from .automation_engine import _notify_relay_change
+
+        final_state = result.get("state") or command
+        _notify_relay_change(channel=channel, state=final_state, source=f"Manuel ({current_user.username})")
 
     if status == "ok":
         flash(message, "success")
@@ -1354,13 +1307,14 @@ def journal():
 
         message = entry.message
         if message.lower().startswith("commande relais ch"):
-            try:
-                channel_part = message.split("ch", 1)[1].strip()
-                channel = int("".join(filter(str.isdigit, channel_part)))
-                relay_name = relay_label_map.get(channel, f"Relais {channel}")
-                message = f"Commande relais • {relay_name}"
-            except Exception:
-                pass
+            channel = detail.get("channel")
+            relay_name = relay_label_map.get(channel, f"Relais {channel}") if channel else "Relais"
+            state = detail.get("command") or detail.get("result", {}).get("state")
+            state_label = state.upper() if isinstance(state, str) else None
+            parts = ["Commande", relay_name]
+            if state_label:
+                parts.append(state_label)
+            message = " • ".join(parts)
 
         formatted = {
             "level": entry.level,
@@ -1369,6 +1323,7 @@ def journal():
             "detail": detail,
             "actors": detail.get("actors") if isinstance(detail.get("actors"), list) else None,
             "metadata": None,
+            "compact_summary": message,
         }
 
         metadata_items = []

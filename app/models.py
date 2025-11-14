@@ -81,6 +81,14 @@ class SensorReading(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
+class RelayState(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    channel = db.Column(db.Integer, nullable=False, index=True)
+    state = db.Column(db.String(8), nullable=False)
+    source = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
