@@ -76,6 +76,11 @@
             background-color: #f1f5f9;
         }
         @media (min-width: 1024px) {
+            body.sidebar-collapsed header[data-app-header] {
+                left: var(--sidebar-width-collapsed);
+            }
+        }
+        @media (min-width: 1024px) {
             body:not(.sidebar-collapsed) .layout-shell {
                 padding-left: var(--sidebar-width);
             }
@@ -281,7 +286,7 @@
         </aside>
 
         <div class="layout-shell flex min-h-screen flex-1 flex-col">
-            <header class="fixed top-0 left-0 right-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur lg:left-72" style="padding-top: var(--safe-area-top);">
+            <header class="fixed top-0 left-0 right-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur lg:left-72" data-app-header style="padding-top: var(--safe-area-top);">
                 <div class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center gap-3">
                         <button type="button"
@@ -438,6 +443,22 @@
             </header>
 
             <div class="flex-1 px-4 pt-24 pb-32 sm:px-6 lg:px-8 lg:pt-28 lg:pb-20">
+                {% set page_explanations = {
+                    'main.dashboard': 'Vue d’ensemble temps réel pour suivre capteurs, alertes et relais.',
+                    'main.charts': 'Analyse détaillée des mesures historiques et des actions relais.',
+                    'main.automation': 'Configurez vos règles pour piloter automatiquement les relais.',
+                    'main.settings': 'Ajustez le matériel détecté, les noms et les paramètres système.',
+                    'main.camera': 'Surveillez la caméra et capturez des images de votre installation.',
+                    'main.journal': 'Consultez le journal des événements, alertes et actions automatiques.',
+                    'main.profile': 'Mettez à jour vos informations personnelles et de connexion.',
+                    'admin.users': 'Administrez les comptes utilisateurs autorisés à accéder au Dashboard.',
+                    'admin.create_user': 'Créez un nouvel utilisateur avec les droits appropriés.',
+                    'admin.edit_user': 'Modifiez les droits ou informations d’un utilisateur existant.',
+                } %}
+                {% set page_intro = page_explanations.get(request.endpoint, 'Surveillez et administrez votre installation connectée en toute simplicité.') %}
+                <div class="-mt-2 rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm font-semibold text-slate-700 shadow-inner">
+                    {{ page_intro }}
+                </div>
                 <section class="mt-6">
                     {% block content %}{% endblock %}
                 </section>

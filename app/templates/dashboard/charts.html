@@ -2,9 +2,9 @@
 {% block title %}Graphiques{% endblock %}
 {% block header_title %}Graphiques{% endblock %}
 {% block content %}
-<div class="graph-page-container mx-auto w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl px-3 sm:px-0">
+<div class="graph-page-container mx-auto w-full max-w-none px-3 lg:px-0">
     <div class="rounded-[28px] border border-slate-200 bg-white shadow-soft">
-        <div class="px-5 pt-5 sm:px-8 sm:pt-6">
+        <div class="px-5 pt-5 pb-7 sm:px-8 sm:pt-6 sm:pb-8">
             <div class="flex flex-col gap-5">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -33,48 +33,34 @@
                     <div class="inline-flex w-full overflow-hidden rounded-full border border-slate-200 bg-white p-1 text-xs font-semibold text-slate-500 sm:w-auto">
                         <button type="button" class="chart-toggle-btn chart-toggle-btn--active" data-chart-toggle="temperature">Température</button>
                         <button type="button" class="chart-toggle-btn" data-chart-toggle="humidity">Humidité</button>
+                        <button type="button" class="chart-toggle-btn" data-chart-toggle="relay">Relais</button>
                     </div>
                     <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
                         <span class="inline-flex items-center justify-center rounded-full bg-teal-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-600" data-summary-count>0 mesure</span>
+                        <span class="inline-flex hidden items-center justify-center rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600" data-relay-summary>0 action</span>
                         <button type="button" id="chart-expand-button" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-teal-200 hover:text-teal-600">
                             Agrandir
                         </button>
                     </div>
                 </div>
 
-                <div>
+                <div id="climateChartSection">
                     <div id="climateChartWrapper" class="relative w-full overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-3 shadow-inner transition-all duration-300 sm:p-4">
                         <div id="climateChart" class="h-[260px] w-full{% if not chart_has_data %} hidden{% endif %}"></div>
                         <div id="chartEmptyMessage" class="{% if chart_has_data %}hidden{% endif %} flex h-[260px] w-full items-center justify-center text-center text-sm font-medium text-slate-500">
                             Aucune donnée disponible pour cette métrique.
                         </div>
                     </div>
-                    <p class="mt-2 text-[11px] font-medium text-slate-400">Les annotations signalent les changements d’état des relais enregistrés.</p>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<div class="graph-page-container mx-auto mt-6 w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl px-3 sm:px-0">
-    <div class="rounded-[28px] border border-slate-200 bg-white shadow-soft">
-        <div class="px-5 py-5 sm:px-8 sm:py-6">
-            <div class="flex flex-col gap-4">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <h3 class="text-lg font-semibold text-slate-800">Changements d’état des relais</h3>
-                        <p class="text-sm text-slate-500">Visualisez les actions ON/OFF déclenchées pendant la période sélectionnée.</p>
-                    </div>
-                    <span class="inline-flex items-center justify-center rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600" data-relay-count>0 action</span>
-                </div>
-                <div>
+                <div id="relayChartSection" class="hidden">
                     <div id="relayChartWrapper" class="relative w-full overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-3 shadow-inner transition-all duration-300 sm:p-4">
-                        <div id="relayChart" class="h-[220px] w-full"></div>
-                        <div id="relayEmptyMessage" class="hidden h-[220px] w-full items-center justify-center text-center text-sm font-medium text-slate-500">
+                        <div id="relayChart" class="h-[260px] w-full"></div>
+                        <div id="relayEmptyMessage" class="hidden flex h-[260px] w-full items-center justify-center text-center text-sm font-medium text-slate-500">
                             Aucun changement de relais enregistré sur cette période.
                         </div>
                     </div>
-                    <p class="mt-2 text-[11px] font-medium text-slate-400">Les courbes affichent l’état ON/OFF (1 / 0) de chaque relais dans le temps.</p>
+                    <p class="mt-2 text-[11px] font-medium text-slate-400">Visualisez les actions ON/OFF déclenchées pendant la période sélectionnée.</p>
                 </div>
             </div>
         </div>
@@ -87,12 +73,15 @@
         const chartElement = document.getElementById('climateChart');
         const wrapper = document.getElementById('climateChartWrapper');
         const emptyMessage = document.getElementById('chartEmptyMessage');
+        const climateSection = document.getElementById('climateChartSection');
+        const relaySection = document.getElementById('relayChartSection');
         const expandBtn = document.getElementById('chart-expand-button');
         const toggleButtons = Array.from(document.querySelectorAll('[data-chart-toggle]'));
 
         const summaryEls = {
             count: document.querySelector('[data-summary-count]'),
         };
+        const relaySummaryEl = document.querySelector('[data-relay-summary]');
 
         const datasets = {
             temperature: {
@@ -123,18 +112,18 @@
         const relayChartElement = document.getElementById('relayChart');
         const relayWrapper = document.getElementById('relayChartWrapper');
         const relayEmptyMessage = document.getElementById('relayEmptyMessage');
-        const relayCountEl = document.querySelector('[data-relay-count]');
-        const relaySeries = {{ relay_state_series|tojson }};
-        const relayColors = {{ relay_state_colors|tojson }};
-        const relayEventCount = {{ relay_event_count }};
-        if (relayCountEl) {
-            relayCountEl.textContent = relayEventCount === 1 ? '1 action' : `${relayEventCount} actions`;
+        const relaySeries = {{ (relay_state_series or [])|tojson }};
+        const relayColors = {{ (relay_state_colors or [])|tojson }};
+        const relayEventCount = {{ relay_event_count or 0 }};
+        if (relaySummaryEl) {
+            relaySummaryEl.textContent = relayEventCount === 1 ? '1 action' : `${relayEventCount} actions`;
         }
 
         let relayChartInstance = null;
 
         let chartInstance = null;
         let activeDataset = null;
+        let isExpanded = false;
 
         const fmtCount = (count) => {
             if (!count) return '0 mesure';
@@ -206,7 +195,7 @@
                 return unit ? `${numeric} ${unit}` : numeric;
             };
 
-            const baseHeight = wrapper.classList.contains('chart-expanded') ? 460 : 260;
+            const baseHeight = isExpanded ? 460 : 260;
 
             return {
                 chart: {
@@ -237,7 +226,7 @@
                 colors: dataset.colors && dataset.colors.length ? dataset.colors : ['#0f5dd7', '#0ea5e9', '#14b8a6'],
                 stroke: {
                     curve: 'smooth',
-                    width: wrapper.classList.contains('chart-expanded') ? 5 : 4,
+                    width: isExpanded ? 5 : 4,
                     lineCap: 'round',
                 },
                 markers: {
@@ -339,21 +328,21 @@
                     {
                         breakpoint: 1024,
                         options: {
-                            chart: { height: 300 },
+                            chart: { height: isExpanded ? 360 : 300 },
                         },
                     },
                     {
                         breakpoint: 768,
                         options: {
-                            chart: { height: 260 },
+                            chart: { height: isExpanded ? 320 : 260 },
                             legend: { position: 'bottom' },
                         },
                     },
                     {
                         breakpoint: 480,
                         options: {
-                            chart: { height: wrapper.classList.contains('chart-expanded') ? 420 : 230 },
-                            stroke: { width: wrapper.classList.contains('chart-expanded') ? 4 : 3 },
+                            chart: { height: isExpanded ? 400 : 230 },
+                            stroke: { width: isExpanded ? 4 : 3 },
                             grid: { padding: { left: 6, right: 6 } },
                             xaxis: {
                                 labels: { style: { fontSize: '10px' } },
@@ -382,6 +371,21 @@
             }, delay);
         };
 
+        const applyExpansionState = () => {
+            if (wrapper) {
+                wrapper.classList.toggle('chart-expanded', isExpanded);
+            }
+            if (relayWrapper) {
+                relayWrapper.classList.toggle('chart-expanded', isExpanded);
+            }
+        };
+
+        const updateRelayHeight = () => {
+            if (!relayChartInstance) return;
+            const targetHeight = isExpanded ? 340 : 260;
+            relayChartInstance.updateOptions({ chart: { height: targetHeight } }, false, true);
+        };
+
         const renderRelayChart = () => {
             if (!relayChartElement) return;
             if (relayChartInstance) {
@@ -403,10 +407,12 @@
                 relayEmptyMessage.classList.add('hidden');
             }
 
+            const baseHeight = isExpanded ? 340 : 260;
+
             relayChartInstance = new ApexCharts(relayChartElement, {
                 chart: {
                     type: 'line',
-                    height: 220,
+                    height: baseHeight,
                     animations: {
                         enabled: true,
                         easing: 'easeinout',
@@ -473,13 +479,13 @@
                     {
                         breakpoint: 768,
                         options: {
-                            chart: { height: 200 },
+                            chart: { height: isExpanded ? 300 : 220 },
                         },
                     },
                     {
                         breakpoint: 480,
                         options: {
-                            chart: { height: 190 },
+                            chart: { height: isExpanded ? 260 : 200 },
                             xaxis: {
                                 labels: { style: { fontSize: '10px' } },
                             },
@@ -502,19 +508,66 @@
             });
         };
 
+        const showRelayTab = () => {
+            if (activeDataset === 'relay') return;
+            activeDataset = 'relay';
+            setActiveButton('relay');
+            if (climateSection) {
+                climateSection.classList.add('hidden');
+            }
+            if (relaySection) {
+                relaySection.classList.remove('hidden');
+            }
+            if (summaryEls.count) {
+                summaryEls.count.classList.add('hidden');
+            }
+            if (relaySummaryEl) {
+                relaySummaryEl.classList.remove('hidden');
+            }
+            if (expandBtn) {
+                const hasRelayData = Array.isArray(relaySeries) && relaySeries.some((serie) => (serie.data || []).length > 1);
+                expandBtn.disabled = !hasRelayData;
+                expandBtn.classList.toggle('opacity-50', !hasRelayData);
+                expandBtn.classList.toggle('cursor-not-allowed', !hasRelayData);
+                expandBtn.textContent = isExpanded ? 'Réduire' : 'Agrandir';
+            }
+            renderRelayChart();
+            applyExpansionState();
+        };
+
         const renderDataset = (datasetKey) => {
+            if (datasetKey === 'relay') {
+                showRelayTab();
+                return;
+            }
             const dataset = datasets[datasetKey];
             if (!dataset) {
                 return;
             }
             activeDataset = datasetKey;
             setActiveButton(datasetKey);
+            if (climateSection) {
+                climateSection.classList.remove('hidden');
+            }
+            if (relaySection) {
+                relaySection.classList.add('hidden');
+            }
+            if (summaryEls.count) {
+                summaryEls.count.classList.remove('hidden');
+            }
+            if (relaySummaryEl) {
+                relaySummaryEl.classList.add('hidden');
+            }
             updateSummary(dataset);
 
             const hasData = dataset.summary.count > 0;
-            expandBtn.disabled = !hasData;
-            expandBtn.classList.toggle('opacity-50', !hasData);
-            expandBtn.classList.toggle('cursor-not-allowed', !hasData);
+            if (expandBtn) {
+                expandBtn.disabled = !hasData;
+                expandBtn.classList.toggle('opacity-50', !hasData);
+                expandBtn.classList.toggle('cursor-not-allowed', !hasData);
+                expandBtn.textContent = isExpanded ? 'Réduire' : 'Agrandir';
+            }
+            applyExpansionState();
 
             if (chartInstance) {
                 chartInstance.destroy();
@@ -543,29 +596,40 @@
 
         if (expandBtn) {
             expandBtn.addEventListener('click', () => {
-                const expanded = wrapper.classList.toggle('chart-expanded');
-                expandBtn.textContent = expanded ? 'Réduire' : 'Agrandir';
-                if (chartInstance) {
+                if (expandBtn.disabled) return;
+                isExpanded = !isExpanded;
+                expandBtn.textContent = isExpanded ? 'Réduire' : 'Agrandir';
+                applyExpansionState();
+                if (activeDataset === 'relay') {
+                    updateRelayHeight();
+                } else if (chartInstance && activeDataset) {
                     const options = buildChartOptions(activeDataset);
-                    chartInstance.updateOptions({ chart: { height: options.chart.height } }, false, true);
+                    chartInstance.updateOptions({ chart: { height: options.chart.height }, stroke: options.stroke }, false, true);
                     scheduleResize(80);
                 }
-                scheduleRelayResize(expanded ? 160 : 120);
+                scheduleRelayResize(isExpanded ? 200 : 140);
             });
         }
 
+        const relayHasData = Array.isArray(relaySeries) && relaySeries.some((serie) => (serie.data || []).length > 1);
         const defaultDatasetKey = datasets.temperature.summary.count
             ? 'temperature'
-            : (datasets.humidity.summary.count ? 'humidity' : 'temperature');
+            : (datasets.humidity.summary.count ? 'humidity' : (relayHasData ? 'relay' : 'temperature'));
 
-        renderDataset(defaultDatasetKey);
-        renderRelayChart();
+        if (defaultDatasetKey === 'relay') {
+            showRelayTab();
+        } else {
+            renderDataset(defaultDatasetKey);
+        }
 
         function scheduleRelayResize(delay = 120) {
             if (!relayChartInstance) return;
             setTimeout(() => {
                 if (!relayChartInstance) return;
-                const targetHeight = window.innerWidth < 480 ? 190 : 220;
+                const mobile = window.innerWidth < 480;
+                const targetHeight = mobile
+                    ? (isExpanded ? 280 : 200)
+                    : (isExpanded ? 340 : 260);
                 relayChartInstance.updateOptions({ chart: { height: targetHeight } }, false, true);
             }, delay);
         }
@@ -593,9 +657,9 @@
     }
 
     .chart-toggle-btn--active {
-        background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 100%);
+        background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);
         color: #fff;
-        box-shadow: 0 12px 28px -18px rgba(14, 165, 233, 0.8);
+        box-shadow: 0 12px 28px -18px rgba(34, 197, 94, 0.8);
     }
 
     .chart-toggle-btn:not(.chart-toggle-btn--active):hover {
@@ -604,10 +668,6 @@
     }
 
     @media (max-width: 480px) {
-        .graph-page-container {
-            max-width: 335px;
-        }
-
         #chart-expand-button {
             width: 100%;
             justify-content: center;

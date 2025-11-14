@@ -37,7 +37,7 @@
 {% if sensor_highlights %}
 <div class="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
     {% for card in sensor_highlights %}
-    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-sensor-card="{{ card.key }}">
         <div class="flex items-start justify-between gap-4">
             <div>
                 <h2 class="text-sm uppercase tracking-wide text-slate-500">{{ card.title }}</h2>
@@ -58,47 +58,46 @@
                 {% endif %}
             </span>
         </div>
-        {% if card.value is not none %}
-        <p class="mt-4 text-4xl font-semibold text-slate-900">
-            {{ card.value|round(1) }}
-            <span class="ml-1 text-lg font-normal text-slate-500">{{ card.unit }}</span>
-        </p>
-        {% if card.last_seen_text %}
-        <p class="mt-2 text-xs font-medium text-slate-500">Dernière mesure le {{ card.last_seen_text }}</p>
-        {% endif %}
-        {% if card.min_value is not none or card.max_value is not none %}
-        <div class="mt-4 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500">
-            <div class="flex items-center justify-between">
-                <span>Min 24h</span>
-                <span class="text-sm font-semibold text-slate-900">
-                    {% if card.min_value is not none %}
-                        {{ card.min_value|round(1) }} {{ card.unit }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </span>
-            </div>
-            <div class="flex items-center justify-between">
-                <span>Max 24h</span>
-                <span class="text-sm font-semibold text-slate-900">
-                    {% if card.max_value is not none %}
-                        {{ card.max_value|round(1) }} {{ card.unit }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </span>
+        <div data-sensor-value-block class="{% if card.value is none %}hidden{% endif %}">
+            <p class="mt-4 text-4xl font-semibold text-slate-900">
+                <span data-sensor-value>{{ card.value|round(1) if card.value is not none else '' }}</span>
+                <span class="ml-1 text-lg font-normal text-slate-500" data-sensor-unit>{{ card.unit }}</span>
+            </p>
+            <p class="mt-2 text-xs font-medium text-slate-500" data-sensor-timestamp>
+                {% if card.last_seen_text %}Dernière mesure le {{ card.last_seen_text }}{% endif %}
+            </p>
+            <div class="mt-4 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div class="flex items-center justify-between">
+                    <span>Min 24h</span>
+                    <span class="text-sm font-semibold text-slate-900" data-sensor-min>
+                        {% if card.min_value is not none %}
+                            {{ card.min_value|round(1) }} {{ card.unit }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span>Max 24h</span>
+                    <span class="text-sm font-semibold text-slate-900" data-sensor-max>
+                        {% if card.max_value is not none %}
+                            {{ card.max_value|round(1) }} {{ card.unit }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </span>
+                </div>
             </div>
         </div>
-        {% endif %}
-        {% else %}
         {% set status_color = 'text-slate-500' %}
         {% if card.status == 'warning' %}
             {% set status_color = 'text-amber-600' %}
         {% elif card.status == 'error' %}
             {% set status_color = 'text-rose-600' %}
         {% endif %}
-        <p class="mt-4 text-sm font-medium {{ status_color }}">{{ card.message }}</p>
-        {% endif %}
+        <p class="mt-4 text-sm font-medium {{ status_color }} {% if card.value is not none %}hidden{% endif %}" data-sensor-empty-block>
+            <span data-sensor-message>{{ card.message }}</span>
+        </p>
     </div>
     {% endfor %}
 </div>
@@ -121,27 +120,27 @@
     </div>
     <div class="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {% for relay in relay_cards %}
-        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {% set state_label = 'Inconnu' %}
+        {% set state_class = 'is-unknown' %}
+        {% if relay.state == 'on' %}
+            {% set state_label = 'On' %}
+            {% set state_class = 'is-on' %}
+        {% elif relay.state == 'off' %}
+            {% set state_label = 'Off' %}
+            {% set state_class = 'is-off' %}
+        {% endif %}
+        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-relay-card="{{ relay.channel }}">
             <header class="flex items-start justify-between gap-4">
                 <div>
                     <p class="text-xs uppercase tracking-wide text-slate-400">{{ relay.label }}</p>
                     <h3 class="text-base font-semibold text-slate-900">GPIO {{ relay.pin }}</h3>
                 </div>
-                {% if relay.state == 'on' %}
-                <span class="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span> On
+                <span class="relay-state-pill {{ state_class }}" data-relay-state-pill>
+                    <span class="relay-state-dot"></span>
+                    <span data-relay-state-text>{{ state_label }}</span>
                 </span>
-                {% elif relay.state == 'off' %}
-                <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    <span class="h-2.5 w-2.5 rounded-full bg-slate-400"></span> Off
-                </span>
-                {% else %}
-                <span class="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                    <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span> Inconnu
-                </span>
-                {% endif %}
             </header>
-            {% if relay.rules %}
+{% if relay.rules %}
             <div class="mt-3 rounded-xl bg-teal-50/80 p-3 text-xs text-teal-700">
                 <p class="font-semibold uppercase tracking-wide">Contrôlé par l’automatisation</p>
                 <ul class="mt-1 space-y-2">
@@ -159,9 +158,9 @@
                 </ul>
             </div>
             {% endif %}
-            <form method="post" action="{{ url_for('main.relay_command', channel=relay.channel) }}" class="mt-5">
+            <form method="post" action="{{ url_for('main.relay_command', channel=relay.channel) }}" class="mt-5" data-relay-form="{{ relay.channel }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="command" value="{{ 'toggle' if relay.state != 'on' else 'off' }}">
+                <input type="hidden" name="command" value="{{ 'off' if relay.state == 'on' else 'on' }}" data-relay-command-input>
                 <label class="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
                     <span class="text-sm font-medium text-slate-600">
                         {% if relay.rules %}
@@ -176,6 +175,8 @@
                            class="relative h-5 w-10 cursor-pointer appearance-none rounded-full border border-slate-300 bg-slate-200 transition before:absolute before:left-0.5 before:top-1/2 before:h-4 before:w-4 before:-translate-y-1/2 before:rounded-full before:bg-white before:shadow-sm before:transition checked:bg-teal-500 checked:before:translate-x-5 focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:before:bg-slate-300"
                            {% if relay.state == 'on' %}checked{% endif %}
                            {% if relay.rules or relay_manual_disabled %}disabled{% endif %}
+                           data-relay-toggle
+                           data-relay-channel="{{ relay.channel }}"
                            onchange="this.form.command.value = this.checked ? 'on' : 'off'; this.form.submit();">
                 </label>
             </form>
@@ -244,5 +245,182 @@
     </div>
 </div>
 {% endif %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const sensorEndpoint = "{{ url_for('main.dashboard_highlights_api') }}";
+        const relayEndpoint = "{{ url_for('main.relays_states_api') }}";
+        const sensorCards = {};
+        document.querySelectorAll('[data-sensor-card]').forEach((cardEl) => {
+            const key = cardEl.dataset.sensorCard;
+            if (!key) {
+                return;
+            }
+            sensorCards[key] = {
+                valueBlock: cardEl.querySelector('[data-sensor-value-block]'),
+                emptyBlock: cardEl.querySelector('[data-sensor-empty-block]'),
+                valueEl: cardEl.querySelector('[data-sensor-value]'),
+                unitEl: cardEl.querySelector('[data-sensor-unit]'),
+                timestampEl: cardEl.querySelector('[data-sensor-timestamp]'),
+                messageEl: cardEl.querySelector('[data-sensor-message]'),
+                minEl: cardEl.querySelector('[data-sensor-min]'),
+                maxEl: cardEl.querySelector('[data-sensor-max]'),
+            };
+        });
+
+        const relayCards = {};
+        document.querySelectorAll('[data-relay-card]').forEach((cardEl) => {
+            const channel = cardEl.dataset.relayCard;
+            if (!channel) {
+                return;
+            }
+            relayCards[channel] = {
+                pill: cardEl.querySelector('[data-relay-state-pill]'),
+                pillText: cardEl.querySelector('[data-relay-state-text]'),
+                toggle: cardEl.querySelector('[data-relay-toggle]'),
+                commandInput: cardEl.querySelector('[data-relay-command-input]'),
+            };
+        });
+
+        async function refreshHighlights() {
+            if (!Object.keys(sensorCards).length) {
+                return;
+            }
+            try {
+                const response = await fetch(sensorEndpoint, {
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) {
+                    return;
+                }
+                const payload = await response.json();
+                if (!payload || !Array.isArray(payload.cards)) {
+                    return;
+                }
+                payload.cards.forEach((card) => {
+                    const target = sensorCards[card.key];
+                    if (!target) {
+                        return;
+                    }
+                    const hasValue = card.value !== null && card.value !== undefined;
+                    target.valueBlock?.classList.toggle('hidden', !hasValue);
+                    target.emptyBlock?.classList.toggle('hidden', hasValue);
+                    if (hasValue) {
+                        if (target.valueEl) {
+                            const numericValue = Number(card.value);
+                            target.valueEl.textContent = Number.isFinite(numericValue) ? numericValue.toFixed(1) : card.value;
+                        }
+                        if (target.unitEl) {
+                            target.unitEl.textContent = card.unit || '';
+                        }
+                        if (target.timestampEl) {
+                            target.timestampEl.textContent = card.last_seen_text ? `Dernière mesure le ${card.last_seen_text}` : '';
+                        }
+                        const minText = (card.min_value !== null && card.min_value !== undefined)
+                            ? `${Number(card.min_value).toFixed(1)} ${card.unit || ''}`.trim()
+                            : '—';
+                        const maxText = (card.max_value !== null && card.max_value !== undefined)
+                            ? `${Number(card.max_value).toFixed(1)} ${card.unit || ''}`.trim()
+                            : '—';
+                        if (target.minEl) {
+                            target.minEl.textContent = minText;
+                        }
+                        if (target.maxEl) {
+                            target.maxEl.textContent = maxText;
+                        }
+                    } else if (target.messageEl) {
+                        target.messageEl.textContent = card.message || 'Sonde non détectée ou aucune mesure disponible.';
+                    }
+                });
+            } catch (error) {
+                console.warn('Impossible de rafraîchir les mesures capteurs:', error);
+            }
+        }
+
+        function applyRelayState(target, state) {
+            if (!target || !target.pill || !target.pillText) {
+                return;
+            }
+            const normalized = state === 'on' ? 'on' : state === 'off' ? 'off' : 'unknown';
+            target.pill.classList.remove('is-on', 'is-off', 'is-unknown');
+            target.pill.classList.add(`is-${normalized}`);
+            const labelMap = { on: 'On', off: 'Off', unknown: 'Inconnu' };
+            target.pillText.textContent = labelMap[normalized];
+            if (target.toggle) {
+                target.toggle.checked = normalized === 'on';
+            }
+            if (target.commandInput) {
+                target.commandInput.value = normalized === 'on' ? 'off' : 'on';
+            }
+        }
+
+        async function refreshRelays() {
+            if (!Object.keys(relayCards).length) {
+                return;
+            }
+            try {
+                const response = await fetch(relayEndpoint, {
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) {
+                    return;
+                }
+                const payload = await response.json();
+                const states = payload?.states || {};
+                Object.entries(relayCards).forEach(([channel, target]) => {
+                    const state = states[channel] ?? states[Number(channel)] ?? 'unknown';
+                    applyRelayState(target, state);
+                });
+            } catch (error) {
+                console.warn('Impossible de rafraîchir les états des relais:', error);
+            }
+        }
+
+        refreshHighlights();
+        refreshRelays();
+        setInterval(refreshHighlights, 30000);
+        setInterval(refreshRelays, 15000);
+    });
+</script>
+<style>
+    .relay-state-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 9999px;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        color: #475569;
+    }
+    .relay-state-dot {
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 9999px;
+        background: currentColor;
+    }
+    .relay-state-pill.is-on {
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+        color: #047857;
+    }
+    .relay-state-pill.is-off {
+        background: #f8fafc;
+        border-color: #e2e8f0;
+        color: #475569;
+    }
+    .relay-state-pill.is-unknown {
+        background: #fff7ed;
+        border-color: #fed7aa;
+        color: #b45309;
+    }
+</style>
 {% endblock %}
 

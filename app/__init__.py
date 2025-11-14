@@ -20,6 +20,8 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "UTC"))
 
+from .tasks import collect_sensor_readings
+
 
 def schedule_sensor_poll(app: Flask, minutes: int) -> None:
     minutes = max(1, int(minutes))
@@ -72,8 +74,6 @@ def create_app():
     from .routes import main_bp
     from .auth import auth_bp
     from .admin import admin_bp
-    from .tasks import collect_sensor_readings
-
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
@@ -140,6 +140,14 @@ def create_app():
 
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         _start_scheduler()
+
+    def _ensure_scheduler_once():
+        _start_scheduler()
+
+    if hasattr(app, "before_first_request"):
+        app.before_first_request(_ensure_scheduler_once)
+    else:  # compat Flask >=3.1
+        app.before_request(_ensure_scheduler_once)
 
     with app.app_context():
         from . import seed

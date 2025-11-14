@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Generator, Tuple
+from typing import Any, Generator, Tuple
 
 from flask import (Blueprint, Response, current_app, flash, jsonify, redirect,
                    render_template, request, url_for)
@@ -38,6 +38,33 @@ METRIC_LABELS = {
     "humidity": "Humidité",
 }
 
+SENSOR_HIGHLIGHT_DEFINITIONS = [
+    {
+        "sensor_type": "ds18b20",
+        "metric": "temperature",
+        "title": "Température DS18B20",
+        "subtitle_key": "ds18b20",
+        "default_unit": "°C",
+        "icon": "temperature",
+    },
+    {
+        "sensor_type": "am2315",
+        "metric": "temperature",
+        "title": "Température AM2315",
+        "subtitle_key": "am2315",
+        "default_unit": "°C",
+        "icon": "temperature",
+    },
+    {
+        "sensor_type": "am2315",
+        "metric": "humidity",
+        "title": "Humidité AM2315",
+        "subtitle_key": "am2315",
+        "default_unit": "%",
+        "icon": "humidity",
+    },
+]
+
 
 def get_setting_value(key: str, default: str) -> str:
     setting = Setting.query.filter_by(key=key).first()
@@ -52,6 +79,85 @@ def get_sensor_display_name(sensor_type: str) -> str:
     if not key:
         return default
     return get_setting_value(key, default)
+
+
+def _build_sensor_highlight(
+    *,
+    sensor_type: str,
+    metric: str,
+    title: str,
+    default_unit: str,
+    icon: str,
+    subtitle_key: str | None = None,
+    subtitle: str | None = None,
+) -> dict[str, object]:
+    subtitle_value = subtitle
+    if subtitle_value is None and subtitle_key:
+        subtitle_value = get_sensor_display_name(subtitle_key)
+
+    reading = (
+        SensorReading.query.filter(
+            SensorReading.sensor_type == sensor_type,
+            SensorReading.metric == metric,
+        )
+        .order_by(SensorReading.created_at.desc())
+        .first()
+    )
+    card: dict[str, object] = {
+        "key": f"{sensor_type}_{metric}",
+        "sensor_type": sensor_type,
+        "metric": metric,
+        "title": title,
+        "subtitle": subtitle_value,
+        "icon": icon,
+        "value": None,
+        "unit": default_unit,
+        "status": "error",
+        "message": "Sonde non détectée ou aucune mesure disponible.",
+        "last_seen_text": None,
+        "last_seen_iso": None,
+        "min_value": None,
+        "max_value": None,
+    }
+    if reading and reading.value is not None:
+        value = round(float(reading.value), 2)
+        card["value"] = value
+        card["unit"] = reading.unit or default_unit
+        card["status"] = "ok"
+        card["message"] = None
+        card["last_seen_text"] = reading.created_at.strftime("%d/%m/%Y %H:%M")
+        card["last_seen_iso"] = reading.created_at.isoformat()
+        if reading.sensor_id and not subtitle_value:
+            card["subtitle"] = f"ID {reading.sensor_id.upper()}"
+
+        window_start = datetime.utcnow() - timedelta(hours=24)
+        stats = (
+            db.session.query(
+                func.min(SensorReading.value),
+                func.max(SensorReading.value),
+            )
+            .filter(
+                SensorReading.sensor_type == sensor_type,
+                SensorReading.metric == metric,
+                SensorReading.value.isnot(None),
+                SensorReading.created_at >= window_start,
+            )
+            .first()
+        )
+        if stats:
+            min_value, max_value = stats
+            if min_value is not None:
+                card["min_value"] = round(float(min_value), 2)
+            if max_value is not None:
+                card["max_value"] = round(float(max_value), 2)
+    return card
+
+
+def _get_sensor_highlights() -> list[dict[str, object]]:
+    cards: list[dict[str, object]] = []
+    for definition in SENSOR_HIGHLIGHT_DEFINITIONS:
+        cards.append(_build_sensor_highlight(**definition))
+    return cards
 
 
 def _extract_relay_action_description(line: str) -> str:
@@ -360,95 +466,7 @@ def dashboard():
         .first()
     )
 
-    def build_sensor_highlight(
-        *,
-        sensor_type: str,
-        metric: str,
-        title: str,
-        subtitle: str | None,
-        default_unit: str,
-        icon: str,
-    ) -> dict[str, object]:
-        reading = (
-        SensorReading.query.filter(
-                SensorReading.sensor_type == sensor_type,
-                SensorReading.metric == metric,
-            )
-            .order_by(SensorReading.created_at.desc())
-            .first()
-        )
-        card: dict[str, object] = {
-            "title": title,
-            "subtitle": subtitle,
-            "icon": icon,
-            "value": None,
-            "unit": default_unit,
-            "status": "error",
-            "message": "Sonde non détectée ou aucune mesure disponible.",
-            "last_seen_text": None,
-            "last_seen_iso": None,
-            "min_value": None,
-            "max_value": None,
-        }
-        if reading and reading.value is not None:
-            value = round(float(reading.value), 2)
-            card["value"] = value
-            card["unit"] = reading.unit or default_unit
-            card["status"] = "ok"
-            card["message"] = None
-            card["last_seen_text"] = reading.created_at.strftime("%d/%m/%Y %H:%M")
-            card["last_seen_iso"] = reading.created_at.isoformat()
-            if reading.sensor_id and not subtitle:
-                card["subtitle"] = f"ID {reading.sensor_id.upper()}"
-
-            window_start = datetime.utcnow() - timedelta(hours=24)
-            stats = (
-                db.session.query(
-                    func.min(SensorReading.value),
-                    func.max(SensorReading.value),
-                )
-                .filter(
-                    SensorReading.sensor_type == sensor_type,
-                    SensorReading.metric == metric,
-                    SensorReading.value.isnot(None),
-                    SensorReading.created_at >= window_start,
-                )
-                .first()
-            )
-            if stats:
-                min_value, max_value = stats
-                if min_value is not None:
-                    card["min_value"] = round(float(min_value), 2)
-                if max_value is not None:
-                    card["max_value"] = round(float(max_value), 2)
-        return card
-
-    sensor_highlights = [
-        build_sensor_highlight(
-            sensor_type="ds18b20",
-            metric="temperature",
-            title="Température DS18B20",
-            subtitle=get_sensor_display_name("ds18b20"),
-            default_unit="°C",
-            icon="temperature",
-        ),
-        build_sensor_highlight(
-            sensor_type="am2315",
-            metric="temperature",
-            title="Température AM2315",
-            subtitle=get_sensor_display_name("am2315"),
-            default_unit="°C",
-            icon="temperature",
-        ),
-        build_sensor_highlight(
-            sensor_type="am2315",
-            metric="humidity",
-            title="Humidité AM2315",
-            subtitle=get_sensor_display_name("am2315"),
-            default_unit="%",
-            icon="humidity",
-        ),
-    ]
+    sensor_highlights = _get_sensor_highlights()
 
     # Relais
     relay_pins = get_configured_relay_pins()
@@ -511,6 +529,20 @@ def dashboard():
         relays_active_low=relays_active_low,
         relay_manual_disabled=not relays_available,
     )
+
+
+@main_bp.route("/api/dashboard/highlights")
+@login_required
+def dashboard_highlights_api():
+    cards = _get_sensor_highlights()
+    return jsonify({"cards": cards})
+
+
+@main_bp.route("/api/relays/states")
+@login_required
+def relays_states_api():
+    states = get_relay_states()
+    return jsonify({"states": states, "timestamp": datetime.utcnow().isoformat()})
 
 
 @main_bp.route("/graphiques", methods=["GET"])
@@ -751,6 +783,51 @@ def charts():
 
     relay_legend = sorted(relay_legend_map.values(), key=lambda item: item["name"])
 
+    relay_state_series_map: dict[int, dict[str, object]] = {}
+    relay_state_colors = []
+    relay_state_counts = 0
+
+    relay_series_entries: dict[int, list[dict[str, object]]] = {}
+    for entry in relay_entries:
+        details = entry.details or {}
+        channel = details.get("channel")
+        if channel is None:
+            try:
+                channel = int(entry.message.split("ch")[1])
+            except Exception:
+                continue
+        command = (details.get("command") or "").strip().lower()
+        if not command:
+            continue
+
+        target_state: int | None = None
+        if command == "on":
+            target_state = 1
+        elif command == "off":
+            target_state = 0
+        elif command == "toggle":
+            current_state = relay_last_command.get(channel, "off")
+            target_state = 0 if current_state == "on" else 1
+        if target_state is None:
+            continue
+
+        relay_last_command[channel] = "on" if target_state == 1 else "off"
+        relay_state_counts += 1
+        relay_series_entries.setdefault(channel, []).append(
+            {"x": entry.created_at.isoformat(), "y": target_state}
+        )
+
+    for channel, series_data in relay_series_entries.items():
+        relay_name = relay_labels_map.get(channel, f"Relais {channel}")
+        color = relay_channel_colors.get(channel, {"border": "#f97316"})["border"]
+        relay_state_colors.append(color)
+        relay_state_series_map[channel] = {
+            "name": relay_name,
+            "data": series_data,
+        }
+
+    relay_state_series = list(relay_state_series_map.values())
+
     measurements_total = (temperature_summary["count"] or 0) + (humidity_summary["count"] or 0)
 
     return render_template(
@@ -767,6 +844,9 @@ def charts():
         temperature_has_data=temperature_has_data,
         humidity_has_data=humidity_has_data,
         relay_legend=relay_legend,
+        relay_state_series=relay_state_series,
+        relay_state_colors=relay_state_colors,
+        relay_event_count=relay_state_counts,
         measurements_total=measurements_total,
     )
 
@@ -1231,7 +1311,7 @@ def journal():
     level = request.args.get("level", "")
     sort = request.args.get("sort", "recent")
     page = max(int(request.args.get("page", 1)), 1)
-    per_page = max(min(int(request.args.get("per_page", 20)), 100), 5)
+    per_page = max(min(int(request.args.get("per_page", 25)), 100), 5)
     from_date = request.args.get("from", "")
     to_date = request.args.get("to", "")
 
@@ -1339,15 +1419,33 @@ def journal():
         if metadata_items:
             formatted["metadata"] = metadata_items
 
-        if detail:
-            try:
-                formatted["detail_pretty"] = json.dumps(detail, ensure_ascii=False, indent=2, sort_keys=True)
-            except (TypeError, ValueError):
-                formatted["detail_pretty"] = None
-        else:
-            formatted["detail_pretty"] = None
-
         detailed_entries.append(formatted)
+
+    today = datetime.utcnow().date()
+    yesterday = today - timedelta(days=1)
+    grouped_entries: list[dict[str, Any]] = []
+    current_group_key = None
+    current_group: dict[str, Any] | None = None
+
+    for entry in detailed_entries:
+        day = entry["timestamp"].date()
+        if current_group_key != day:
+            if current_group:
+                grouped_entries.append(current_group)
+            label = day.strftime("%A %d %B %Y").capitalize()
+            is_collapsed = day < yesterday
+            current_group = {
+                "date": day.isoformat(),
+                "label": label,
+                "entries": [],
+                "collapsed": is_collapsed,
+            }
+            current_group_key = day
+        entry["time_label"] = entry["timestamp"].strftime("%H:%M")
+        current_group["entries"].append(entry)  # type: ignore[arg-type]
+
+    if current_group:
+        grouped_entries.append(current_group)
 
     prev_url = None
     next_url = None
@@ -1360,10 +1458,38 @@ def journal():
         params["page"] = pagination.next_num
         next_url = url_for("main.journal", **params)
 
+    compact = request.args.get("compact", "0") == "1"
+    filters_active = bool(search or level or from_date or to_date)
+    reset_filters_url = url_for("main.journal")
+    toggle_args = query_args.copy()
+    toggle_args["compact"] = "0" if compact else "1"
+    toggle_compact_url = url_for("main.journal", **toggle_args)
+    today_str = today.isoformat()
+    today_view_url = url_for(
+        "main.journal",
+        **{
+            **{k: v for k, v in query_args.items() if k in {"compact"}},
+            "from": today_str,
+            "to": today_str,
+            "page": 1,
+        },
+    )
+
     return render_template(
         "dashboard/journal.html",
-        entries=detailed_entries,
-        filters={"q": search, "level": level, "from": from_date, "to": to_date},
+        entries=grouped_entries,
+        filters={
+            "q": search,
+            "level": level,
+            "from": from_date,
+            "to": to_date,
+            "compact": compact,
+        },
+        filters_active=filters_active,
+        stats={
+            "page_count": len(detailed_entries),
+            "total": pagination.total,
+        },
         pagination={
             "page": pagination.page,
             "pages": pagination.pages,
@@ -1376,6 +1502,11 @@ def journal():
             "prev_url": prev_url,
             "next_url": next_url,
         },
+        next_url=next_url,
+        compact=compact,
+        reset_filters_url=reset_filters_url,
+        toggle_compact_url=toggle_compact_url,
+        today_view_url=today_view_url,
     )
 
 

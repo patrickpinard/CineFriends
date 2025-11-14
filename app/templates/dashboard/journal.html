@@ -3,101 +3,108 @@
 {% block header_title %}Journal des activités{% endblock %}
 {% block content %}
 <div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div class="space-y-4 border-b border-slate-200 px-6 py-4">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <form method="get" class="grid gap-3 sm:grid-cols-[minmax(0,18rem)_auto_auto_auto] sm:items-center" data-filter-form>
-                <div class="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+    <div class="sticky top-24 z-10 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur sm:px-6">
+        <form method="get" class="flex flex-wrap items-center gap-2" id="journal-filter-form">
+            <input type="hidden" name="compact" value="{{ 1 if compact else 0 }}">
+            <div class="journal-chip journal-chip--fluid">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.2-5.2M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z" />
                     </svg>
-                    <input type="search" name="q" value="{{ filters.q }}" placeholder="Rechercher une action…" class="h-8 flex-1 border-none bg-transparent focus:ring-0" />
+                <input type="search" name="q" value="{{ filters.q }}" placeholder="Rechercher…" class="flex-1 border-none bg-transparent text-sm text-slate-700 focus:ring-0" />
                 </div>
-                <select name="level" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 focus:border-primary-400 focus:ring-primary-400/40">
+            <label class="journal-chip">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Niveau</span>
+                <select name="level" class="border-none bg-transparent text-sm font-semibold text-slate-700 focus:ring-0">
                     <option value="">Tous</option>
                     <option value="info" {% if filters.level == 'info' %}selected{% endif %}>Info</option>
-                    <option value="warning" {% if filters.level == 'warning' %}selected{% endif %}>Warning</option>
-                    <option value="danger" {% if filters.level == 'danger' %}selected{% endif %}>Danger</option>
+                    <option value="warning" {% if filters.level == 'warning' %}selected{% endif %}>Alerte</option>
+                    <option value="danger" {% if filters.level == 'danger' %}selected{% endif %}>Critique</option>
                 </select>
-                <input type="date" name="from" value="{{ filters.from }}" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 focus:border-primary-400 focus:ring-primary-400/40" />
-                <input type="date" name="to" value="{{ filters.to }}" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 focus:border-primary-400 focus:ring-primary-400/40" />
-                {% if filters.q or filters.level or filters.from or filters.to %}
-                <a href="{{ url_for('main.journal') }}" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
-                    Réinitialiser
+            </label>
+            <label class="journal-chip">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Du</span>
+                <input type="date" name="from" value="{{ filters.from }}" class="border-none bg-transparent text-xs text-slate-600 focus:ring-0" />
+            </label>
+            <label class="journal-chip">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Au</span>
+                <input type="date" name="to" value="{{ filters.to }}" class="border-none bg-transparent text-xs text-slate-600 focus:ring-0" />
+            </label>
+            <button type="submit" class="journal-chip journal-chip--action">
+                Filtrer
+            </button>
+            {% if filters_active %}
+            <a href="{{ reset_filters_url }}" class="journal-chip journal-chip--ghost">
+                Effacer les filtres
                 </a>
                 {% endif %}
-            </form>
+            <a href="{{ today_view_url }}" class="journal-chip journal-chip--ghost">
+                Aujourd’hui
+            </a>
+            <div class="journal-chip journal-chip--counter">
+                {{ stats.page_count }} affichées / {{ stats.total }} total
+            </div>
+            <a href="{{ toggle_compact_url }}"
+               class="journal-chip journal-chip--ghost">
+                {% if compact %}Vue détaillée{% else %}Vue compacte{% endif %}
+            </a>
             {% if current_user.role == 'admin' %}
-            <div class="flex justify-end">
-                <button type="button" data-purge-open class="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500 shadow-sm transition hover:bg-rose-50">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 9h15m-12 0V5.25A2.25 2.25 0 0 1 9.75 3h4.5A2.25 2.25 0 0 1 16.5 5.25V9m1.5 0v10.125A2.25 2.25 0 0 1 15.75 21H8.25a2.25 2.25 0 0 1-2.25-2.25V9" />
-                    </svg>
-                    Purger le journal
+            <button type="button" data-purge-open class="journal-chip journal-chip--danger">
+                Purger
                 </button>
-            </div>
             {% endif %}
-        </div>
+        </form>
     </div>
-    <div class="space-y-6 px-6 py-5">
-        {% if entries %}
-        {% for entry in entries %}
-        <article class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <span class="absolute left-6 top-4 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                {% if entry.level == 'danger' %}
-                <span class="h-2 w-2 rounded-full bg-rose-500"></span>
-                Critique
-                {% elif entry.level == 'warning' %}
-                <span class="h-2 w-2 rounded-full bg-amber-400"></span>
-                Alerte
-                {% else %}
-                <span class="h-2 w-2 rounded-full bg-teal-500"></span>
-                Info
-                {% endif %}
+    <div class="px-4 py-5 sm:px-6">
+        {% if entries and entries|length %}
+        <div class="journal-timeline">
+            {% for day in entries %}
+            <details class="timeline-day group"{% if not day.collapsed %} open{% endif %}>
+                <summary class="timeline-day__summary">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">{{ day.label }}</span>
+                        <span class="text-xs text-slate-400">{{ day.entries|length }} événement(s)</span>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 transition group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
+                    </svg>
+                </summary>
+                <div class="timeline-day__body">
+                    {% for entry in day.entries %}
+                    <article class="timeline-entry{% if compact %} timeline-entry--compact{% endif %}">
+                        <div class="timeline-entry__dot {% if entry.level == 'danger' %}bg-rose-500{% elif entry.level == 'warning' %}bg-amber-400{% else %}bg-teal-500{% endif %}"></div>
+                        <div class="timeline-entry__line"></div>
+                        <div class="timeline-entry__content">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <span class="level-pill {% if entry.level == 'danger' %}level-pill--danger{% elif entry.level == 'warning' %}level-pill--warning{% else %}level-pill--info{% endif %}">
+                                    {% if entry.level == 'danger' %}Critique{% elif entry.level == 'warning' %}Alerte{% else %}Info{% endif %}
             </span>
-            <div class="border-b border-slate-100 px-6 py-5 pt-12">
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <h2 class="text-base font-semibold text-slate-900">{{ entry.message }}</h2>
-                    <time class="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        {{ entry.timestamp.strftime('%d/%m/%Y · %H:%M:%S') }}
-                    </time>
+                                <time class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ entry.time_label }}</time>
+                            </div>
+                            <p class="mt-2 text-sm font-semibold text-slate-800">{{ entry.message }}</p>
+                            {% if entry.metadata and not compact %}
+                            <dl class="mt-2 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                                {% for meta in entry.metadata %}
+                                <div class="rounded-xl bg-slate-50 px-3 py-2">
+                                    <dt class="font-semibold text-slate-700">{{ meta.label }}</dt>
+                                    <dd class="mt-1 break-words text-slate-600">{{ meta.value }}</dd>
+                                </div>
+                            {% endfor %}
+                            </dl>
+                            {% endif %}
+                        </div>
+                    </article>
+                    {% endfor %}
                 </div>
+            </details>
+            {% endfor %}
             </div>
-            {% if entry.detail %}
-            <div class="px-6 py-4">
-                <details class="group">
-                    <summary class="flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 transition group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
-                        </svg>
-                        Détails techniques
-                    </summary>
-                    <pre class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 shadow-inner">{{ (entry.detail_pretty or 'Aucune donnée détaillée') | e }}</pre>
-                </details>
+        {% if next_url %}
+        <div class="mt-6 flex justify-center">
+            <a href="{{ next_url }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-teal-200 hover:text-teal-600">
+                Voir 25 événements supplémentaires
+            </a>
             </div>
             {% endif %}
-        </article>
-        {% endfor %}
-    {% if pagination.pages > 1 %}
-    <nav class="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4 text-sm text-slate-500">
-        <div>
-            Page {{ pagination.page }} / {{ pagination.pages }} — {{ pagination.total }} entrées
-        </div>
-        <div class="flex items-center gap-2">
-            {% if pagination.prev_url %}
-            <a href="{{ pagination.prev_url }}"
-               class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:border-teal-200 hover:text-teal-600">
-                Précédent
-            </a>
-            {% endif %}
-            {% if pagination.next_url %}
-            <a href="{{ pagination.next_url }}"
-               class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:border-teal-200 hover:text-teal-600">
-                Suivant
-            </a>
-            {% endif %}
-        </div>
-    </nav>
-    {% endif %}
         {% else %}
         <div class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 py-16 text-center text-sm text-slate-500">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -148,4 +155,139 @@
         closeEls?.forEach((el) => el.addEventListener('click', closeModal));
     });
 </script>
+
+<style>
+    .journal-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 9999px;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #475569;
+    }
+    .journal-chip--fluid {
+        flex: 1 1 12rem;
+    }
+    .journal-chip--action {
+        background: linear-gradient(135deg, #15803d, #22c55e);
+        color: #fff;
+        border-color: transparent;
+        box-shadow: 0 10px 25px -15px rgba(34, 197, 94, 0.55);
+    }
+    .journal-chip--ghost {
+        background: #f8fafc;
+    }
+    .journal-chip--counter {
+        border-style: dashed;
+        background: #f1f5f9;
+    }
+    .journal-chip--danger {
+        border-color: #fecdd3;
+        color: #e11d48;
+        background: #fff1f2;
+    }
+
+    .journal-timeline {
+        position: relative;
+        padding-left: 0.5rem;
+    }
+
+    .timeline-day {
+        border: 1px solid #e2e8f0;
+        border-radius: 1.5rem;
+        background: #fff;
+        margin-bottom: 1rem;
+        padding: 1rem 1.25rem;
+        box-shadow: 0 20px 50px -35px rgba(15, 23, 42, 0.35);
+    }
+
+    .timeline-day__summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .timeline-day__summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .timeline-day__body {
+        margin-top: 1.5rem;
+    }
+
+    .timeline-entry {
+        position: relative;
+        padding-left: 2.75rem;
+        padding-bottom: 1.75rem;
+    }
+
+    .timeline-entry:last-child {
+        padding-bottom: 0;
+    }
+
+    .timeline-entry__dot {
+        position: absolute;
+        left: 0.5rem;
+        top: 0.3rem;
+        width: 0.85rem;
+        height: 0.85rem;
+        border-radius: 9999px;
+        box-shadow: 0 0 0 6px rgba(226, 232, 240, 0.65);
+    }
+
+    .timeline-entry__line {
+        position: absolute;
+        left: 0.88rem;
+        top: 1.5rem;
+        bottom: -0.5rem;
+        width: 2px;
+        background: linear-gradient(#e2e8f0, transparent);
+    }
+
+    .timeline-entry:last-child .timeline-entry__line {
+        display: none;
+    }
+
+    .timeline-entry__content {
+        padding: 1rem 1.25rem;
+        border-radius: 1.25rem;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+    }
+
+    .timeline-entry--compact .timeline-entry__content {
+        padding: 0.75rem 1rem;
+    }
+
+    .level-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 9999px;
+        padding: 0.25rem 0.85rem;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .level-pill--info {
+        background: #ecfeff;
+        color: #0f766e;
+    }
+    .level-pill--warning {
+        background: #fef9c3;
+        color: #b45309;
+    }
+    .level-pill--danger {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+</style>
 {% endblock %}

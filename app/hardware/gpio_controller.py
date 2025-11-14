@@ -93,6 +93,11 @@ def set_relay_state(channel: int, state: str) -> Dict[str, str]:
     if state_lower not in {"on", "off", "toggle"}:
         return {"status": "error", "message": f"État {state} non supporté (attendu: on/off/toggle)."}
     try:
+        try:
+            if GPIO.gpio_function(pin) != GPIO.OUT:  # type: ignore[attr-defined]
+                GPIO.setup(pin, GPIO.OUT)
+        except Exception:
+            GPIO.setup(pin, GPIO.OUT)
         if state_lower == "toggle":
             current_level = GPIO.input(pin)
             desired_level = GPIO.LOW if current_level == GPIO.HIGH else GPIO.HIGH
