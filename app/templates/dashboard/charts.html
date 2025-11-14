@@ -11,6 +11,10 @@
                         <h3 class="text-lg font-semibold text-slate-800">Suivi climatique</h3>
                         <p class="text-sm text-slate-500">Analysez les mesures collectées sur votre installation.</p>
                         <p class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ measurements_total }} mesures enregistrées au total</p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="inline-flex items-center justify-center rounded-full bg-teal-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-600" data-summary-count>0 mesure</span>
+                            <span class="inline-flex hidden items-center justify-center rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600" data-relay-summary>0 action</span>
+                        </div>
                     </div>
                     <div class="-mx-1 max-w-full overflow-x-auto pb-1 sm:mx-0 sm:overflow-visible">
                         <form method="get" class="flex flex-nowrap items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:flex-wrap sm:gap-2 sm:px-0">
@@ -29,16 +33,14 @@
                     </div>
                 </div>
 
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="inline-flex w-full overflow-hidden rounded-full border border-slate-200 bg-white p-1 text-xs font-semibold text-slate-500 sm:w-auto">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4 sm:mt-0">
+                    <div class="flex w-full max-w-xl flex-wrap gap-2 rounded-[9999px] border border-slate-200 bg-white p-1 text-xs font-semibold text-slate-500 sm:inline-flex sm:flex-nowrap sm:gap-0">
                         <button type="button" class="chart-toggle-btn chart-toggle-btn--active" data-chart-toggle="temperature">Température</button>
                         <button type="button" class="chart-toggle-btn" data-chart-toggle="humidity">Humidité</button>
                         <button type="button" class="chart-toggle-btn" data-chart-toggle="relay">Relais</button>
                     </div>
-                    <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-                        <span class="inline-flex items-center justify-center rounded-full bg-teal-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-600" data-summary-count>0 mesure</span>
-                        <span class="inline-flex hidden items-center justify-center rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600" data-relay-summary>0 action</span>
-                        <button type="button" id="chart-expand-button" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-teal-200 hover:text-teal-600">
+                    <div class="flex w-full justify-end">
+                        <button type="button" id="chart-expand-button" class="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-teal-200 hover:text-teal-600 sm:w-auto">
                             Agrandir
                         </button>
                     </div>
@@ -153,7 +155,8 @@
         const updateSummary = (dataset) => {
             const { summary, label } = dataset;
             if (summaryEls.count) {
-                summaryEls.count.textContent = `${fmtCount(summary.count || 0)} • ${label}`;
+                const displayCount = summary.count_display ?? summary.count ?? 0;
+            summaryEls.count.textContent = `${fmtCount(displayCount)} • ${label}`;
             }
         };
 

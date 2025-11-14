@@ -413,8 +413,8 @@ def evaluate_rules_with_readings(readings: Iterable[SensorReading]) -> None:
                 details={"executions": triggered, "timestamp": now.isoformat()},
             )
         )
-    db.session.commit()
-
-    if triggered:
-        _notify_admins(triggered, now)
+        db.session.commit()
+        _notify_rule_trigger(triggered, now)
+    else:
+        db.session.commit()
 

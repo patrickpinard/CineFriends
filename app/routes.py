@@ -688,6 +688,8 @@ def charts():
     humidity_summary = _summarize_series(humidity_series, "%", "Humidité")
     temperature_has_data = temperature_summary["count"] > 0
     humidity_has_data = humidity_summary["count"] > 0
+    temperature_summary["count_display"] = int(temperature_summary["count"] / max(len([s for s in temperature_series if s.get("axis") == "temperature"]), 1))
+    humidity_summary["count_display"] = humidity_summary["count"]
     chart_has_data = bool(temperature_has_data or humidity_has_data)
 
     current_query = request.args.to_dict()
