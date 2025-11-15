@@ -814,8 +814,15 @@ def relay_command(channel: int):
         flash("Accès réservé à l’administrateur.", "danger")
         return redirect(url_for("main.dashboard"))
     command = (request.form.get("command") or "").strip().lower()
+    wants_json = (
+        request.accept_mimetypes["application/json"] >= request.accept_mimetypes["text/html"]
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    )
     if not command:
-        flash("Commande invalide.", "danger")
+        message = "Commande invalide."
+        if wants_json:
+            return jsonify({"status": "error", "message": message, "channel": channel}), 400
+        flash(message, "danger")
         return redirect(url_for("main.dashboard"))
 
     result = set_relay_state(channel, command)
@@ -842,6 +849,32 @@ def relay_command(channel: int):
 
         final_state = result.get("state") or command
         _notify_relay_change(channel=channel, state=final_state, source=f"Manuel ({current_user.username})")
+        if wants_json:
+            return (
+                jsonify(
+                    {
+                        "status": "ok",
+                        "message": message,
+                        "channel": channel,
+                        "state": final_state,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                ),
+                200,
+            )
+
+    if wants_json and status != "ok":
+        return (
+            jsonify(
+                {
+                    "status": status or "error",
+                    "message": message,
+                    "channel": channel,
+                    "state": result.get("state"),
+                }
+            ),
+            400,
+        )
 
     if status == "ok":
         flash(message, "success")

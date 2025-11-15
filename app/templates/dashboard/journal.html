@@ -3,7 +3,7 @@
 {% block header_title %}Journal des activités{% endblock %}
 {% block content %}
 <div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div class="sticky top-24 z-10 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur sm:px-6">
+    <div class="px-4 py-4 sm:px-6">
         <form method="get" class="flex flex-wrap items-center gap-2" id="journal-filter-form">
             <input type="hidden" name="compact" value="{{ 1 if compact else 0 }}">
             <div class="journal-chip journal-chip--fluid">
@@ -54,6 +54,9 @@
             {% endif %}
         </form>
     </div>
+</div>
+
+<div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
     <div class="px-4 py-5 sm:px-6">
         {% if entries and entries|length %}
         <div class="journal-timeline">

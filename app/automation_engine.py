@@ -17,6 +17,16 @@ TRIGGER_PATTERN = re.compile(
     r"sensor:(?P<sensor_type>[a-zA-Z0-9_\-]+)\.(?P<metric>[a-zA-Z0-9_\-]+)(?:@(?P<sensor_id>[a-zA-Z0-9_\-]+))?\s*(?P<operator>>=|<=|>|<|==|!=)\s*(?P<value>-?\d+(?:\.\d+)?)"
 )
 
+def _normalize_relay_state(state: object) -> str:
+    if state is None:
+        return ""
+    value = str(state).strip().lower()
+    if value in {"on", "1", "true", "high"}:
+        return "on"
+    if value in {"off", "0", "false", "low"}:
+        return "off"
+    return value
+
 EMAIL_TEMPLATE = """<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -279,7 +289,14 @@ def _notify_rule_trigger(triggered: List[Dict[str, object]], triggered_at: datet
 
 def _notify_relay_change(*, channel: int, state: str, source: str) -> None:
     now = datetime.utcnow()
-    normalized_state = (state or "").strip().lower()
+    normalized_state = _normalize_relay_state(state)
+    if normalized_state not in {"on", "off"}:
+        current_app.logger.info(
+            "Notification relais ignorée: état '%s' non pris en charge pour channel=%s",
+            state,
+            channel,
+        )
+        return
     previous_state = (
         RelayState.query.filter_by(channel=channel)
         .order_by(RelayState.created_at.desc())
@@ -431,8 +448,5 @@ def evaluate_rules_with_readings(readings: Iterable[SensorReading]) -> None:
                 details={"executions": triggered, "timestamp": now.isoformat()},
             )
         )
-        db.session.commit()
-        _notify_rule_trigger(triggered, now)
-    else:
-        db.session.commit()
+    db.session.commit()
 
