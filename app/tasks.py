@@ -7,6 +7,7 @@ from flask import current_app
 
 from . import db
 from .automation_engine import evaluate_rules_with_readings
+from .lcd_display import refresh_lcd_display
 from .models import JournalEntry, SensorReading
 from .utils import detect_am2315, detect_ds18b20, _is_linux_arm  # type: ignore[attr-defined]
 
@@ -111,6 +112,10 @@ def collect_sensor_readings(app) -> None:
                 db.session.add(reading)
             db.session.commit()
             evaluate_rules_with_readings(all_readings)
+            try:
+                refresh_lcd_display(push=True)
+            except Exception as exc:  # pragma: no cover - dépend matériel
+                logger.warning("Impossible de rafraîchir l'afficheur LCD: %s", exc)
         except Exception as exc:
             db.session.rollback()
             logger.exception("Erreur enregistrement mesures capteurs: %s", exc)

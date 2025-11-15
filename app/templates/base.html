@@ -179,6 +179,15 @@
             align-items: center;
             gap: 0.5rem;
         }
+        nav[data-mobile-footer] {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 40;
+            will-change: transform;
+            transform: translateZ(0);
+        }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -249,14 +258,14 @@
                 </a>
                 <a href="{{ url_for('main.settings') }}"
                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.settings' else '' }}"
-                   title="Paramètres">
+                   title="Hardware">
                     <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.settings' else '' }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.54.56-.94 1.11-.94h2.59c.55 0 1.02.4 1.11.94l.21 1.26a1.13 1.13 0 0 0 1.13.94h1.05c.7 0 1.26.56 1.26 1.26v2.2c0 .43-.22.83-.58 1.06l-.9.58a1.13 1.13 0 0 0 0 1.92l.9.58c.36.23.58.63.58 1.06v2.2c0 .7-.56 1.26-1.26 1.26H15.7c-.55 0-1.02.4-1.11.94l-.21 1.26c-.09.54-.56.94-1.11.94h-2.59c-.55 0-1.02-.4-1.11-.94l-.21-1.26a1.13 1.13 0 0 0-1.13-.94H6.68a1.26 1.26 0 0 1-1.26-1.26v-2.2c0-.43.22-.83.58-1.06l.9-.58a1.13 1.13 0 0 0 0-1.92l-.9-.58a1.26 1.26 0 0 1-.58-1.06v-2.2c0-.7.56-1.26 1.26-1.26h1.05a1.13 1.13 0 0 0 1.13-.94l.21-1.26z" />
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5z" />
                         </svg>
                     </span>
-                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Paramètres</span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Hardware</span>
                 </a>
                 {% if is_admin %}
                 <a href="{{ url_for('main.journal') }}"
@@ -268,6 +277,16 @@
                         </svg>
                     </span>
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Journal</span>
+                </a>
+                <a href="{{ url_for('main.lcd_preview') }}"
+                   class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.lcd_preview' else '' }}"
+                   title="Affichage LCD">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.lcd_preview' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 6A1.5 1.5 0 0 1 6 4.5h12A1.5 1.5 0 0 1 19.5 6v12A1.5 1.5 0 0 1 18 19.5H6A1.5 1.5 0 0 1 4.5 18zM7.5 9.75h9m-9 4.5h6" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Affichage LCD</span>
                 </a>
                 {% endif %}
                 {% if is_admin %}
@@ -542,7 +561,7 @@
         </div>
     </div>
 
-    <nav class="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-lg backdrop-blur-sm lg:hidden">
+    <nav class="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-lg backdrop-blur-sm lg:hidden" data-mobile-footer>
         <div class="mx-auto flex max-w-md items-center justify-around gap-3 px-4" style="padding-bottom: calc(var(--safe-area-bottom) + 0.5rem); padding-top: 0.5rem;">
             <a href="{{ url_for('main.dashboard') }}"
                class="flex flex-col items-center gap-1 text-xs font-semibold transition {{ 'text-teal-600' if request.endpoint == 'main.dashboard' else 'text-slate-400 hover:text-teal-500' }}">
@@ -606,6 +625,7 @@
             <a href="{{ url_for('main.settings') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Paramètres</a>
             {% if is_admin %}
             <a href="{{ url_for('main.journal') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Journal</a>
+            <a href="{{ url_for('main.lcd_preview') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Affichage LCD</a>
             {% endif %}
             {% if is_admin %}
             <a href="{{ url_for('admin.users') }}" class="flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600">Utilisateurs</a>

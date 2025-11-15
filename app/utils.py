@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import secrets
+from importlib import import_module
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -10,6 +11,17 @@ from typing import Any, Dict, Iterable, List
 from flask import current_app
 from werkzeug.datastructures import FileStorage
 
+def _import_optional_module(module_name: str):
+    try:
+        return import_module(module_name)
+    except Exception:
+        return None
+
+np = _import_optional_module("numpy")
+cv2 = _import_optional_module("cv2")
+lcd_module = _import_optional_module("app.hardware.LCD") or _import_optional_module("hardware.LCD")
+LCD = getattr(lcd_module, "LCD", None) if lcd_module else None
+LCD = getattr(lcd_module, "LCD", None) if lcd_module else None
 
 def save_avatar(file: FileStorage) -> str:
     ext = Path(file.filename or "").suffix.lower()
@@ -275,9 +287,177 @@ def detect_am2315() -> Dict[str, Any]:
     return status
 
 
-def build_hardware_overview(relay_pins: Iterable[int]) -> List[Dict[str, Any]]:
+def detect_lcd_display(lcd_enabled: bool) -> Dict[str, Any]:
+    status: Dict[str, Any] = {
+        "id": "lcd",
+        "label": "Grove LCD RGB 16x2",
+        "category": "Affichages",
+        "status": "warning",
+        "message": "Afficheur désactivé dans la configuration.",
+        "details": {},
+    }
+
+    if not lcd_enabled:
+        return status
+
+    if not _is_linux_arm():
+        status.update({"message": "Détection uniquement disponible sur Raspberry Pi."})
+        return status
+
+    try:
+        try:
+            from app.hardware import LCD  # type: ignore
+        except ModuleNotFoundError:
+            from .hardware import LCD  # type: ignore  # pragma: no cover
+        lcd_class = getattr(LCD, "LCD", None)
+    except ModuleNotFoundError:
+        status.update(
+            {
+                "status": "error",
+                "message": "Driver Grove LCD (app/hardware/LCD.py) introuvable.",
+            }
+        )
+        current_app.logger.error("LCD detection failed: module 'app.hardware.LCD' not found.")
+        return status
+    except Exception as exc:  # pragma: no cover - dépendances spécifiques
+        status.update({"status": "error", "message": f"Impossible de charger LCD.py : {exc}"})
+        current_app.logger.exception("LCD detection: import error", exc_info=True)
+        return status
+
+    if lcd_class is None:
+        status.update(
+            {
+                "status": "error",
+                "message": "La classe LCD n’a pas été trouvée dans app.hardware.LCD.",
+            }
+        )
+        current_app.logger.error("LCD detection failed: 'LCD' class missing in app.hardware.LCD")
+        return status
+
+    try:
+        screen = lcd_class()  # type: ignore[call-arg]
+        if hasattr(screen, "setText"):
+            screen.setText("Test\nGrove LCD OK")
+        if hasattr(screen, "setRGB"):
+            screen.setRGB(0, 128, 64)
+        status.update(
+            {
+                "status": "ok",
+                "message": "Grove LCD RGB 16x2 détecté (test I2C réussi).",
+            }
+        )
+        current_app.logger.info("LCD detection successful: Grove LCD responded to test command.")
+    except Exception as exc:  # pragma: no cover - dépendances spécifiques
+        status.update({"status": "error", "message": f"Échec de la communication LCD : {exc}"})
+        current_app.logger.exception("LCD detection failed during communication", exc_info=True)
+    return status
+
+
+def detect_usb_camera() -> Dict[str, Any]:
+    status: Dict[str, Any] = {
+        "id": "usb_camera",
+        "label": "Caméra USB",
+        "category": "Périphériques",
+        "status": "warning",
+        "message": "Vérification non disponible (OpenCV manquant).",
+    }
+
+    if cv2 is None or np is None:
+        try:
+            current_app.logger.warning("USB camera check skipped: OpenCV or numpy not available.")
+        except Exception:
+            pass
+        return status
+
+    try:
+        capture = cv2.VideoCapture(0)
+        if not capture or not capture.isOpened():
+            status.update(
+                {
+                    "status": "warning",
+                    "message": "Aucune caméra USB accessible sur /dev/video0.",
+                }
+            )
+            current_app.logger.warning("USB camera not accessible on /dev/video0.")
+            return status
+        backend = capture.getBackendName() if hasattr(capture, "getBackendName") else "unknown"
+        status.update(
+            {
+                "status": "ok",
+                "message": "Caméra USB détectée et accessible.",
+                "details": {"backend": backend},
+            }
+        )
+        current_app.logger.info("USB camera detection successful via backend '%s'.", backend)
+        return status
+    except Exception as exc:  # pragma: no cover - dépend matériel
+        status.update({"status": "error", "message": f"Impossible d’accéder à la caméra USB : {exc}"})
+        current_app.logger.exception("USB camera detection error", exc_info=True)
+        return status
+    finally:
+        try:
+            if "capture" in locals() and capture:
+                capture.release()
+        except Exception:
+            pass
+
+
+def build_hardware_overview(relay_pins: Iterable[int], *, lcd_enabled: bool = False) -> List[Dict[str, Any]]:
     overview: List[Dict[str, Any]] = []
     overview.append(detect_gpio_relays(relay_pins))
     overview.append(detect_ds18b20())
     overview.append(detect_am2315())
+    overview.append(detect_lcd_display(lcd_enabled))
+    overview.append(detect_usb_camera())
+    overview.append(detect_host_status())
     return overview
+
+
+def detect_host_status() -> Dict[str, Any]:
+    status: Dict[str, Any] = {
+        "id": "host",
+        "label": "État du Raspberry Pi",
+        "category": "Système",
+        "status": "ok",
+        "message": "Ressources système surveillées.",
+        "details": {},
+    }
+    try:
+        load1, _, _ = os.getloadavg()
+        cpu_usage = load1
+    except Exception:
+        cpu_usage = None
+
+    try:
+        import psutil  # type: ignore
+
+        ram = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+        temp = None
+        try:
+            temps = psutil.sensors_temperatures()
+            if temps:
+                for entries in temps.values():
+                    if entries:
+                        temp = entries[0].current
+                        break
+        except Exception:
+            temp = None
+        status["details"] = {
+            "cpu": cpu_usage,
+            "ram_percent": ram.percent if ram else None,
+            "ram_used": getattr(ram, "used", None),
+            "ram_total": getattr(ram, "total", None),
+            "disk_percent": disk.percent if disk else None,
+            "disk_free": getattr(disk, "free", None),
+            "disk_total": getattr(disk, "total", None),
+            "temperature": temp,
+        }
+    except ImportError:
+        status.update(
+            {
+                "status": "warning",
+                "message": "psutil non disponible, impossible de lire l’état du système.",
+            }
+        )
+    return status

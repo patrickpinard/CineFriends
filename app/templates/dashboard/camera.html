@@ -7,7 +7,16 @@
     <p class="mt-2 text-sm text-slate-600">Stream USB en MJPEG. Optimisé pour l’affichage plein écran sur iPhone.</p>
     <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
         <div class="aspect-video w-full">
+            {% if camera_available %}
             <img src="{{ url_for('main.camera_feed') }}" alt="Flux caméra" class="h-full w-full rounded-2xl object-cover" />
+            {% else %}
+            <div class="flex h-full w-full flex-col items-center justify-center gap-4 bg-slate-900/80 text-white">
+                <p class="text-lg font-semibold">Caméra indisponible</p>
+                <p class="text-sm text-slate-200 text-center max-w-md">
+                    Le flux vidéo n’est pas accessible. Vérifiez que la caméra est connectée et que les dépendances (OpenCV, numpy) sont installées sur le serveur.
+                </p>
+            </div>
+            {% endif %}
         </div>
     </div>
     <p class="mt-4 text-xs text-slate-500">Assurez-vous que la caméra USB est connectée au serveur et accessible.</p>

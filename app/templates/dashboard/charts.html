@@ -2,8 +2,8 @@
 {% block title %}Graphiques{% endblock %}
 {% block header_title %}Graphiques{% endblock %}
 {% block content %}
-<div class="graph-page-container mx-auto w-full max-w-none px-3 lg:px-0">
-    <div class="rounded-[28px] border border-slate-200 bg-white shadow-soft">
+<div class="graph-page-container mx-auto w-full px-2 sm:px-4 lg:px-0" style="margin-left: auto; margin-right: auto;">
+    <div class="graph-card rounded-[28px] border border-slate-200 bg-white shadow-soft overflow-hidden">
         <div class="px-5 pt-5 pb-7 sm:px-8 sm:pt-6 sm:pb-8">
             <div class="flex flex-col gap-5">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -78,6 +78,7 @@
         const climateSection = document.getElementById('climateChartSection');
         const relaySection = document.getElementById('relayChartSection');
         const expandBtn = document.getElementById('chart-expand-button');
+        const chartShell = document.querySelector('.graph-card');
         const toggleButtons = Array.from(document.querySelectorAll('[data-chart-toggle]'));
 
         const summaryEls = {
@@ -109,6 +110,10 @@
                 summary: {{ humidity_summary|tojson }},
                 emptyMessage: "Aucune donnée d'humidité pour la période sélectionnée."
             },
+        };
+        const datasetHasData = (dataset) => {
+            if (!dataset || !dataset.series) return false;
+            return dataset.series.some((serie) => Array.isArray(serie.data) && serie.data.length > 0);
         };
 
         const relayChartElement = document.getElementById('relayChart');
@@ -381,6 +386,9 @@
             if (relayWrapper) {
                 relayWrapper.classList.toggle('chart-expanded', isExpanded);
             }
+            if (chartShell) {
+                chartShell.style.minHeight = isExpanded ? '520px' : '';
+            }
         };
 
         const updateRelayHeight = () => {
@@ -563,7 +571,7 @@
             }
             updateSummary(dataset);
 
-            const hasData = dataset.summary.count > 0;
+            const hasData = datasetHasData(dataset);
             if (expandBtn) {
                 expandBtn.disabled = !hasData;
                 expandBtn.classList.toggle('opacity-50', !hasData);
@@ -614,10 +622,10 @@
             });
         }
 
-        const relayHasData = Array.isArray(relaySeries) && relaySeries.some((serie) => (serie.data || []).length > 1);
-        const defaultDatasetKey = datasets.temperature.summary.count
+        const relayHasData = Array.isArray(relaySeries) && relaySeries.some((serie) => (serie.data || []).length > 0);
+        const defaultDatasetKey = datasetHasData(datasets.temperature)
             ? 'temperature'
-            : (datasets.humidity.summary.count ? 'humidity' : (relayHasData ? 'relay' : 'temperature'));
+            : (datasetHasData(datasets.humidity) ? 'humidity' : (relayHasData ? 'relay' : 'temperature'));
 
         if (defaultDatasetKey === 'relay') {
             showRelayTab();
@@ -649,6 +657,26 @@
 </script>
 
 <style>
+    .graph-page-container {
+        max-width: 70rem;
+    }
+
+    @media (max-width: 768px) {
+        .graph-page-container {
+            max-width: 392px;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .graph-page-container {
+            max-width: 360px;
+        }
+    }
+
+    .graph-card {
+        transition: height 0.3s ease;
+    }
+
     .chart-toggle-btn {
         flex: 1 1 0;
         border-radius: 9999px;

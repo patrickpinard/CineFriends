@@ -38,6 +38,13 @@ class AutomationRuleForm(FlaskForm):
         choices=[("on", "Allumer"), ("off", "Éteindre"), ("toggle", "Basculer")],
         validators=[DataRequired()],
     )
+    relay_action_enabled = BooleanField("Activer la commande relais", default=True)
+    notify_user_id = SelectField(
+        "Notifier par email",
+        coerce=int,
+        validators=[Optional()],
+        default=0,
+    )
     trigger = HiddenField()
     action = HiddenField()
     cooldown_seconds = IntegerField(

@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}Affichage LCD{% endblock %}
+{% block header_title %}Aperçu écran LCD{% endblock %}
+{% block content %}
+<section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h2 class="text-lg font-semibold text-slate-900">Affichage temps réel</h2>
+            <p class="mt-1 text-sm text-slate-500">
+                Visualisez les quatre lignes envoyées à l’écran LCD1602 Waveshare (bus I2C).
+            </p>
+            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {% if snapshot.driver_available %}
+                Matériel détecté · Prêt à recevoir les mises à jour.
+                {% else %}
+                Matériel indisponible ou désactivé (config <code>LCD_ENABLED</code>).
+                {% endif %}
+            </p>
+        </div>
+        <form method="post" class="flex justify-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300">
+                Rafraîchir l’écran
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 0 1 12.487-5.235M19.5 12a7.5 7.5 0 0 1-12.487 5.235M5.25 12h-3m6.75 0h-3m10.5 0h-3m6.75 0h-3" />
+                </svg>
+            </button>
+        </form>
+    </div>
+</section>
+
+<section class="mt-6 rounded-3xl border border-slate-200 bg-slate-900/95 p-6 text-slate-100 shadow-inner">
+    <p class="text-xs uppercase tracking-[0.3em] text-slate-400">LCD · alternance toutes les 3&nbsp;s</p>
+    {% set lcd_pages = snapshot.pages if snapshot.pages else [snapshot.lines[0:2], snapshot.lines[2:4]] %}
+    <div class="mt-4 grid gap-4 font-mono text-lg md:grid-cols-2">
+        {% for page in lcd_pages %}
+        <div class="rounded-2xl border border-slate-800 bg-slate-800/60 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Page {{ loop.index }}</p>
+            {% for line in page %}
+            <div class="rounded-xl bg-slate-800 px-4 py-2 tracking-widest">{{ line }}</div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    <p class="mt-4 text-xs text-slate-400">
+        Dernière construction : {{ snapshot.generated_at.strftime('%d/%m/%Y %H:%M:%S') }} UTC
+    </p>
+</section>
+
+{% set meta = snapshot.metadata %}
+<section class="mt-6 grid gap-4 md:grid-cols-2">
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Températures & humidité</h3>
+        <dl class="mt-3 space-y-2 text-sm text-slate-600">
+            <div class="flex items-center justify-between">
+                <dt>Intérieur · Température</dt>
+                <dd class="font-semibold text-slate-900">
+                    {{ meta.internal_temp|round(1) if meta.internal_temp is not none else '—' }} °C
+                </dd>
+            </div>
+            <div class="flex items-center justify-between">
+                <dt>Extérieur · Température</dt>
+                <dd class="font-semibold text-slate-900">
+                    {{ meta.external_temp|round(1) if meta.external_temp is not none else '—' }} °C
+                </dd>
+            </div>
+            <div class="flex items-center justify-between">
+                <dt>Intérieur · Humidité</dt>
+                <dd class="font-semibold text-slate-900">
+                    {{ meta.internal_humidity|round(1) if meta.internal_humidity is not none else '—' }} %
+                </dd>
+            </div>
+            <div class="flex items-center justify-between">
+                <dt>Extérieur · Humidité</dt>
+                <dd class="font-semibold text-slate-900">
+                    {{ meta.external_humidity|round(1) if meta.external_humidity is not none else '—' }} %
+                </dd>
+            </div>
+        </dl>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Relais</h3>
+        <ul class="mt-3 space-y-3 text-sm font-semibold text-slate-800">
+            {% for channel, state in meta.relay_states.items() %}
+            <li class="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                <span>Relais {{ channel }}</span>
+                <span class="{% if state == 'on' %}text-teal-600{% elif state == 'off' %}text-slate-500{% else %}text-amber-600{% endif %}">
+                    {% if state == 'on' %}ON{% elif state == 'off' %}OFF{% else %}Inconnu{% endif %}
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+        <p class="mt-4 text-xs text-slate-500">
+            {% if meta.last_measure_at %}
+            Dernière mesure reçue le {{ meta.last_measure_at.strftime('%d/%m/%Y %H:%M:%S') }} UTC.
+            {% else %}
+            Aucune mesure disponible pour l’instant.
+            {% endif %}
+        </p>
+    </div>
+</section>
+{% endblock %}
+

@@ -77,15 +77,38 @@
                 </label>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-                <div class="grid gap-4 md:grid-cols-2">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-700">Commande des relais</p>
+                        <p class="text-xs text-slate-500">Activez ou désactivez complètement l’action sur les relais.</p>
+                    </div>
+                    <label class="automation-toggle">
+                        {{ form.relay_action_enabled(class_='automation-toggle__input', **{'data-relay-action-toggle': 'true'}) }}
+                        <span class="automation-toggle__label">Activer</span>
+                    </label>
+                </div>
+                <div class="mt-4 grid gap-4 md:grid-cols-2" data-relay-action-fields>
                     <div>
                         {{ form.relay_channel.label(class_='text-sm font-medium text-slate-600') }}
-                        {{ form.relay_channel(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        {{ form.relay_channel(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', **{'data-relay-action-field': 'true'}) }}
                     </div>
                     <div>
                         {{ form.relay_action.label(class_='text-sm font-medium text-slate-600') }}
-                        {{ form.relay_action(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        {{ form.relay_action(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', **{'data-relay-action-field': 'true'}) }}
                     </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                <p class="text-sm font-semibold text-slate-700">Notification email</p>
+                <p class="mt-1 text-xs text-slate-500">
+                    Choisissez un utilisateur actif à prévenir lorsque la règle se déclenche. Par défaut aucun email n’est envoyé.
+                </p>
+                <div class="mt-4 max-w-md">
+                    {{ form.notify_user_id(class_='w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                    {% for error in form.notify_user_id.errors %}
+                    <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                    {% endfor %}
                 </div>
             </div>
             {{ form.trigger() }}
@@ -93,8 +116,8 @@
             <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600">
                 <p class="font-semibold text-slate-700">Aperçu de la règle</p>
                 <p class="mt-2 text-sm">
-                    Déclencheur&nbsp;: <code id="trigger-preview" class="rounded bg-white px-2 py-1 text-xs text-slate-700"></code><br>
-                    Action&nbsp;: <code id="action-preview" class="rounded bg-white px-2 py-1 text-xs text-slate-700"></code>
+                    Déclencheur&nbsp;: <code id="trigger-preview" class="block rounded bg-white px-2 py-1 text-xs text-slate-700"></code><br>
+                    Action&nbsp;: <code id="action-preview" class="block rounded bg-white px-2 py-1 text-xs text-slate-700 whitespace-pre-wrap"></code>
                 </p>
                 <p class="mt-2 text-xs text-slate-500">
                     Les champs ci-dessus génèrent automatiquement l’expression d’automatisation.
@@ -227,7 +250,10 @@
                                 </span>
                                 <span>Action</span>
                             </div>
-                            <p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700">{{ rule.action }}</p>
+                            {% set action_text = (rule.action or '').strip() %}
+                            <p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700">
+                                {{ 'Aucune action programmée' if action_text == 'noop' else action_text }}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -290,6 +316,9 @@
         const thresholdInput = form.querySelector("[name='threshold']");
         const relayChannelSelect = form.querySelector("[name='relay_channel']");
         const relayActionSelect = form.querySelector("[name='relay_action']");
+        const relayActionToggle = form.querySelector("[data-relay-action-toggle]");
+        const relayActionFields = form.querySelectorAll("[data-relay-action-field]");
+        const notifySelect = form.querySelector("[name='notify_user_id']");
         const triggerField = form.querySelector("[name='trigger']");
         const actionField = form.querySelector("[name='action']");
         const triggerPreview = document.getElementById("trigger-preview");
@@ -333,22 +362,31 @@
             const metric = metricSelect.value;
             const operator = operatorSelect.value;
             const threshold = thresholdInput.value || "0";
-            const relayChannel = relayChannelSelect.value;
-            const relayAction = relayActionSelect.value;
+            const relayChannel = relayChannelSelect?.value;
+            const relayAction = relayActionSelect?.value;
+            const relayEnabled = relayActionToggle ? relayActionToggle.checked : true;
+            const actions = [];
 
             let trigger = `sensor:${sensorType}.${metric}`;
             if (sensorId) {
                 trigger += `@${sensorId}`;
             }
             trigger += ` ${operator} ${threshold}`;
-            const action = `relay:${relayChannel}=${relayAction}`;
 
             sensorIdSelect.dataset.selected = sensorId;
             triggerField.value = trigger;
-            actionField.value = action;
 
             if (triggerPreview) triggerPreview.textContent = trigger;
-            if (actionPreview) actionPreview.textContent = action;
+            if (relayEnabled && relayChannel && relayAction) {
+                actions.push(`relay:${relayChannel}=${relayAction}`);
+            }
+            if (notifySelect && notifySelect.value && notifySelect.value !== "0") {
+                actions.push(`email:user=${notifySelect.value}`);
+            }
+            const actionValue = actions.length ? actions.join("\n") : "noop";
+            const actionDisplay = actions.length ? actions.join("\n") : "Aucune action programmée";
+            actionField.value = actionValue;
+            if (actionPreview) actionPreview.textContent = actionDisplay;
         }
 
         if (sensorTypeSelect) {
@@ -359,11 +397,28 @@
             });
         }
 
-        [sensorIdSelect, metricSelect, operatorSelect, thresholdInput, relayChannelSelect, relayActionSelect].forEach(el => {
+        [sensorIdSelect, metricSelect, operatorSelect, thresholdInput, relayChannelSelect, relayActionSelect, notifySelect].forEach(el => {
             if (!el) return;
             el.addEventListener("change", buildExpressions);
             el.addEventListener("input", buildExpressions);
         });
+
+        function syncRelayFieldsState() {
+            const enabled = relayActionToggle ? relayActionToggle.checked : true;
+            relayActionFields.forEach((el) => {
+                el.toggleAttribute("disabled", !enabled);
+                el.classList.toggle("opacity-60", !enabled);
+            });
+        }
+
+        if (relayActionToggle) {
+            relayActionToggle.addEventListener("change", () => {
+                syncRelayFieldsState();
+                buildExpressions();
+            });
+        }
+
+        syncRelayFieldsState();
 
         buildExpressions();
         form.addEventListener("submit", buildExpressions);

@@ -17,6 +17,7 @@ from .services import create_notification
 from .tasks import collect_sensor_readings
 from .utils import build_changes, build_hardware_overview, delete_avatar, save_avatar
 from .automation_engine import parse_trigger
+from .lcd_display import refresh_lcd_display
 SENSOR_LABELS = {
     "ds18b20": "Sonde intérieure DS18B20",
     "am2315": "Sonde extérieure AM2315",
@@ -173,6 +174,26 @@ def _extract_relay_action_description(line: str) -> str:
         return line.strip()
 
 
+def _collect_relay_states_with_fallback(relay_pins: dict[int, int]) -> dict[int, str]:
+    hardware_states = get_relay_states() or {}
+    normalized = {channel: (state or "unknown").lower() for channel, state in hardware_states.items()}
+    missing_channels = [ch for ch in relay_pins.keys() if normalized.get(ch) not in {"on", "off"}]
+    if not missing_channels:
+        return normalized
+
+    for channel in missing_channels:
+        record = (
+            RelayState.query.filter_by(channel=channel)
+            .order_by(RelayState.created_at.desc())
+            .first()
+        )
+        if record and record.state:
+            normalized[channel] = (record.state or "unknown").lower()
+        else:
+            normalized[channel] = "unknown"
+    return normalized
+
+
 def _build_sensor_registry() -> dict[str, dict[str, object]]:
     registry: dict[str, dict[str, object]] = {}
     readings = (
@@ -270,6 +291,20 @@ def _hydrate_rule_form(form: AutomationRuleForm, sensor_registry: dict[str, dict
     if form.relay_channel.data not in dict(relay_choices):
         form.relay_channel.data = relay_choices[0][0]
 
+    user_choices = [(0, "Ne pas envoyer d'email")]
+    active_users = (
+        User.query.filter_by(active=True)
+        .order_by(User.username.asc())
+        .all()
+    )
+    for user in active_users:
+        label = f"{user.username} ({user.email})" if user.email else user.username
+        user_choices.append((user.id, label))
+    form.notify_user_id.choices = user_choices
+    allowed_user_ids = {choice[0] for choice in user_choices}
+    if form.notify_user_id.data not in allowed_user_ids:
+        form.notify_user_id.data = 0
+
 
 def build_trigger_expression(sensor_type: str, metric: str, sensor_id: str | None, operator: str, threshold) -> str:
     base = f"sensor:{sensor_type}.{metric}"
@@ -278,8 +313,21 @@ def build_trigger_expression(sensor_type: str, metric: str, sensor_id: str | Non
     return f"{base} {operator} {threshold}"
 
 
-def build_action_expression(channel: int, command: str) -> str:
-    return f"relay:{channel}={command}"
+def build_action_expression(
+    channel: int | None,
+    command: str | None,
+    *,
+    relay_enabled: bool,
+    notify_user_id: int | None,
+) -> str:
+    lines: list[str] = []
+    if relay_enabled and channel is not None and command:
+        lines.append(f"relay:{channel}={command}")
+    if notify_user_id:
+        lines.append(f"email:user={notify_user_id}")
+    if not lines:
+        return "noop"
+    return "\n".join(lines)
 
 
 def parse_relay_action(action: str) -> tuple[int | None, str | None]:
@@ -295,6 +343,23 @@ def parse_relay_action(action: str) -> tuple[int | None, str | None]:
         except Exception:
             continue
     return None, None
+
+
+def parse_email_action(action: str) -> int | None:
+    for raw_line in action.splitlines():
+        line = raw_line.strip()
+        if not line or not line.lower().startswith("email:"):
+            continue
+        try:
+            payload = line.split(":", 1)[1]
+            key, value = payload.split("=", 1)
+            if key.strip().lower() != "user":
+                continue
+            user_id = int(value.strip())
+            return user_id
+        except Exception:
+            continue
+    return None
 
 from .hardware.gpio_controller import (
     get_relay_states,
@@ -427,12 +492,19 @@ HARDWARE_SETTING_GROUPS = [
 
 def _camera_stream() -> Generator[bytes, None, None]:
     if cv2 is None:
-        current_app.logger.error("OpenCV n’est pas installé pour le streaming caméra.")
+        try:
+            current_app.logger.error("OpenCV n’est pas installé pour le streaming caméra.")
+        except RuntimeError:
+            print("OpenCV n’est pas installé pour le streaming caméra.")
         raise RuntimeError("Camera indisponible")
 
-    capture = cv2.VideoCapture(0)
+    device_index = current_app.config.get("CAMERA_DEVICE_INDEX", 0)
+    capture = cv2.VideoCapture(device_index)
     if not capture.isOpened():
-        current_app.logger.error("Impossible d’ouvrir la caméra USB.")
+        try:
+            current_app.logger.error("Impossible d’ouvrir la caméra USB.")
+        except RuntimeError:
+            print("Impossible d’ouvrir la caméra USB.")
         raise RuntimeError("Camera indisponible")
 
     try:
@@ -471,7 +543,7 @@ def dashboard():
     # Relais
     relay_pins = get_configured_relay_pins()
     relay_labels = get_relay_labels()
-    relay_states = get_relay_states()
+    relay_states = _collect_relay_states_with_fallback(relay_pins)
     relays_available = hardware_available() and bool(relay_pins)
     relays_active_low = is_active_low()
     relay_cards = []
@@ -541,7 +613,8 @@ def dashboard_highlights_api():
 @main_bp.route("/api/relays/states")
 @login_required
 def relays_states_api():
-    states = get_relay_states()
+    relay_pins = get_configured_relay_pins()
+    states = _collect_relay_states_with_fallback(relay_pins)
     return jsonify({"states": states, "timestamp": datetime.utcnow().isoformat()})
 
 
@@ -889,6 +962,9 @@ def relay_command(channel: int):
 @login_required
 def automation():
     form = AutomationRuleForm()
+    if request.method == "GET":
+        form.relay_action_enabled.data = True
+        form.notify_user_id.data = 0
 
     sensor_registry = _build_sensor_registry()
     relay_pins = get_configured_relay_pins()
@@ -930,9 +1006,13 @@ def automation():
             operator=form.operator.data,
             threshold=form.threshold.data,
         )
+        relay_enabled = bool(form.relay_action_enabled.data)
+        notify_user = form.notify_user_id.data or None
         action_str = build_action_expression(
             channel=form.relay_channel.data,
             command=form.relay_action.data,
+            relay_enabled=relay_enabled,
+            notify_user_id=notify_user,
         )
         rule = AutomationRule(
             name=form.name.data,
@@ -991,10 +1071,15 @@ def edit_rule(rule_id: int):
             form.threshold.data = trigger.threshold
             form.sensor_id.data = trigger.sensor_id or ""
         action_channel, action_command = parse_relay_action(rule.action)
-        if action_channel:
+        if action_channel is not None:
             form.relay_channel.data = action_channel
+            form.relay_action_enabled.data = True
+        else:
+            form.relay_action_enabled.data = False
         if action_command:
             form.relay_action.data = action_command
+        notify_user = parse_email_action(rule.action)
+        form.notify_user_id.data = notify_user or 0
 
     _hydrate_rule_form(form, sensor_registry, relay_pins)
 
@@ -1033,9 +1118,13 @@ def edit_rule(rule_id: int):
             operator=form.operator.data,
             threshold=form.threshold.data,
         )
+        relay_enabled = bool(form.relay_action_enabled.data)
+        notify_user = form.notify_user_id.data or None
         action_str = build_action_expression(
             channel=form.relay_channel.data,
             command=form.relay_action.data,
+            relay_enabled=relay_enabled,
+            notify_user_id=notify_user,
         )
         original = {
             "name": rule.name,
@@ -1119,7 +1208,8 @@ def delete_rule(rule_id: int):
 @main_bp.route("/camera")
 @login_required
 def camera():
-    return render_template("dashboard/camera.html")
+    #camera_o = True  # juste pour tester
+    return render_template("dashboard/camera.html", camera_available=current_app.config.get("CAMERA_AVAILABLE"))
 
 
 @main_bp.route("/camera/flux")
@@ -1200,15 +1290,15 @@ def settings():
                         details={"before": before_value, "after": after_value},
                     )
                 )
-            db.session.commit()
-            if new_poll_interval is not None:
-                app_obj = current_app._get_current_object()
-                if app_obj.config.get("SENSOR_POLL_ENABLED", True):
-                    schedule_sensor_poll(app_obj, new_poll_interval)
-                else:
-                    app_obj.config["SENSOR_POLL_INTERVAL_MINUTES"] = new_poll_interval
-            flash("Paramètres enregistrés.", "success")
-            return redirect(url_for("main.settings"))
+        db.session.commit()
+        if new_poll_interval is not None:
+            app_obj = current_app._get_current_object()
+            if app_obj.config.get("SENSOR_POLL_ENABLED", True):
+                schedule_sensor_poll(app_obj, new_poll_interval)
+            else:
+                app_obj.config["SENSOR_POLL_INTERVAL_MINUTES"] = new_poll_interval
+        flash("Paramètres enregistrés.", "success")
+        return redirect(url_for("main.settings"))
 
     hardware_groups = []
     hardware_keys = set()
@@ -1265,7 +1355,10 @@ def settings():
         _get_int_value("Relay_Ch3", 21),
     ]
 
-    hardware_status = build_hardware_overview(relay_pins)
+    hardware_status = build_hardware_overview(
+        relay_pins,
+        lcd_enabled=current_app.config.get("LCD_ENABLED", False),
+    )
     configured_values = {
         "relays": ", ".join(str(pin) for pin in relay_pins),
         "ds18b20": settings_map.get("Sensor_DS18B20_Interface").value if settings_map.get("Sensor_DS18B20_Interface") else "—",
@@ -1280,6 +1373,9 @@ def settings():
             status["configured"] = f"Interface actuelle : {configured_values['ds18b20']}"
         elif status["id"] == "am2315":
             status["configured"] = f"Capteur : {configured_values['am2315']} @ {configured_values['am2315_address']}"
+        elif status["id"] == "lcd":
+            lcd_flag = "activé" if current_app.config.get("LCD_ENABLED", False) else "désactivé"
+            status["configured"] = f"LCD {lcd_flag}"
 
     return render_template(
         "dashboard/settings.html",
@@ -1589,6 +1685,25 @@ def manual_sensor_collect():
         flash("Impossible de lancer la collecte. Consultez le journal.", "danger")
 
     return redirect(url_for(redirect_endpoint))
+
+
+@main_bp.route("/affichage-lcd", methods=["GET", "POST"])
+@login_required
+def lcd_preview():
+    if current_user.role != "admin":
+        flash("Accès réservé à l’administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
+
+    push_requested = request.method == "POST"
+    snapshot = refresh_lcd_display(push=push_requested)
+    if push_requested:
+        if snapshot.get("push_success"):
+            flash("Afficheur LCD mis à jour.", "success")
+        else:
+            message = snapshot.get("push_error") or "Impossible de contacter l'écran LCD."
+            flash(message, "warning")
+
+    return render_template("dashboard/lcd_preview.html", snapshot=snapshot)
 
 
 @main_bp.route("/profil", methods=["GET", "POST"])

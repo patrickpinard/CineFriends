@@ -115,7 +115,7 @@ def _execute_actions(actions: str, *, rule: Optional[AutomationRule] = None) -> 
     outcome: List[Dict[str, str]] = []
     for raw_line in actions.splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith("#") or line.lower() == "noop":
             continue
         if line.lower().startswith("relay:"):
             try:
@@ -154,6 +154,68 @@ def _execute_actions(actions: str, *, rule: Optional[AutomationRule] = None) -> 
                     )
             except Exception as exc:  # pragma: no cover - parsing robuste
                 outcome.append({"status": "error", "message": f"Action invalide '{line}': {exc}"})
+        elif line.lower().startswith("email:"):
+            try:
+                payload = line.split(":", 1)[1]
+                key, value = payload.split("=", 1)
+                if key.strip().lower() != "user":
+                    raise ValueError("Cible email invalide.")
+                target_user_id = int(value.strip())
+            except Exception as exc:
+                outcome.append({"status": "error", "message": f"Commande email invalide '{line}': {exc}"})
+                continue
+            recipient = User.query.get(target_user_id)
+            if not recipient or not recipient.active or not recipient.email:
+                outcome.append(
+                    {
+                        "status": "error",
+                        "message": f"Destinataire email introuvable pour l'identifiant {target_user_id}.",
+                    }
+                )
+                continue
+            subject = f"Alerte automatisation — {rule.name if rule else 'Règle sans nom'}"
+            timestamp_label = datetime.utcnow().strftime("%d/%m/%Y %H:%M:%S UTC")
+            body = "\n".join(
+                [
+                    "Bonjour,",
+                    "",
+                    f"La règle '{rule.name if rule else 'Automatisation'}' vient de se déclencher.",
+                    f"Heure: {timestamp_label}",
+                    "",
+                    "Ceci est un message automatique.",
+                ]
+            )
+            html_body = EMAIL_TEMPLATE.format(
+                title=subject,
+                logo_url=current_app.config.get("EXTERNAL_LOGO_URL", ""),
+                body=f"""
+                <p>Bonjour,</p>
+                <p>La règle <strong>{rule.name if rule else 'Automatisation'}</strong> vient d’être exécutée.</p>
+                <p class="meta"><strong>Horodatage :</strong> {timestamp_label}</p>
+                <p>Message automatique transmis par votre Dashboard.</p>
+                """,
+            )
+            send_email(subject=subject, recipients=[recipient.email], body=body, html_body=html_body)
+            db.session.add(
+                JournalEntry(
+                    level="info",
+                    message="Notification email envoyée (règle)",
+                    details={
+                        "type": "automation_email",
+                        "rule_id": rule.id if rule else None,
+                        "rule_name": rule.name if rule else None,
+                        "recipient": recipient.email,
+                        "timestamp": timestamp_label,
+                    },
+                )
+            )
+            outcome.append(
+                {
+                    "status": "ok",
+                    "message": f"Email envoyé à {recipient.email}",
+                    "recipient": recipient.email,
+                }
+            )
         else:
             outcome.append({"status": "ignored", "message": f"Commande inconnue '{line}'"})
     return outcome
@@ -386,6 +448,12 @@ def _notify_relay_change(*, channel: int, state: str, source: str) -> None:
         )
     )
     db.session.commit()
+    try:
+        from .lcd_display import refresh_lcd_display
+
+        refresh_lcd_display(push=True)
+    except Exception as exc:  # pragma: no cover - dépend matériel
+        current_app.logger.warning("Rafraîchissement LCD impossible: %s", exc)
 
 
 def evaluate_rules_with_readings(readings: Iterable[SensorReading]) -> None:
