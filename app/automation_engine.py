@@ -279,8 +279,26 @@ def _notify_rule_trigger(triggered: List[Dict[str, object]], triggered_at: datet
 
 def _notify_relay_change(*, channel: int, state: str, source: str) -> None:
     now = datetime.utcnow()
+    normalized_state = (state or "").strip().lower()
+    previous_state = (
+        RelayState.query.filter_by(channel=channel)
+        .order_by(RelayState.created_at.desc())
+        .first()
+    )
+    if previous_state and (previous_state.state or "").lower() == normalized_state:
+        current_app.logger.info(
+            "Notification relais ignorée: channel=%s état inchangé (%s)",
+            channel,
+            normalized_state,
+        )
+        return
+
     recipients = _collect_admin_recipients()
-    db.session.add(RelayState(channel=channel, state=state, source=source, created_at=now))
+    db.session.add(
+        RelayState(channel=channel, state=normalized_state, source=source, created_at=now)
+    )
+    display_state = (normalized_state or state or "unknown").upper()
+
     if not recipients:
         current_app.logger.info("Notification relais ignorée: aucun destinataire configuré.")
         db.session.add(
@@ -290,7 +308,7 @@ def _notify_relay_change(*, channel: int, state: str, source: str) -> None:
                 details={
                     "type": "relay_change",
                     "channel": channel,
-                    "state": state,
+                    "state": normalized_state,
                     "source": source,
                     "reason": "no_recipients",
                     "timestamp": now.isoformat(),
@@ -301,12 +319,12 @@ def _notify_relay_change(*, channel: int, state: str, source: str) -> None:
         return
 
     timestamp_label = now.strftime("%d/%m/%Y %H:%M:%S UTC")
-    subject = f"Relais {channel} → {state.upper()}"
+    subject = f"Relais {channel} → {display_state}"
     body = "\n".join(
         [
             "Bonjour,",
             "",
-            f"Le relais #{channel} vient de passer à l’état {state.upper()} ({source}).",
+            f"Le relais #{channel} vient de passer à l’état {display_state} ({source}).",
             f"Heure: {timestamp_label}",
             "",
             "Ceci est un message automatique ; vérifiez votre installation si nécessaire.",
@@ -324,7 +342,7 @@ def _notify_relay_change(*, channel: int, state: str, source: str) -> None:
     card = f"""
     <div class="card">
         <span class="badge">Relais {channel}</span>
-        <p class="meta"><strong>Nouvel état :</strong> {state.upper()}</p>
+        <p class="meta"><strong>Nouvel état :</strong> {display_state}</p>
         <p class="meta"><strong>Origine :</strong> {source}</p>
         <p class="meta"><strong>Horodatage :</strong> {timestamp_label}</p>
     </div>
@@ -338,11 +356,11 @@ def _notify_relay_change(*, channel: int, state: str, source: str) -> None:
     db.session.add(
         JournalEntry(
             level="info",
-            message=f"Notification email envoyée — Relais {channel} {state.upper()}",
+            message=f"Notification email envoyée — Relais {channel} {display_state}",
             details={
                 "type": "relay_change",
                 "channel": channel,
-                "state": state,
+                "state": normalized_state,
                 "source": source,
                 "subject": subject,
                 "recipients": recipients,
