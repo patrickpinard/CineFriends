@@ -194,6 +194,18 @@ def _collect_relay_states_with_fallback(relay_pins: dict[int, int]) -> dict[int,
     return normalized
 
 
+def _sync_runtime_device_flags(statuses: list[dict[str, Any]]) -> None:
+    if not statuses:
+        current_app.config["CAMERA_AVAILABLE"] = False
+        current_app.config["LCD_PRESENT"] = False
+        return
+
+    camera_ok = any(status.get("id") == "usb_camera" and status.get("status") == "ok" for status in statuses)
+    lcd_ok = any(status.get("id") == "lcd" and status.get("status") == "ok" for status in statuses)
+    current_app.config["CAMERA_AVAILABLE"] = camera_ok
+    current_app.config["LCD_PRESENT"] = lcd_ok
+
+
 def _build_sensor_registry() -> dict[str, dict[str, object]]:
     registry: dict[str, dict[str, object]] = {}
     readings = (
@@ -493,7 +505,7 @@ HARDWARE_SETTING_GROUPS = [
 def _camera_stream() -> Generator[bytes, None, None]:
     if cv2 is None:
         try:
-            current_app.logger.error("OpenCV n’est pas installé pour le streaming caméra.")
+        current_app.logger.error("OpenCV n’est pas installé pour le streaming caméra.")
         except RuntimeError:
             print("OpenCV n’est pas installé pour le streaming caméra.")
         raise RuntimeError("Camera indisponible")
@@ -502,7 +514,7 @@ def _camera_stream() -> Generator[bytes, None, None]:
     capture = cv2.VideoCapture(device_index)
     if not capture.isOpened():
         try:
-            current_app.logger.error("Impossible d’ouvrir la caméra USB.")
+        current_app.logger.error("Impossible d’ouvrir la caméra USB.")
         except RuntimeError:
             print("Impossible d’ouvrir la caméra USB.")
         raise RuntimeError("Camera indisponible")
@@ -1208,8 +1220,8 @@ def delete_rule(rule_id: int):
 @main_bp.route("/camera")
 @login_required
 def camera():
-    #camera_o = True  # juste pour tester
-    return render_template("dashboard/camera.html", camera_available=current_app.config.get("CAMERA_AVAILABLE"))
+    camera_available = current_app.config.get("CAMERA_AVAILABLE", False)
+    return render_template("dashboard/camera.html", camera_available=bool(camera_available))
 
 
 @main_bp.route("/camera/flux")
@@ -1264,9 +1276,9 @@ def settings():
             setting_key = key.split("setting__", 1)[1]
             setting = Setting.query.filter_by(key=setting_key).first()
             before_value = setting.value if setting else None
-            if not setting:
+        if not setting:
                 setting = Setting(key=setting_key)
-                db.session.add(setting)
+            db.session.add(setting)
             cleaned_value = value
             if setting_key == "Sensor_Poll_Interval_Minutes":
                 try:
@@ -1359,6 +1371,7 @@ def settings():
         relay_pins,
         lcd_enabled=current_app.config.get("LCD_ENABLED", False),
     )
+    _sync_runtime_device_flags(hardware_status)
     configured_values = {
         "relays": ", ".join(str(pin) for pin in relay_pins),
         "ds18b20": settings_map.get("Sensor_DS18B20_Interface").value if settings_map.get("Sensor_DS18B20_Interface") else "—",
@@ -1427,8 +1440,31 @@ def journal():
     else:
         query = query.order_by(JournalEntry.created_at.desc())
 
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    entries = pagination.items
+    # Si aucun filtre de date n'est appliqué, récupérer tous les événements des 25 derniers jours
+    view_mode = request.args.get("view_mode", "compact" if not (from_date or to_date) else "detailed")
+    show_last_25_days = view_mode == "compact" and not (from_date or to_date)
+    
+    if show_last_25_days:
+        # Récupérer tous les événements des 25 derniers jours sans pagination
+        from_date_25_days = (datetime.utcnow() - timedelta(days=25)).date()
+        query = query.filter(JournalEntry.created_at >= datetime.combine(from_date_25_days, datetime.min.time()))
+    entries = query.all()
+        # Créer une pagination factice pour la compatibilité
+        class FakePagination:
+            def __init__(self, items, total):
+                self.items = items
+                self.total = total
+                self.page = 1
+                self.pages = 1
+                self.per_page = len(items)
+                self.has_prev = False
+                self.has_next = False
+                self.prev_num = None
+                self.next_num = None
+        pagination = FakePagination(entries, len(entries))
+    else:
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        entries = pagination.items
     query_args = request.args.to_dict()
     relay_label_map = get_relay_labels()
     sensor_alias_cache: dict[str, str] = {}
@@ -1509,29 +1545,69 @@ def journal():
 
     today = datetime.utcnow().date()
     yesterday = today - timedelta(days=1)
+    
     grouped_entries: list[dict[str, Any]] = []
-    current_group_key = None
-    current_group: dict[str, Any] | None = None
-
-    for entry in detailed_entries:
-        day = entry["timestamp"].date()
-        if current_group_key != day:
-            if current_group:
-                grouped_entries.append(current_group)
-            label = day.strftime("%A %d %B %Y").capitalize()
-            is_collapsed = day < yesterday
-            current_group = {
-                "date": day.isoformat(),
+    
+    if show_last_25_days:
+        # Créer une entrée pour chaque jour des 25 derniers jours
+        days_map: dict[str, dict[str, Any]] = {}
+        for i in range(25):
+            day_date = today - timedelta(days=i)
+            day_key = day_date.isoformat()
+            label = day_date.strftime("%A %d %B %Y").capitalize()
+            if day_date == today:
+                label = "Aujourd'hui"
+            elif day_date == yesterday:
+                label = "Hier"
+            days_map[day_key] = {
+                "date": day_key,
                 "label": label,
                 "entries": [],
-                "collapsed": is_collapsed,
+                "collapsed": i > 1,  # Seuls aujourd'hui et hier sont ouverts par défaut
+                "event_count": 0,
             }
-            current_group_key = day
-        entry["time_label"] = entry["timestamp"].strftime("%H:%M")
-        current_group["entries"].append(entry)  # type: ignore[arg-type]
+        
+        # Répartir les événements dans les jours correspondants
+        for entry in detailed_entries:
+            day = entry["timestamp"].date()
+            day_key = day.isoformat()
+            if day_key in days_map:
+                entry["time_label"] = entry["timestamp"].strftime("%H:%M")
+                days_map[day_key]["entries"].append(entry)
+                days_map[day_key]["event_count"] += 1
+        
+        # Trier par date décroissante (du plus récent au plus ancien)
+        grouped_entries = [days_map[day_key] for day_key in sorted(days_map.keys(), reverse=True)]
+    else:
+        # Mode détaillé avec pagination (comportement original)
+        current_group_key = None
+        current_group: dict[str, Any] | None = None
 
-    if current_group:
-        grouped_entries.append(current_group)
+        for entry in detailed_entries:
+            day = entry["timestamp"].date()
+            if current_group_key != day:
+                if current_group:
+                    grouped_entries.append(current_group)
+                label = day.strftime("%A %d %B %Y").capitalize()
+                if day == today:
+                    label = "Aujourd'hui"
+                elif day == yesterday:
+                    label = "Hier"
+                is_collapsed = day < yesterday
+                current_group = {
+                    "date": day.isoformat(),
+                    "label": label,
+                    "entries": [],
+                    "collapsed": is_collapsed,
+                    "event_count": 0,
+                }
+                current_group_key = day
+            entry["time_label"] = entry["timestamp"].strftime("%H:%M")
+            current_group["entries"].append(entry)  # type: ignore[arg-type]
+            current_group["event_count"] = len(current_group["entries"])  # type: ignore[union-attr]
+
+        if current_group:
+            grouped_entries.append(current_group)
 
     prev_url = None
     next_url = None
@@ -1560,6 +1636,20 @@ def journal():
             "page": 1,
         },
     )
+
+    # Créer les URLs pour basculer entre vue compacte et détaillée
+    detailed_view_url = None
+    compact_view_url = None
+    if show_last_25_days:
+        # Créer l'URL pour passer en mode détaillé
+        detailed_params = {k: v for k, v in query_args.items() if k != "view_mode"}
+        detailed_params["view_mode"] = "detailed"
+        detailed_view_url = url_for("main.journal", **detailed_params)
+    else:
+        # Créer l'URL pour passer en mode compact
+        compact_params = {k: v for k, v in query_args.items() if k != "view_mode"}
+        compact_params["view_mode"] = "compact"
+        compact_view_url = url_for("main.journal", **compact_params)
 
     return render_template(
         "dashboard/journal.html",
@@ -1593,6 +1683,9 @@ def journal():
         reset_filters_url=reset_filters_url,
         toggle_compact_url=toggle_compact_url,
         today_view_url=today_view_url,
+        show_last_25_days=show_last_25_days,
+        detailed_view_url=detailed_view_url,
+        compact_view_url=compact_view_url,
     )
 
 

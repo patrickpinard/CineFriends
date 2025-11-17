@@ -47,6 +47,17 @@
                class="journal-chip journal-chip--ghost">
                 {% if compact %}Vue détaillée{% else %}Vue compacte{% endif %}
             </a>
+            {% if show_last_25_days and detailed_view_url %}
+            <a href="{{ detailed_view_url }}"
+               class="journal-chip journal-chip--ghost">
+                Vue détaillée
+            </a>
+            {% elif compact_view_url %}
+            <a href="{{ compact_view_url }}"
+               class="journal-chip journal-chip--ghost">
+                Vue 25 jours
+            </a>
+            {% endif %}
             {% if current_user.role == 'admin' %}
             <button type="button" data-purge-open class="journal-chip journal-chip--danger">
                 Purger
@@ -65,13 +76,22 @@
                 <summary class="timeline-day__summary">
                     <div class="flex items-center gap-3">
                         <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">{{ day.label }}</span>
-                        <span class="text-xs text-slate-400">{{ day.entries|length }} événement(s)</span>
+                        <span class="text-xs text-slate-400">
+                            {% if day.event_count is defined %}
+                                {{ day.event_count }} événement(s)
+                {% else %}
+                                {{ day.entries|length }} événement(s)
+                {% endif %}
+                        </span>
                     </div>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 transition group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" />
                     </svg>
                 </summary>
                 <div class="timeline-day__body">
+                    {% if day.entries|length == 0 %}
+                    <p class="text-xs text-slate-400 italic py-2">Aucun événement ce jour</p>
+                    {% else %}
                     {% for entry in day.entries %}
                     <article class="timeline-entry{% if compact %} timeline-entry--compact{% endif %}">
                         <div class="timeline-entry__dot {% if entry.level == 'danger' %}bg-rose-500{% elif entry.level == 'warning' %}bg-amber-400{% else %}bg-teal-500{% endif %}"></div>
@@ -97,12 +117,13 @@
                                     <dt class="font-semibold text-slate-700">{{ meta.label }}</dt>
                                     <dd class="mt-1 break-words text-slate-600">{{ meta.value }}</dd>
                                 </div>
-                                {% endfor %}
+                            {% endfor %}
                             </dl>
                             {% endif %}
                         </div>
                     </article>
                     {% endfor %}
+                    {% endif %}
                 </div>
             </details>
             {% endfor %}

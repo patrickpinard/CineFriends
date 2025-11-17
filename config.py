@@ -39,4 +39,4 @@ class Config:
     SENSOR_POLL_INTERVAL_MINUTES = int(os.getenv("SENSOR_POLL_INTERVAL_MINUTES", "30"))
     SENSOR_POLL_ENABLED = os.getenv("SENSOR_POLL_ENABLED", "true").lower() == "true"
     LCD_ENABLED = os.getenv("LCD_ENABLED", "true").lower() == "true"
-    CAMERA_DEVICE_INDEX = int(os.getenv("CAMERA_DEVICE_INDEX", "1"))
+    CAMERA_DEVICE_INDEX = int(os.getenv("CAMERA_DEVICE_INDEX", "0"))

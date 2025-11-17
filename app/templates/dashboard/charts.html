@@ -39,16 +39,11 @@
                         <button type="button" class="chart-toggle-btn" data-chart-toggle="humidity">Humidité</button>
                         <button type="button" class="chart-toggle-btn" data-chart-toggle="relay">Relais</button>
                     </div>
-                    <div class="flex w-full justify-end">
-                        <button type="button" id="chart-expand-button" class="inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:border-teal-200 hover:text-teal-600 sm:w-auto">
-                            Agrandir
-                        </button>
-                    </div>
                 </div>
 
                 <div id="climateChartSection">
                     <div id="climateChartWrapper" class="relative w-full overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-3 shadow-inner transition-all duration-300 sm:p-4">
-                        <div id="climateChart" class="h-[260px] w-full{% if not chart_has_data %} hidden{% endif %}"></div>
+                        <div id="climateChart" class="w-full{% if not chart_has_data %} hidden{% endif %}" style="height: 260px; min-height: 260px;"></div>
                         <div id="chartEmptyMessage" class="{% if chart_has_data %}hidden{% endif %} flex h-[260px] w-full items-center justify-center text-center text-sm font-medium text-slate-500">
                             Aucune donnée disponible pour cette métrique.
                         </div>
@@ -57,7 +52,7 @@
 
                 <div id="relayChartSection" class="hidden">
                     <div id="relayChartWrapper" class="relative w-full overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-3 shadow-inner transition-all duration-300 sm:p-4">
-                        <div id="relayChart" class="h-[260px] w-full"></div>
+                        <div id="relayChart" class="w-full" style="height: 260px; min-height: 260px;"></div>
                         <div id="relayEmptyMessage" class="hidden flex h-[260px] w-full items-center justify-center text-center text-sm font-medium text-slate-500">
                             Aucun changement de relais enregistré sur cette période.
                         </div>
@@ -77,7 +72,6 @@
         const emptyMessage = document.getElementById('chartEmptyMessage');
         const climateSection = document.getElementById('climateChartSection');
         const relaySection = document.getElementById('relayChartSection');
-        const expandBtn = document.getElementById('chart-expand-button');
         const chartShell = document.querySelector('.graph-card');
         const toggleButtons = Array.from(document.querySelectorAll('[data-chart-toggle]'));
 
@@ -130,7 +124,6 @@
 
         let chartInstance = null;
         let activeDataset = null;
-        let isExpanded = false;
 
         const fmtCount = (count) => {
             if (!count) return '0 mesure';
@@ -189,6 +182,19 @@
             });
         };
 
+        const getChartHeight = () => {
+            const width = window.innerWidth;
+            if (width < 480) {
+                return 230;
+            } else if (width < 768) {
+                return 260;
+            } else if (width < 1024) {
+                return 300;
+            } else {
+                return 260;
+            }
+        };
+
         const buildChartOptions = (datasetKey) => {
             const dataset = datasets[datasetKey];
             const decimals = dataset.decimals ?? dataset.summary.decimals ?? 1;
@@ -203,7 +209,7 @@
                 return unit ? `${numeric} ${unit}` : numeric;
             };
 
-            const baseHeight = isExpanded ? 460 : 260;
+            const baseHeight = getChartHeight();
 
             return {
                 chart: {
@@ -234,7 +240,7 @@
                 colors: dataset.colors && dataset.colors.length ? dataset.colors : ['#0f5dd7', '#0ea5e9', '#14b8a6'],
                 stroke: {
                     curve: 'smooth',
-                    width: isExpanded ? 5 : 4,
+                    width: 4,
                     lineCap: 'round',
                 },
                 markers: {
@@ -336,21 +342,21 @@
                     {
                         breakpoint: 1024,
                         options: {
-                            chart: { height: isExpanded ? 360 : 300 },
+                            chart: { height: getChartHeight() },
                         },
                     },
                     {
                         breakpoint: 768,
                         options: {
-                            chart: { height: isExpanded ? 320 : 260 },
+                            chart: { height: getChartHeight() },
                             legend: { position: 'bottom' },
                         },
                     },
                     {
                         breakpoint: 480,
                         options: {
-                            chart: { height: isExpanded ? 400 : 230 },
-                            stroke: { width: isExpanded ? 4 : 3 },
+                            chart: { height: getChartHeight() },
+                            stroke: { width: 3 },
                             grid: { padding: { left: 6, right: 6 } },
                             xaxis: {
                                 labels: { style: { fontSize: '10px' } },
@@ -370,31 +376,72 @@
             if (!chartInstance) return;
             setTimeout(() => {
                 if (!chartInstance || !activeDataset) return;
-                const options = buildChartOptions(activeDataset);
+                const newHeight = getChartHeight();
                 chartInstance.updateOptions({
-                    chart: { height: options.chart.height },
-                    stroke: options.stroke,
-                    markers: options.markers,
+                    chart: { height: newHeight },
+                    stroke: { 
+                        width: 4,
+                        curve: 'smooth',
+                        lineCap: 'round'
+                    },
+                    markers: {
+                        size: 0,
+                        strokeWidth: 0,
+                        hover: { sizeOffset: 0 }
+                    },
                 }, false, true);
+                // Force resize pour s'assurer que le graphique se redimensionne
+                setTimeout(() => {
+                    if (chartInstance) {
+                        chartInstance.resize();
+                    }
+                }, 50);
             }, delay);
         };
 
         const applyExpansionState = () => {
-            if (wrapper) {
-                wrapper.classList.toggle('chart-expanded', isExpanded);
+            const newHeight = getChartHeight();
+            if (wrapper && chartElement) {
+                chartElement.style.height = newHeight + 'px';
+                chartElement.style.minHeight = newHeight + 'px';
             }
-            if (relayWrapper) {
-                relayWrapper.classList.toggle('chart-expanded', isExpanded);
-            }
-            if (chartShell) {
-                chartShell.style.minHeight = isExpanded ? '520px' : '';
+            if (relayWrapper && relayChartElement) {
+                const relayHeight = window.innerWidth < 480 
+                    ? 230
+                    : (window.innerWidth < 768 ? 260 : 260);
+                relayChartElement.style.height = relayHeight + 'px';
+                relayChartElement.style.minHeight = relayHeight + 'px';
             }
         };
 
         const updateRelayHeight = () => {
             if (!relayChartInstance) return;
-            const targetHeight = isExpanded ? 340 : 260;
-            relayChartInstance.updateOptions({ chart: { height: targetHeight } }, false, true);
+            const mobile = window.innerWidth < 480;
+            const tablet = window.innerWidth < 768;
+            let targetHeight;
+            if (mobile) {
+                targetHeight = 230;
+            } else if (tablet) {
+                targetHeight = 260;
+            } else {
+                targetHeight = 260;
+            }
+            relayChartInstance.updateOptions({ 
+                chart: { 
+                    height: targetHeight,
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 300
+                    }
+                } 
+            }, false, true);
+            // Force resize pour s'assurer que le graphique se redimensionne
+            setTimeout(() => {
+                if (relayChartInstance) {
+                    relayChartInstance.resize();
+                }
+            }, 150);
         };
 
         const renderRelayChart = () => {
@@ -418,7 +465,7 @@
                 relayEmptyMessage.classList.add('hidden');
             }
 
-            const baseHeight = isExpanded ? 340 : 260;
+            const baseHeight = 260;
 
             relayChartInstance = new ApexCharts(relayChartElement, {
                 chart: {
@@ -490,13 +537,13 @@
                     {
                         breakpoint: 768,
                         options: {
-                            chart: { height: isExpanded ? 300 : 220 },
+                            chart: { height: 220 },
                         },
                     },
                     {
                         breakpoint: 480,
                         options: {
-                            chart: { height: isExpanded ? 260 : 200 },
+                            chart: { height: 200 },
                             xaxis: {
                                 labels: { style: { fontSize: '10px' } },
                             },
@@ -535,13 +582,6 @@
             if (relaySummaryEl) {
                 relaySummaryEl.classList.remove('hidden');
             }
-            if (expandBtn) {
-                const hasRelayData = Array.isArray(relaySeries) && relaySeries.some((serie) => (serie.data || []).length > 1);
-                expandBtn.disabled = !hasRelayData;
-                expandBtn.classList.toggle('opacity-50', !hasRelayData);
-                expandBtn.classList.toggle('cursor-not-allowed', !hasRelayData);
-                expandBtn.textContent = isExpanded ? 'Réduire' : 'Agrandir';
-            }
             renderRelayChart();
             applyExpansionState();
         };
@@ -572,12 +612,6 @@
             updateSummary(dataset);
 
             const hasData = datasetHasData(dataset);
-            if (expandBtn) {
-                expandBtn.disabled = !hasData;
-                expandBtn.classList.toggle('opacity-50', !hasData);
-                expandBtn.classList.toggle('cursor-not-allowed', !hasData);
-                expandBtn.textContent = isExpanded ? 'Réduire' : 'Agrandir';
-            }
             applyExpansionState();
 
             if (chartInstance) {
@@ -597,6 +631,39 @@
             requestAnimationFrame(() => scheduleResize(60));
         };
 
+        function scheduleRelayResize(delay = 120) {
+            if (!relayChartInstance) return;
+            setTimeout(() => {
+                if (!relayChartInstance) return;
+                const mobile = window.innerWidth < 480;
+                const tablet = window.innerWidth < 768;
+                let targetHeight;
+                if (mobile) {
+                    targetHeight = 230;
+                } else if (tablet) {
+                    targetHeight = 260;
+                } else {
+                    targetHeight = 260;
+                }
+                relayChartInstance.updateOptions({ 
+                    chart: { 
+                        height: targetHeight,
+                        animations: {
+                            enabled: true,
+                            easing: 'easeinout',
+                            speed: 300
+                        }
+                    } 
+                }, false, true);
+                // Force resize pour s'assurer que le graphique se redimensionne
+                setTimeout(() => {
+                    if (relayChartInstance) {
+                        relayChartInstance.resize();
+                    }
+                }, 50);
+            }, delay);
+        }
+
         toggleButtons.forEach((button) => {
             button.addEventListener('click', () => {
                 const datasetKey = button.dataset.chartToggle;
@@ -604,23 +671,6 @@
                 renderDataset(datasetKey);
             });
         });
-
-        if (expandBtn) {
-            expandBtn.addEventListener('click', () => {
-                if (expandBtn.disabled) return;
-                isExpanded = !isExpanded;
-                expandBtn.textContent = isExpanded ? 'Réduire' : 'Agrandir';
-                applyExpansionState();
-                if (activeDataset === 'relay') {
-                    updateRelayHeight();
-                } else if (chartInstance && activeDataset) {
-                    const options = buildChartOptions(activeDataset);
-                    chartInstance.updateOptions({ chart: { height: options.chart.height }, stroke: options.stroke }, false, true);
-                    scheduleResize(80);
-                }
-                scheduleRelayResize(isExpanded ? 200 : 140);
-            });
-        }
 
         const relayHasData = Array.isArray(relaySeries) && relaySeries.some((serie) => (serie.data || []).length > 0);
         const defaultDatasetKey = datasetHasData(datasets.temperature)
@@ -631,18 +681,6 @@
             showRelayTab();
         } else {
             renderDataset(defaultDatasetKey);
-        }
-
-        function scheduleRelayResize(delay = 120) {
-            if (!relayChartInstance) return;
-            setTimeout(() => {
-                if (!relayChartInstance) return;
-                const mobile = window.innerWidth < 480;
-                const targetHeight = mobile
-                    ? (isExpanded ? 280 : 200)
-                    : (isExpanded ? 340 : 260);
-                relayChartInstance.updateOptions({ chart: { height: targetHeight } }, false, true);
-            }, delay);
         }
 
         window.addEventListener('resize', () => {
@@ -699,11 +737,6 @@
     }
 
     @media (max-width: 480px) {
-        #chart-expand-button {
-            width: 100%;
-            justify-content: center;
-        }
-
         #climateChartWrapper {
             border-radius: 22px;
         }

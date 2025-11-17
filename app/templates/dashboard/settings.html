@@ -49,51 +49,63 @@
                         <p class="text-sm font-semibold text-slate-800">{{ status.label }}</p>
                         <p class="mt-1 text-sm text-slate-600">{{ status.message }}</p>
                         {% if status.id == 'host' and status.details %}
-                        <div class="mt-3 grid gap-3 text-sm text-slate-700">
-                            <div class="flex justify-between">
-                                <span>Charge CPU (1 min)</span>
-                                <span class="font-semibold">{{ status.details.cpu if status.details.cpu is not none else '—' }}</span>
+                        <div class="mt-4 space-y-2">
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Charge CPU (1 min)</p>
+                                    <p class="text-xs text-slate-500">Moyenne glissante</p>
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">{{ status.details.cpu if status.details.cpu is not none else '—' }}</p>
                             </div>
-                            <div class="flex justify-between">
-                                <span>RAM utilisée</span>
-                                <span class="font-semibold">
-                                    {{ status.details.ram_percent if status.details.ram_percent is not none else '—' }} %
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">RAM utilisée</p>
                                     {% if status.details.ram_used and status.details.ram_total %}
-                                        <span class="text-xs text-slate-500">
-                                            ({{ (status.details.ram_used/1024/1024/1024)|round(1) }}/{{ (status.details.ram_total/1024/1024/1024)|round(1) }} Go)
-                                        </span>
+                                    <p class="text-xs text-slate-500">
+                                        {{ (status.details.ram_used/1024/1024/1024)|round(1) }} Go / {{ (status.details.ram_total/1024/1024/1024)|round(1) }} Go
+                                    </p>
                                     {% endif %}
-                                </span>
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">
+                                    {{ status.details.ram_percent if status.details.ram_percent is not none else '—' }} %
+                                </p>
                             </div>
-                            <div class="flex justify-between">
-                                <span>Stockage libre</span>
-                                <span class="font-semibold">
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Stockage libre</p>
+                                    {% if status.details.disk_free and status.details.disk_total %}
+                                    <p class="text-xs text-slate-500">
+                                        {{ (status.details.disk_free/1024/1024/1024)|round(1) }} Go / {{ (status.details.disk_total/1024/1024/1024)|round(1) }} Go
+                                    </p>
+                                    {% endif %}
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">
                                     {% if status.details.disk_percent is not none %}
                                         {{ (100 - status.details.disk_percent)|round(1) }} %
                                     {% else %}
                                         —
                                     {% endif %}
-                                    {% if status.details.disk_free and status.details.disk_total %}
-                                        <span class="text-xs text-slate-500">
-                                            ({{ (status.details.disk_free/1024/1024/1024)|round(1) }}/{{ (status.details.disk_total/1024/1024/1024)|round(1) }} Go)
-                                        </span>
-                                    {% endif %}
-                                </span>
+                                </p>
                             </div>
-                            <div class="flex justify-between">
-                                <span>Température CPU</span>
-                                <span class="font-semibold">{{ status.details.temperature if status.details.temperature is not none else '—' }} °C</span>
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+            <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Température CPU</p>
+                                    <p class="text-xs text-slate-500">Sonde interne</p>
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">
+                                    {{ status.details.temperature if status.details.temperature is not none else '—' }} °C
+                                </p>
                             </div>
                         </div>
                         {% elif status.details %}
-                        <div class="mt-3 grid gap-2 text-xs text-slate-500">
+                        <div class="mt-4 space-y-2">
                             {% for key, value in status.details.items() %}
-                            <div>
-                                <span class="font-semibold text-slate-700">{{ key|replace("_", " ")|title }} :</span>
-                                <span class="ml-1">{{ value if value is not none else '—' }}</span>
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 shadow-sm">
+                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ key|replace("_", " ")|title }}</span>
+                                <span class="text-sm font-semibold text-slate-800">{{ value if value is not none else '—' }}</span>
                             </div>
-                            {% endfor %}
-                        </div>
+                {% endfor %}
+            </div>
                         {% endif %}
                         {% if status.configured %}
                         <p class="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">{{ status.configured }}</p>
@@ -142,7 +154,7 @@
                             {% endfor %}
                         </div>
                     </div>
-                    {% else %}
+            {% else %}
                     <div class="rounded-2xl border border-slate-200/60 bg-slate-50/50 p-5 shadow-sm">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div>
