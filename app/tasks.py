@@ -8,8 +8,9 @@ from flask import current_app
 from . import db
 from .automation_engine import evaluate_rules_with_readings
 from .lcd_display import refresh_lcd_display
-from .models import JournalEntry, SensorReading
+from .models import JournalEntry, RelayState, SensorReading
 from .utils import detect_am2315, detect_ds18b20, _is_linux_arm  # type: ignore[attr-defined]
+from .hardware.gpio_controller import get_configured_relay_pins, get_relay_states
 
 
 def _extract_ds18b20_readings(status: dict[str, Any]) -> List[SensorReading]:
@@ -86,12 +87,40 @@ def collect_sensor_readings(app) -> None:
         try:
             am_status = detect_am2315()
             status_label = am_status.get("status")
+            message = am_status.get("message", "")
+            details = am_status.get("details", {})
+            
             if status_label not in {"ok", "warning"}:
-                warnings.append(f"AM2315: {am_status.get('message')}")
-            all_readings.extend(_extract_am2315_readings(am_status))
+                warnings.append(f"AM2315: {message}")
+                logger.warning("AM2315 statut: %s - %s - Détails: %s", status_label, message, details)
+            
+            am_readings = _extract_am2315_readings(am_status)
+            if not am_readings and status_label == "ok":
+                logger.warning("AM2315: statut OK mais aucune mesure extraite. Détails: %s", details)
+            elif not am_readings:
+                logger.warning("AM2315: aucune mesure disponible. Statut: %s, Message: %s, Détails: %s", 
+                             status_label, message, details)
+            
+            all_readings.extend(am_readings)
         except Exception as exc:  # pragma: no cover - dépendant hardware
             logger.exception("Erreur lecture AM2315: %s", exc)
             warnings.append(f"AM2315 indisponible ({exc})")
+            # Enregistrer l'erreur dans le journal pour diagnostic
+            db.session.add(
+                JournalEntry(
+                    level="warning",
+                    message="Erreur lecture AM2315",
+                    details={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    },
+                )
+            )
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
         if not all_readings:
             if warnings and _is_linux_arm():
@@ -110,6 +139,25 @@ def collect_sensor_readings(app) -> None:
             for reading in all_readings:
                 reading.extra = {"snapshot_at": timestamp}
                 db.session.add(reading)
+            
+            # Collecter et sauvegarder les états des relais périodiquement
+            try:
+                relay_pins = get_configured_relay_pins()
+                if relay_pins:
+                    relay_states = get_relay_states()
+                    for channel, state in relay_states.items():
+                        if channel in relay_pins:
+                            # Toujours sauvegarder l'état pour avoir une trace périodique continue
+                            # Cela permet d'afficher l'état dans le graphique même s'il n'a pas changé
+                            relay_state = RelayState(
+                                channel=channel,
+                                state=state,
+                                source="scheduler",
+                            )
+                            db.session.add(relay_state)
+            except Exception as exc:
+                logger.warning("Erreur lors de la collecte des états des relais: %s", exc)
+            
             db.session.commit()
             evaluate_rules_with_readings(all_readings)
             try:

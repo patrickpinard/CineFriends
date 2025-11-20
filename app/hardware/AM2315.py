@@ -112,28 +112,60 @@ class AM2315:
         count = 0
         tmp = None
         powercyclecount = 0
+        last_exception = None
+        
+        # Délai initial pour réveiller le capteur s'il est en veille
+        if count == 0:
+            time.sleep(0.8)
+        
         while count <= MAXREADATTEMPT:
             try:
                 try:
+                    # Tentative de réveil du capteur
                     self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
                     time.sleep(0.050)
-                except Exception:
+                except OSError as e:
+                    # Erreur I2C - capteur peut être déconnecté
+                    last_exception = e
                     if AM2315DEBUG:
-                        print("Wake Byte Fail")
+                        print(f"Wake Byte Fail (OSError): {e}")
                     time.sleep(2.000)
-                    self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
-                    time.sleep(0.001)
-                    time.sleep(0.050)
+                    try:
+                        self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+                        time.sleep(0.001)
+                        time.sleep(0.050)
+                    except Exception as e2:
+                        last_exception = e2
+                        if AM2315DEBUG:
+                            print(f"Wake Byte Fail (retry): {e2}")
+                except Exception as e:
+                    last_exception = e
+                    if AM2315DEBUG:
+                        print(f"Wake Byte Fail: {e}")
+                    time.sleep(2.000)
+                    try:
+                        self._device.write_byte_data(AM2315_I2CADDR, AM2315_READREG, 0x00)
+                        time.sleep(0.001)
+                        time.sleep(0.050)
+                    except Exception as e2:
+                        last_exception = e2
 
+                # Demander la lecture
                 self._device.write_i2c_block_data(
                     AM2315_I2CADDR, AM2315_READREG, [0x00, 0x04]
                 )
                 time.sleep(0.09)
+                
+                # Lire les données
                 tmp = self._device.am2315_read_i2c_block_data(
                     AM2315_I2CADDR, AM2315_READREG, 8
                 )
+                
+                # Parser les données
                 self.temperature = (((tmp[4] & 0x7F) << 8) | tmp[5]) / 10.0
                 self.humidity = ((tmp[2] << 8) | tmp[3]) / 10.0
+                
+                # Validation des données
                 if self.AM2315PreviousTemp != -1000:
                     if self.humidity < 0.01 or self.humidity > 100.0:
                         if AM2315DEBUG:
@@ -153,11 +185,18 @@ class AM2315:
                         self.AM2315PreviousTemp = self.temperature
                 else:
                     self.AM2315PreviousTemp = self.temperature
+                    
                 if tmp is not None:
                     break
-            except Exception:
+            except OSError as e:
+                # Erreur I2C - probablement capteur déconnecté ou bus inaccessible
+                last_exception = e
                 if AM2315DEBUG:
-                    print("AM2315readCount = ", count)
+                    print(f"AM2315 OSError (count={count}): {e}")
+            except Exception as e:
+                last_exception = e
+                if AM2315DEBUG:
+                    print(f"AM2315readCount = {count}, Exception: {e}")
             count += 1
             self.retrys += 1
             time.sleep(0.10)
@@ -165,11 +204,14 @@ class AM2315:
                 if count > MAXREADATTEMPT:
                     self.powerCycleAM2315()
                     if powercyclecount <= 2:
-                        powercyclecount + 1
+                        powercyclecount += 1  # Correction: += au lieu de +
                         count = 0
 
         if tmp is None:
-            raise RuntimeError("Impossible de lire des données AM2315.")
+            error_msg = "Impossible de lire des données AM2315."
+            if last_exception:
+                error_msg += f" Dernière erreur: {type(last_exception).__name__}: {last_exception}"
+            raise RuntimeError(error_msg)
 
         self.humidity = ((tmp[2] << 8) | tmp[3]) / 10.0
         self.temperature = (((tmp[4] & 0x7F) << 8) | tmp[5]) / 10.0

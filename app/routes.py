@@ -505,18 +505,18 @@ HARDWARE_SETTING_GROUPS = [
 def _camera_stream() -> Generator[bytes, None, None]:
     if cv2 is None:
         try:
-        current_app.logger.error("OpenCV n’est pas installé pour le streaming caméra.")
+            current_app.logger.error("OpenCV n'est pas installé pour le streaming caméra.")
         except RuntimeError:
-            print("OpenCV n’est pas installé pour le streaming caméra.")
+            print("OpenCV n'est pas installé pour le streaming caméra.")
         raise RuntimeError("Camera indisponible")
 
     device_index = current_app.config.get("CAMERA_DEVICE_INDEX", 0)
     capture = cv2.VideoCapture(device_index)
     if not capture.isOpened():
         try:
-        current_app.logger.error("Impossible d’ouvrir la caméra USB.")
+            current_app.logger.error("Impossible d'ouvrir la caméra USB.")
         except RuntimeError:
-            print("Impossible d’ouvrir la caméra USB.")
+            print("Impossible d'ouvrir la caméra USB.")
         raise RuntimeError("Camera indisponible")
 
     try:
@@ -1276,9 +1276,9 @@ def settings():
             setting_key = key.split("setting__", 1)[1]
             setting = Setting.query.filter_by(key=setting_key).first()
             before_value = setting.value if setting else None
-        if not setting:
+            if not setting:
                 setting = Setting(key=setting_key)
-            db.session.add(setting)
+                db.session.add(setting)
             cleaned_value = value
             if setting_key == "Sensor_Poll_Interval_Minutes":
                 try:
@@ -1448,7 +1448,7 @@ def journal():
         # Récupérer tous les événements des 25 derniers jours sans pagination
         from_date_25_days = (datetime.utcnow() - timedelta(days=25)).date()
         query = query.filter(JournalEntry.created_at >= datetime.combine(from_date_25_days, datetime.min.time()))
-    entries = query.all()
+        entries = query.all()
         # Créer une pagination factice pour la compatibilité
         class FakePagination:
             def __init__(self, items, total):
@@ -1693,7 +1693,7 @@ def journal():
 @login_required
 def journal_purge():
     if current_user.role != "admin":
-        flash("Accès réservé à l’administrateur.", "danger")
+        flash("Accès réservé à l'administrateur.", "danger")
         return redirect(url_for("main.dashboard"))
 
     before_str = request.form.get("before")
@@ -1729,6 +1729,41 @@ def journal_purge():
     db.session.commit()
     flash(f"{count} entrée(s) supprimée(s) du journal.", "success")
     return redirect(url_for("main.journal"))
+
+
+@main_bp.route("/actions/purge-mesures", methods=["POST"])
+@login_required
+def purge_sensor_readings():
+    if current_user.role != "admin":
+        flash("Accès réservé à l'administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
+
+    # Supprimer toutes les mesures jusqu'à aujourd'hui (avant minuit aujourd'hui)
+    today = datetime.utcnow().date()
+    threshold = datetime.combine(today, datetime.min.time())
+
+    query = SensorReading.query.filter(SensorReading.created_at < threshold)
+    count = query.count()
+    
+    if count == 0:
+        flash("Aucune mesure à supprimer.", "info")
+        return redirect(url_for("main.dashboard"))
+
+    query.delete(synchronize_session=False)
+    db.session.add(
+        JournalEntry(
+            level="warning",
+            message="Purge des mesures capteurs",
+            details={
+                "deleted_before": threshold.isoformat(),
+                "deleted_count": count,
+                "performed_by": current_user.username,
+            },
+        )
+    )
+    db.session.commit()
+    flash(f"{count} mesure(s) supprimée(s) (jusqu'à aujourd'hui).", "success")
+    return redirect(url_for("main.dashboard"))
 
 
 @main_bp.route("/actions/collecte-manuelle", methods=["POST"])

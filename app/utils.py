@@ -234,34 +234,68 @@ def detect_am2315() -> Dict[str, Any]:
         return status
 
     try:
+        # Lire l'adresse I2C depuis les paramètres si disponible
+        address_str = None
         try:
-            sensor = AM2315()
+            from .models import Setting
+            setting = Setting.query.filter_by(key="Sensor_AM2315_Address").first()
+            if setting and setting.value:
+                address_str = setting.value.strip()
+        except Exception:
+            pass
+        
+        # Parser l'adresse (peut être "0x5C" ou "5C" ou "92")
+        address = 0x5C  # Adresse par défaut
+        if address_str:
+            try:
+                if address_str.startswith("0x") or address_str.startswith("0X"):
+                    address = int(address_str, 16)
+                else:
+                    address = int(address_str, 16) if all(c in "0123456789ABCDEFabcdef" for c in address_str) else int(address_str)
+            except (ValueError, TypeError):
+                pass
+        
+        # Initialiser le capteur
+        try:
+            sensor = AM2315(address=address)
         except TypeError:
-            sensor = AM2315(busnum=1)  # type: ignore[call-arg]
+            try:
+                sensor = AM2315(address=address, busnum=1)  # type: ignore[call-arg]
+            except TypeError:
+                sensor = AM2315()  # type: ignore[call-arg]
+        
         temperature = None
         humidity = None
-
-        if hasattr(sensor, "read_sensor"):
+        
+        # Essayer de lire température et humidité ensemble (plus efficace)
+        if hasattr(sensor, "read_humidity_temperature"):
             try:
-                data = sensor.read_sensor()  # type: ignore[attr-defined]
-            except TypeError:
-                data = sensor.read_sensor(quick=True)  # type: ignore[attr-defined]
-            if isinstance(data, dict):
-                temperature = data.get("temperature")
-                humidity = data.get("humidity")
-            elif isinstance(data, (tuple, list)) and len(data) >= 2:
-                temperature, humidity = data[0], data[1]
-        if temperature is None and hasattr(sensor, "read_temperature"):
-            temperature = sensor.read_temperature()  # type: ignore[attr-defined]
-        if humidity is None and hasattr(sensor, "read_humidity"):
-            humidity = sensor.read_humidity()  # type: ignore[attr-defined]
+                data = sensor.read_humidity_temperature()  # type: ignore[attr-defined]
+                if isinstance(data, (tuple, list)) and len(data) >= 2:
+                    humidity, temperature = data[0], data[1]
+            except Exception as exc:
+                # Si la lecture groupée échoue, essayer séparément
+                try:
+                    if hasattr(sensor, "read_temperature"):
+                        temperature = sensor.read_temperature()  # type: ignore[attr-defined]
+                    if hasattr(sensor, "read_humidity"):
+                        humidity = sensor.read_humidity()  # type: ignore[attr-defined]
+                except Exception:
+                    # Si tout échoue, lever l'exception originale
+                    raise exc
+        else:
+            # Méthode de fallback : lire séparément
+            if hasattr(sensor, "read_temperature"):
+                temperature = sensor.read_temperature()  # type: ignore[attr-defined]
+            if hasattr(sensor, "read_humidity"):
+                humidity = sensor.read_humidity()  # type: ignore[attr-defined]
 
         if temperature is None or humidity is None:
             status.update(
                 {
                     "status": "warning",
                     "message": "Capteur AM2315 détecté mais les mesures ne sont pas disponibles.",
-                    "details": {"raw": {"temperature": temperature, "humidity": humidity}},
+                    "details": {"raw": {"temperature": temperature, "humidity": humidity}, "address": hex(address)},
                 }
             )
             return status
@@ -272,7 +306,7 @@ def detect_am2315() -> Dict[str, Any]:
             {
                 "status": "ok",
                 "message": f"Capteur détecté. Température : {temperature}°C, Humidité : {humidity} %.",
-                "details": {"temperature": temperature, "humidity": humidity},
+                "details": {"temperature": temperature, "humidity": humidity, "address": hex(address)},
             }
         )
     except RuntimeError as exc:
@@ -280,10 +314,23 @@ def detect_am2315() -> Dict[str, Any]:
             {
                 "status": "warning",
                 "message": f"Impossible de lire le capteur AM2315 : {exc}",
+                "details": {"error": str(exc), "error_type": "RuntimeError"},
+            }
+        )
+    except OSError as exc:
+        status.update(
+            {
+                "status": "error",
+                "message": f"Erreur I2C AM2315 (bus I2C inaccessible ou capteur déconnecté) : {exc}",
+                "details": {"error": str(exc), "error_type": "OSError"},
             }
         )
     except Exception as exc:  # pragma: no cover - dépendances spécifiques
-        status.update({"status": "error", "message": f"Erreur AM2315 : {exc}"})
+        status.update({
+            "status": "error", 
+            "message": f"Erreur AM2315 : {exc}",
+            "details": {"error": str(exc), "error_type": type(exc).__name__},
+        })
     return status
 
 
