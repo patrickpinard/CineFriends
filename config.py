@@ -9,10 +9,45 @@ class Config:
     load_dotenv(BASE_DIR / ".env")
 
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-this-secret-key")
-    SQLALCHEMY_DATABASE_URI = (
-        os.getenv("DATABASE_URL")
-        or f"sqlite:///{BASE_DIR / 'dashboard.db'}"
-    )
+    
+    # Définir le chemin du dossier instance
+    INSTANCE_DIR = BASE_DIR / "instance"
+    
+    # Construire l'URI de la base de données
+    # Si DATABASE_URL est défini dans .env, l'utiliser, sinon utiliser instance/dashboard.db
+    _db_uri = os.getenv("DATABASE_URL")
+    if not _db_uri:
+        # S'assurer que le dossier instance existe avec les bonnes permissions
+        try:
+            INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+            # Vérifier que le dossier est accessible en écriture
+            if not os.access(INSTANCE_DIR, os.W_OK):
+                raise PermissionError(f"Le dossier {INSTANCE_DIR} n'est pas accessible en écriture")
+        except Exception as e:
+            # En cas d'erreur, utiliser le dossier de base comme fallback
+            import logging
+            logging.warning(f"Impossible de créer le dossier instance: {e}. Utilisation du dossier de base.")
+            INSTANCE_DIR = BASE_DIR
+        
+        # Utiliser un chemin absolu avec le format SQLite correct
+        db_path = INSTANCE_DIR / "dashboard.db"
+        db_path_absolute = db_path.resolve()
+        db_path_str = str(db_path_absolute)
+        
+        # Normaliser les slashes pour Unix/Linux
+        db_path_str = db_path_str.replace("\\", "/")
+        
+        # Pour SQLAlchemy avec SQLite, utiliser le format avec 4 slashes pour les chemins absolus
+        # Format: sqlite:////chemin/absolu/vers/fichier.db
+        # Alternative: utiliser sqlite+pysqlite3://// pour forcer l'utilisation de pysqlite3
+        # Mais d'abord, essayons avec le format standard
+        SQLALCHEMY_DATABASE_URI = f"sqlite:////{db_path_str}"
+        
+        # Si le format avec 4 slashes ne fonctionne pas, SQLAlchemy peut aussi accepter
+        # le format avec 3 slashes si on utilise un chemin relatif depuis le répertoire de travail
+        # Mais nous préférons le chemin absolu pour éviter les problèmes de répertoire de travail
+    else:
+        SQLALCHEMY_DATABASE_URI = _db_uri
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     WTF_CSRF_TIME_LIMIT = None
     SESSION_COOKIE_SECURE = False

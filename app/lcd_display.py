@@ -17,6 +17,9 @@ LINE_LENGTH = 16
 LINE_COUNT = 2
 RELAY_CHANNELS = (1, 2, 3)
 
+# État global pour le défilement automatique des pages LCD
+_lcd_current_page_index = 0
+
 
 def _lcd_is_enabled() -> bool:
     return bool(LCD) and current_app.config.get("LCD_ENABLED", False)
@@ -130,6 +133,7 @@ def _chunk_lines(lines: List[str], size: int = LINE_COUNT) -> List[List[str]]:
 
 
 def _push_to_lcd_cycle(pages: List[List[str]]) -> Tuple[bool, Optional[str]]:
+    """Affiche toutes les pages du LCD en boucle avec un délai de 3 secondes entre chaque page"""
     if not _lcd_is_enabled():
         return False, "Afficheur LCD désactivé ou indisponible."
     try:
@@ -144,6 +148,52 @@ def _push_to_lcd_cycle(pages: List[List[str]]) -> Tuple[bool, Optional[str]]:
     except Exception as exc:  # pragma: no cover - dépend matériel
         current_app.logger.exception("Échec mise à jour LCD: %s", exc)
         return False, str(exc)
+
+
+def _push_single_page_to_lcd(page_index: int, pages: List[List[str]]) -> Tuple[bool, Optional[str]]:
+    """Affiche une seule page spécifique du LCD (pour le défilement automatique)"""
+    if not _lcd_is_enabled():
+        return False, "Afficheur LCD désactivé ou indisponible."
+    try:
+        device = LCD()
+        frames = pages or [[_pad(""), _pad("")]]
+        if 0 <= page_index < len(frames):
+            frame = frames[page_index]
+            payload = "\n".join(frame)
+            device.setText(payload)
+            device.setRGB(0, 128, 64)
+            return True, None
+        return False, f"Index de page invalide: {page_index}"
+    except Exception as exc:  # pragma: no cover - dépend matériel
+        current_app.logger.exception("Échec mise à jour LCD (page %s): %s", page_index, exc)
+        return False, str(exc)
+
+
+def auto_scroll_lcd_pages() -> None:
+    """Fait défiler automatiquement les pages du LCD toutes les 3 secondes"""
+    global _lcd_current_page_index
+    
+    if not _lcd_is_enabled():
+        return
+    
+    try:
+        # Construire les pages actuelles avec les dernières données
+        lines, _ = build_lcd_lines()
+        pages = _chunk_lines(lines)
+        
+        if not pages:
+            return
+        
+        # Afficher la page actuelle
+        success, error = _push_single_page_to_lcd(_lcd_current_page_index, pages)
+        
+        if success:
+            # Passer à la page suivante (boucle)
+            _lcd_current_page_index = (_lcd_current_page_index + 1) % len(pages)
+        else:
+            current_app.logger.warning("Échec défilement LCD automatique: %s", error)
+    except Exception as exc:  # pragma: no cover - dépend matériel
+        current_app.logger.exception("Erreur lors du défilement automatique LCD: %s", exc)
 
 
 def refresh_lcd_display(*, push: bool = False) -> dict:

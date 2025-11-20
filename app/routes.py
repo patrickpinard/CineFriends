@@ -15,7 +15,7 @@ from .forms import AutomationRuleForm, ProfileForm, SettingForm
 from .models import AutomationRule, JournalEntry, Notification, RelayState, SensorReading, Setting, User
 from .services import create_notification
 from .tasks import collect_sensor_readings
-from .utils import build_changes, build_hardware_overview, delete_avatar, save_avatar
+from .utils import build_changes, build_hardware_overview, delete_avatar, save_avatar, format_local_datetime, utc_to_local
 from .automation_engine import parse_trigger
 from .lcd_display import refresh_lcd_display
 SENSOR_LABELS = {
@@ -67,11 +67,37 @@ SENSOR_HIGHLIGHT_DEFINITIONS = [
 ]
 
 
+# Cache pour les settings (invalidé à chaque modification)
+_settings_cache: dict[str, str | None] = {}
+_settings_cache_timestamp: datetime | None = None
+
 def get_setting_value(key: str, default: str) -> str:
+    """Récupère une valeur de setting avec cache pour optimiser les performances"""
+    global _settings_cache, _settings_cache_timestamp
+    
+    # Invalider le cache après 5 minutes ou au premier appel
+    now = datetime.utcnow()
+    if _settings_cache_timestamp is None or (now - _settings_cache_timestamp).total_seconds() > 300:
+        _settings_cache.clear()
+        _settings_cache_timestamp = now
+    
+    # Vérifier le cache
+    if key in _settings_cache:
+        cached_value = _settings_cache[key]
+        return cached_value if cached_value is not None else default
+    
+    # Requête DB si pas en cache
     setting = Setting.query.filter_by(key=key).first()
-    if setting and setting.value:
-        return setting.value
-    return default
+    value = setting.value if setting and setting.value else None
+    _settings_cache[key] = value
+    return value if value is not None else default
+
+
+def invalidate_settings_cache() -> None:
+    """Invalide le cache des settings (à appeler après modification)"""
+    global _settings_cache, _settings_cache_timestamp
+    _settings_cache.clear()
+    _settings_cache_timestamp = None
 
 
 def get_sensor_display_name(sensor_type: str) -> str:
@@ -126,7 +152,7 @@ def _build_sensor_highlight(
         card["unit"] = reading.unit or default_unit
         card["status"] = "ok"
         card["message"] = None
-        card["last_seen_text"] = reading.created_at.strftime("%d/%m/%Y %H:%M")
+        card["last_seen_text"] = format_local_datetime(reading.created_at)
         card["last_seen_iso"] = reading.created_at.isoformat()
         if reading.sensor_id and not subtitle_value:
             card["subtitle"] = f"ID {reading.sensor_id.upper()}"
@@ -973,6 +999,9 @@ def relay_command(channel: int):
 @main_bp.route("/automatisation", methods=["GET", "POST"])
 @login_required
 def automation():
+    if current_user.role != "admin":
+        flash("Accès réservé à l'administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
     form = AutomationRuleForm()
     if request.method == "GET":
         form.relay_action_enabled.data = True
@@ -1061,6 +1090,9 @@ def automation():
 @main_bp.route("/automatisation/<int:rule_id>/modifier", methods=["GET", "POST"])
 @login_required
 def edit_rule(rule_id: int):
+    if current_user.role != "admin":
+        flash("Accès réservé à l'administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
     rule = AutomationRule.query.get_or_404(rule_id)
     if rule.owner != current_user and current_user.role != "admin":
         flash("Accès refusé.", "danger")
@@ -1195,7 +1227,7 @@ def edit_rule(rule_id: int):
         filters_query=filters_query,
         form_action=form_action,
         form_title="Modifier la règle",
-        form_subtitle=f"Dernière mise à jour le {rule.updated_at.strftime('%d/%m/%Y %H:%M') if rule.updated_at else rule.created_at.strftime('%d/%m/%Y %H:%M')}",
+        form_subtitle=f"Dernière mise à jour le {format_local_datetime(rule.updated_at if rule.updated_at else rule.created_at)}",
         submit_label="Mettre à jour",
         cancel_url=cancel_url,
         editing_rule_id=rule.id,
@@ -1206,6 +1238,9 @@ def edit_rule(rule_id: int):
 @main_bp.route("/automatisation/<int:rule_id>/supprimer", methods=["POST"])
 @login_required
 def delete_rule(rule_id: int):
+    if current_user.role != "admin":
+        flash("Accès réservé à l'administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
     rule = AutomationRule.query.get_or_404(rule_id)
     if rule.owner != current_user and current_user.role != "admin":
         flash("Accès refusé.", "danger")
@@ -1237,6 +1272,9 @@ def camera_feed():
 @main_bp.route("/parametres", methods=["GET", "POST"])
 @login_required
 def settings():
+    if current_user.role != "admin":
+        flash("Accès réservé à l'administrateur.", "danger")
+        return redirect(url_for("main.dashboard"))
     form = SettingForm()
     form.key.validators = []
     form.value.validators = []
@@ -1303,6 +1341,8 @@ def settings():
                     )
                 )
         db.session.commit()
+        # Invalider le cache des settings après modification
+        invalidate_settings_cache()
         if new_poll_interval is not None:
             app_obj = current_app._get_current_object()
             if app_obj.config.get("SENSOR_POLL_ENABLED", True):
@@ -1543,7 +1583,9 @@ def journal():
 
         detailed_entries.append(formatted)
 
-    today = datetime.utcnow().date()
+    # Utiliser l'heure locale pour déterminer aujourd'hui et hier
+    now_local = datetime.now()
+    today = now_local.date()
     yesterday = today - timedelta(days=1)
     
     grouped_entries: list[dict[str, Any]] = []
@@ -1569,10 +1611,12 @@ def journal():
         
         # Répartir les événements dans les jours correspondants
         for entry in detailed_entries:
-            day = entry["timestamp"].date()
+            # Convertir le timestamp UTC en local pour le groupement par jour
+            local_timestamp = utc_to_local(entry["timestamp"])
+            day = local_timestamp.date()
             day_key = day.isoformat()
             if day_key in days_map:
-                entry["time_label"] = entry["timestamp"].strftime("%H:%M")
+                entry["time_label"] = local_timestamp.strftime("%H:%M")
                 days_map[day_key]["entries"].append(entry)
                 days_map[day_key]["event_count"] += 1
         
@@ -1584,7 +1628,9 @@ def journal():
         current_group: dict[str, Any] | None = None
 
         for entry in detailed_entries:
-            day = entry["timestamp"].date()
+            # Convertir le timestamp UTC en local pour le groupement par jour
+            local_timestamp = utc_to_local(entry["timestamp"])
+            day = local_timestamp.date()
             if current_group_key != day:
                 if current_group:
                     grouped_entries.append(current_group)
@@ -1602,7 +1648,7 @@ def journal():
                     "event_count": 0,
                 }
                 current_group_key = day
-            entry["time_label"] = entry["timestamp"].strftime("%H:%M")
+            entry["time_label"] = local_timestamp.strftime("%H:%M")
             current_group["entries"].append(entry)  # type: ignore[arg-type]
             current_group["event_count"] = len(current_group["entries"])  # type: ignore[union-attr]
 
@@ -2010,6 +2056,23 @@ def manifest():
         ]
     }
     return jsonify(manifest_data)
+
+
+@main_bp.route("/api/server-time")
+@login_required
+def server_time():
+    """Retourne l'heure actuelle du serveur (Raspberry Pi) en heure locale"""
+    # Utiliser datetime.now() pour obtenir l'heure locale du système (Raspberry Pi)
+    server_now_local = datetime.now()
+    server_now_utc = datetime.utcnow()
+    
+    return jsonify({
+        "timestamp": server_now_local.isoformat(),
+        "utc": server_now_utc.isoformat(),
+        "local": server_now_local.strftime("%H:%M:%S"),
+        "date": server_now_local.strftime("%d/%m/%Y"),
+        "timezone_offset": (server_now_local - server_now_utc).total_seconds() / 3600,  # Offset en heures
+    })
 
 
 @main_bp.route("/service-worker.js")

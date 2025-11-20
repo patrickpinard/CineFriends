@@ -224,7 +224,7 @@
             <div>
                 <p class="text-sm uppercase tracking-wide text-teal-700">Dernière automatisation</p>
                 <p class="text-base font-semibold text-slate-900">
-                    {{ last_automation_event.created_at.strftime('%d/%m/%Y %H:%M') }}
+                    {{ last_automation_event.created_at|local_datetime }}
                 </p>
             </div>
         </div>

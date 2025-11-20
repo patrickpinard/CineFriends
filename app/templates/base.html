@@ -261,6 +261,7 @@
                     </span>
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Graphiques</span>
                 </a>
+                {% if is_admin %}
                 <a href="{{ url_for('main.automation') }}"
                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.automation' else '' }}"
                    title="Automatisation">
@@ -271,6 +272,7 @@
                     </span>
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Automatisation</span>
                 </a>
+                {% endif %}
                 <a href="{{ url_for('main.camera') }}"
                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint in ['main.camera', 'main.camera_feed'] else '' }}"
                    title="Caméra">
@@ -281,6 +283,7 @@
                     </span>
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Caméra</span>
                 </a>
+                {% if is_admin %}
                 <a href="{{ url_for('main.settings') }}"
                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.settings' else '' }}"
                    title="Hardware">
@@ -292,6 +295,7 @@
                     </span>
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Hardware</span>
                 </a>
+                {% endif %}
                 {% if is_admin %}
                 <a href="{{ url_for('main.journal') }}"
                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.journal' else '' }}"
@@ -325,6 +329,16 @@
                     </span>
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Utilisateurs</span>
                 </a>
+                <a href="{{ url_for('admin.purge_data') }}"
+                   class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'admin.purge_data' else '' }}"
+                   title="Purge des données">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'admin.purge_data' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Purge données</span>
+                </a>
                 {% endif %}
             </nav>
         </aside>
@@ -332,7 +346,7 @@
         <div class="layout-shell flex min-h-screen flex-1 flex-col">
             <header class="fixed top-0 left-0 right-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur lg:left-72" data-app-header style="padding-top: var(--safe-area-top);">
                 <div class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
                         <button type="button"
                                 class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 lg:hidden"
                                 data-mobile-nav-toggle>
@@ -348,11 +362,19 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15m0 0L9 6m-4.5 6L9 18" />
                             </svg>
                         </button>
-                        <div class="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                        <div class="text-sm font-semibold uppercase tracking-wide text-slate-500 truncate">
                             {% block header_title %}{% endblock %}
                         </div>
                     </div>
-                    <div class="relative flex items-center gap-2">
+                    <div class="hidden md:flex items-center justify-center flex-1">
+                        <div class="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50/80 px-4 py-1.5 shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                            <time id="header-time" class="text-sm font-semibold text-slate-700 tabular-nums" datetime="" title="Heure locale du Raspberry Pi"></time>
+                        </div>
+                    </div>
+                    <div class="relative flex items-center gap-2 flex-1 justify-end">
                         {% if current_user.is_authenticated %}
                         <button type="button"
                                 class="inline-flex items-center justify-center h-9 w-9 rounded-full border border-sky-200 bg-sky-50 text-sky-600 shadow-sm transition hover:bg-sky-100 hover:border-sky-300 hover:text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2"
@@ -407,7 +429,7 @@
                                                         {{ notif.title }}
                                                     </p>
                                                     <p class="mt-1 text-xs text-slate-500">{{ notif.message }}</p>
-                                                    <p class="mt-2 text-[11px] uppercase tracking-wide text-slate-400">{{ notif.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                                                    <p class="mt-2 text-[11px] uppercase tracking-wide text-slate-400">{{ notif.created_at|local_datetime }}</p>
                                                 </a>
                                             </div>
                                             <button type="button" class="mt-1 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" data-notification-delete="{{ notif.id }}" aria-label="Supprimer la notification">
@@ -495,7 +517,7 @@
                 </div>
             </header>
 
-            <div class="flex-1 px-4 pt-8 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-20">
+            <div class="flex-1 px-4 pt-8 pb-8 sm:px-6 lg:px-8 lg:pt-24 lg:pb-8">
                 {% set page_explanations = {
                     'main.dashboard': 'Vue d\'ensemble temps réel pour suivre capteurs, alertes et relais.',
                     'main.charts': 'Analyse détaillée des mesures historiques et des actions relais.',
@@ -508,6 +530,7 @@
                     'admin.users': 'Administrez les comptes utilisateurs autorisés à accéder au Dashboard.',
                     'admin.create_user': 'Créez un nouvel utilisateur avec les droits appropriés.',
                     'admin.edit_user': 'Modifiez les droits ou informations d\'un utilisateur existant.',
+                    'admin.purge_data': 'Purgez les données anciennes de capteurs pour libérer de l\'espace et optimiser les performances.',
                 } %}
                 {% set page_intro = page_explanations.get(request.endpoint, 'Surveillez et administrez votre installation connectée en toute simplicité.') %}
                 <div id="page-info-content" class="hidden">{{ page_intro }}</div>
@@ -647,6 +670,7 @@
                 </span>
                 <span>Graphiques</span>
             </a>
+            {% if is_admin %}
             <a href="{{ url_for('main.automation') }}" class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.automation' else '' }}">
                 <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -655,6 +679,7 @@
                 </span>
                 <span>Automatisation</span>
             </a>
+            {% endif %}
             <a href="{{ url_for('main.camera') }}" class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint in ['main.camera', 'main.camera_feed'] else '' }}">
                 <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -663,6 +688,7 @@
                 </span>
                 <span>Caméra</span>
             </a>
+            {% if is_admin %}
             <a href="{{ url_for('main.settings') }}" class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.settings' else '' }}">
                 <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -672,6 +698,7 @@
                 </span>
                 <span>Hardware</span>
             </a>
+            {% endif %}
             {% if is_admin %}
             <a href="{{ url_for('main.journal') }}" class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.journal' else '' }}">
                 <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
@@ -699,6 +726,14 @@
                 </span>
                 <span>Utilisateurs</span>
             </a>
+            <a href="{{ url_for('admin.purge_data') }}" class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'admin.purge_data' else '' }}">
+                <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                </span>
+                <span>Purge données</span>
+            </a>
             {% endif %}
         </nav>
     </aside>
@@ -717,6 +752,58 @@
             const skeleton = document.getElementById('page-skeleton');
             if (skeleton) {
                 skeleton.setAttribute('aria-hidden', 'true');
+            }
+
+            // Mise à jour de l'heure locale du Raspberry Pi
+            const timeElement = document.getElementById('header-time');
+            let serverTimeBase = null; // Timestamp de base du serveur
+            let serverTimeClientBase = null; // Timestamp client au moment de la synchronisation
+            
+            function updateTime() {
+                if (!timeElement || !serverTimeBase || !serverTimeClientBase) return;
+                
+                // Calculer l'heure actuelle du serveur en ajoutant l'écart de temps écoulé
+                const now = Date.now();
+                const elapsed = now - serverTimeClientBase;
+                const serverTimeNow = new Date(serverTimeBase.getTime() + elapsed);
+                
+                const hours = String(serverTimeNow.getHours()).padStart(2, '0');
+                const minutes = String(serverTimeNow.getMinutes()).padStart(2, '0');
+                const seconds = String(serverTimeNow.getSeconds()).padStart(2, '0');
+                const timeString = `${hours}:${minutes}:${seconds}`;
+                timeElement.textContent = timeString;
+                timeElement.setAttribute('datetime', serverTimeNow.toISOString());
+            }
+            
+            // Synchroniser avec l'heure locale du serveur (Raspberry Pi)
+            function syncServerTime() {
+                fetch('{{ url_for("main.server_time") }}', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Le serveur retourne maintenant l'heure locale (datetime.now())
+                    // On parse directement le timestamp ISO local
+                    serverTimeBase = new Date(data.timestamp);
+                    serverTimeClientBase = Date.now();
+                    updateTime();
+                })
+                .catch((error) => {
+                    console.warn('Erreur synchronisation heure serveur:', error);
+                    // En cas d'erreur, utiliser l'heure locale du navigateur
+                    serverTimeBase = new Date();
+                    serverTimeClientBase = Date.now();
+                    updateTime();
+                });
+            }
+            
+            if (timeElement) {
+                syncServerTime();
+                updateTime();
+                setInterval(updateTime, 1000);
+                // Resynchroniser toutes les 5 minutes
+                setInterval(syncServerTime, 5 * 60 * 1000);
             }
 
             const showLoadingOverlay = () => {
@@ -1179,7 +1266,7 @@
     </script>
 
     <!-- Menu mobile fixe en bas -->
-    <nav class="fixed inset-x-0 bottom-0 z-40 lg:hidden" data-mobile-footer>
+    <nav class="hidden" data-mobile-footer>
         <div class="mx-auto flex max-w-sm items-center justify-around gap-1.5 px-4 pb-0.5">
             <div class="rounded-2xl border border-slate-200 bg-white shadow-lg w-full">
                 <div class="flex items-center justify-around gap-1.5 px-2 py-1.5">

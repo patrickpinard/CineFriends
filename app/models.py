@@ -46,20 +46,20 @@ class AutomationRule(db.Model):
     name = db.Column(db.String(120), nullable=False)
     trigger = db.Column(db.String(255), nullable=False)
     action = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    enabled = db.Column(db.Boolean, default=True)
+    enabled = db.Column(db.Boolean, default=True, index=True)
     cooldown_seconds = db.Column(db.Integer, default=300)
     last_triggered_at = db.Column(db.DateTime, nullable=True)
 
-    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
 
 
 class JournalEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    level = db.Column(db.String(20), default="info")
+    level = db.Column(db.String(20), default="info", index=True)
     message = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     details = db.Column(db.JSON, nullable=True)
 
 
@@ -72,9 +72,9 @@ class Setting(db.Model):
 
 class SensorReading(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    sensor_type = db.Column(db.String(50), nullable=False)
+    sensor_type = db.Column(db.String(50), nullable=False, index=True)
     sensor_id = db.Column(db.String(120), nullable=True)
-    metric = db.Column(db.String(50), nullable=False)
+    metric = db.Column(db.String(50), nullable=False, index=True)
     value = db.Column(db.Float, nullable=True)
     unit = db.Column(db.String(20), nullable=True)
     extra = db.Column(db.JSON, nullable=True)

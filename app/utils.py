@@ -3,13 +3,47 @@ from __future__ import annotations
 import os
 import platform
 import secrets
+import time
 from importlib import import_module
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from flask import current_app
 from werkzeug.datastructures import FileStorage
+
+
+def utc_to_local(utc_dt: datetime) -> datetime:
+    """Convertit un datetime UTC en datetime local du système (Raspberry Pi)"""
+    if utc_dt is None:
+        return utc_dt
+    # Obtenir l'offset local en secondes
+    # time.timezone est négatif pour les fuseaux à l'est de UTC (ex: UTC+1 = -3600)
+    # time.altzone est utilisé pendant l'heure d'été si applicable
+    if time.daylight and time.localtime().tm_isdst:
+        offset_seconds = time.altzone
+    else:
+        offset_seconds = time.timezone
+    
+    # Appliquer l'offset (time.timezone est négatif pour UTC+X, donc on soustrait)
+    local_dt = utc_dt - timedelta(seconds=offset_seconds)
+    return local_dt
+
+
+def format_local_datetime(dt: datetime, format_str: str = "%d/%m/%Y %H:%M") -> str:
+    """Formate un datetime UTC en heure locale du système
+    
+    Args:
+        dt: datetime UTC à convertir
+        format_str: Format de sortie (par défaut "%d/%m/%Y %H:%M")
+    
+    Returns:
+        Chaîne formatée en heure locale
+    """
+    if dt is None:
+        return ""
+    local_dt = utc_to_local(dt)
+    return local_dt.strftime(format_str)
 
 def _import_optional_module(module_name: str):
     try:
@@ -20,7 +54,6 @@ def _import_optional_module(module_name: str):
 np = _import_optional_module("numpy")
 cv2 = _import_optional_module("cv2")
 lcd_module = _import_optional_module("app.hardware.LCD") or _import_optional_module("hardware.LCD")
-LCD = getattr(lcd_module, "LCD", None) if lcd_module else None
 LCD = getattr(lcd_module, "LCD", None) if lcd_module else None
 
 def save_avatar(file: FileStorage) -> str:
@@ -499,12 +532,132 @@ def detect_host_status() -> Dict[str, Any]:
             "disk_free": getattr(disk, "free", None),
             "disk_total": getattr(disk, "total", None),
             "temperature": temp,
-        }
+            }
     except ImportError:
         status.update(
             {
                 "status": "warning",
-                "message": "psutil non disponible, impossible de lire l’état du système.",
+                "message": "psutil non disponible, impossible de lire l'état du système.",
             }
         )
     return status
+
+
+def purge_sensor_data(retention_days: int = 30, perform_purge: bool = False) -> Dict[str, Any]:
+    """
+    Purge les données de capteurs selon les règles suivantes :
+    - Supprime les données de plus de retention_days jours
+    - Pour les données entre 7 jours et retention_days jours, ne garde qu'1 mesure par heure
+    
+    Args:
+        retention_days: Nombre de jours de conservation (défaut: 30)
+        perform_purge: Si False, retourne seulement les statistiques sans purger
+    
+    Returns:
+        Dict avec les statistiques de purge
+    """
+    from .models import SensorReading, RelayState, Setting
+    from sqlalchemy import func, and_
+    
+    now = datetime.utcnow()
+    retention_threshold = now - timedelta(days=retention_days)
+    week_threshold = now - timedelta(days=7)
+    
+    stats = {
+        "retention_days": retention_days,
+        "total_readings": SensorReading.query.count(),
+        "readings_to_delete_old": 0,
+        "readings_to_reduce": 0,
+        "readings_deleted_old": 0,
+        "readings_deleted_reduced": 0,
+        "relay_states_to_delete": 0,
+        "relay_states_deleted": 0,
+    }
+    
+    if not perform_purge:
+        # Mode simulation : compter seulement
+        stats["readings_to_delete_old"] = SensorReading.query.filter(
+            SensorReading.created_at < retention_threshold
+        ).count()
+        
+        stats["readings_to_reduce"] = SensorReading.query.filter(
+            and_(
+                SensorReading.created_at >= retention_threshold,
+                SensorReading.created_at < week_threshold
+            )
+        ).count()
+        
+        stats["relay_states_to_delete"] = RelayState.query.filter(
+            RelayState.created_at < retention_threshold
+        ).count()
+        
+        return stats
+    
+    # Mode purge réel
+    try:
+        # 1. Supprimer les données de plus de retention_days jours
+        old_readings_query = SensorReading.query.filter(
+            SensorReading.created_at < retention_threshold
+        )
+        stats["readings_deleted_old"] = old_readings_query.count()
+        old_readings_query.delete(synchronize_session=False)
+        
+        # 2. Réduire les données entre 7 jours et retention_days jours (1 mesure/heure)
+        # Pour chaque combinaison (sensor_type, metric, sensor_id), on garde la première mesure de chaque heure
+        readings_to_reduce = SensorReading.query.filter(
+            and_(
+                SensorReading.created_at >= retention_threshold,
+                SensorReading.created_at < week_threshold
+            )
+        ).order_by(
+            SensorReading.sensor_type,
+            SensorReading.metric,
+            SensorReading.sensor_id,
+            SensorReading.created_at
+        ).all()
+        
+        # Grouper par (sensor_type, metric, sensor_id, année, mois, jour, heure)
+        # et garder seulement la première mesure de chaque groupe
+        readings_to_keep = set()
+        readings_to_delete_ids = []
+        
+        current_group = None
+        for reading in readings_to_reduce:
+            # Créer une clé de groupe : (sensor_type, metric, sensor_id, année, mois, jour, heure)
+            group_key = (
+                reading.sensor_type or "",
+                reading.metric or "",
+                reading.sensor_id or "",
+                reading.created_at.year,
+                reading.created_at.month,
+                reading.created_at.day,
+                reading.created_at.hour
+            )
+            
+            if group_key != current_group:
+                # Nouveau groupe : garder cette mesure
+                current_group = group_key
+                readings_to_keep.add(reading.id)
+            else:
+                # Même groupe : marquer pour suppression
+                readings_to_delete_ids.append(reading.id)
+        
+        # Supprimer les mesures en double
+        if readings_to_delete_ids:
+            SensorReading.query.filter(SensorReading.id.in_(readings_to_delete_ids)).delete(synchronize_session=False)
+            stats["readings_deleted_reduced"] = len(readings_to_delete_ids)
+        
+        # 3. Supprimer les états de relais anciens
+        old_relay_states_query = RelayState.query.filter(
+            RelayState.created_at < retention_threshold
+        )
+        stats["relay_states_deleted"] = old_relay_states_query.count()
+        old_relay_states_query.delete(synchronize_session=False)
+        
+        # Note: La sauvegarde de la configuration de rétention et le commit sont gérés dans la route admin
+        
+        return stats
+    except Exception as exc:
+        current_app.logger.exception("Erreur lors de la purge des données: %s", exc)
+        stats["error"] = str(exc)
+        return stats

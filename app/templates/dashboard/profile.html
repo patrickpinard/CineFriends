@@ -139,7 +139,7 @@
         <ul class="mt-4 space-y-3 text-sm text-slate-600">
             <li class="flex items-center justify-between">
                 <span>Compte créé</span>
-                <time class="text-xs uppercase tracking-wide text-slate-400">{{ current_user.created_at.strftime('%d/%m/%Y %H:%M') }}</time>
+                <time class="text-xs uppercase tracking-wide text-slate-400">{{ current_user.created_at|local_datetime }}</time>
             </li>
             <li class="flex items-center justify-between">
                 <span>Dernière mise à jour du profil</span>

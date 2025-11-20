@@ -44,7 +44,7 @@
         {% endfor %}
     </div>
     <p class="mt-4 text-xs text-slate-400">
-        Dernière construction : {{ snapshot.generated_at.strftime('%d/%m/%Y %H:%M:%S') }} UTC
+        Dernière construction : {{ snapshot.generated_at|local_datetime('%d/%m/%Y %H:%M:%S') }}
     </p>
 </section>
 
@@ -93,9 +93,9 @@
         </ul>
         <p class="mt-4 text-xs text-slate-500">
             {% if meta.last_measure_at %}
-            Dernière mesure reçue le {{ meta.last_measure_at.strftime('%d/%m/%Y %H:%M:%S') }} UTC.
+            Dernière mesure reçue le {{ meta.last_measure_at|local_datetime('%d/%m/%Y %H:%M:%S') }}.
             {% else %}
-            Aucune mesure disponible pour l’instant.
+            Aucune mesure disponible pour l'instant.
             {% endif %}
         </p>
     </div>

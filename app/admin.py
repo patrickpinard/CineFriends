@@ -7,6 +7,7 @@ from .mailer import send_email
 from .models import JournalEntry, User
 from .services import create_notification, notify_admins
 from .utils import build_changes, delete_avatar, save_avatar
+from .routes import invalidate_settings_cache
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -300,3 +301,84 @@ def delete_user(user_id: int):
     )
     flash("Utilisateur supprimé.", "info")
     return redirect(url_for("admin.users"))
+
+
+@admin_bp.route("/purge-donnees", methods=["GET", "POST"])
+@login_required
+def purge_data():
+    """Page de gestion de la purge des données de capteurs"""
+    from .models import Setting, JournalEntry
+    from .utils import purge_sensor_data
+    
+    # Récupérer ou créer le paramètre de rétention
+    retention_setting = Setting.query.filter_by(key="Data_Retention_Days").first()
+    default_retention = 30
+    if retention_setting and retention_setting.value:
+        try:
+            default_retention = int(retention_setting.value)
+        except ValueError:
+            pass
+    
+    retention_days = default_retention
+    
+    if request.method == "POST":
+        if request.form.get("action") == "simulate":
+            # Simulation de la purge
+            try:
+                retention_days = int(request.form.get("retention_days", default_retention))
+                if retention_days < 1 or retention_days > 365:
+                    flash("La durée de conservation doit être entre 1 et 365 jours.", "danger")
+                    return redirect(url_for("admin.purge_data"))
+            except ValueError:
+                flash("Durée de conservation invalide.", "danger")
+                return redirect(url_for("admin.purge_data"))
+            
+            stats = purge_sensor_data(retention_days=retention_days, perform_purge=False)
+            return render_template("dashboard/purge_data.html", stats=stats, retention_days=retention_days)
+        
+        elif request.form.get("action") == "purge":
+            # Exécution de la purge
+            try:
+                retention_days = int(request.form.get("retention_days", default_retention))
+                if retention_days < 1 or retention_days > 365:
+                    flash("La durée de conservation doit être entre 1 et 365 jours.", "danger")
+                    return redirect(url_for("admin.purge_data"))
+            except ValueError:
+                flash("Durée de conservation invalide.", "danger")
+                return redirect(url_for("admin.purge_data"))
+            
+            stats = purge_sensor_data(retention_days=retention_days, perform_purge=True)
+            
+            # Mettre à jour le paramètre de rétention
+            if not retention_setting:
+                retention_setting = Setting(key="Data_Retention_Days", value=str(retention_days))
+                db.session.add(retention_setting)
+            else:
+                retention_setting.value = str(retention_days)
+            
+            # Enregistrer dans le journal
+            db.session.add(
+                JournalEntry(
+                    level="warning",
+                    message="Purge des données de capteurs",
+                    details={
+                        "retention_days": retention_days,
+                        "readings_deleted_old": stats.get("readings_deleted_old", 0),
+                        "readings_deleted_reduced": stats.get("readings_deleted_reduced", 0),
+                        "relay_states_deleted": stats.get("relay_states_deleted", 0),
+                        "performed_by": current_user.username,
+                    },
+                )
+            )
+            db.session.commit()
+            
+            # Invalider le cache des settings après modification
+            invalidate_settings_cache()
+            
+            total_deleted = stats.get("readings_deleted_old", 0) + stats.get("readings_deleted_reduced", 0) + stats.get("relay_states_deleted", 0)
+            flash(f"Purge effectuée : {total_deleted} enregistrement(s) supprimé(s).", "success")
+            return redirect(url_for("admin.purge_data"))
+    
+    # Mode GET : afficher les statistiques actuelles
+    stats = purge_sensor_data(retention_days=retention_days, perform_purge=False)
+    return render_template("dashboard/purge_data.html", stats=stats, retention_days=retention_days)
