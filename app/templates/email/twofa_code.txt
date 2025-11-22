@@ -1,0 +1,9 @@
+Bonjour {{ user.username }},
+
+Pour terminer votre connexion au Dashboard, saisissez le code suivant :
+
+{{ code }}
+
+Ce code est valable {{ ttl_minutes }} minute(s). Si vous n’êtes pas à l’origine de cette tentative, vous pouvez ignorer cet e-mail.
+
+— L’équipe Dashboard

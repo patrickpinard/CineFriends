@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Modifier' if is_edit else 'Créer' }} un utilisateur{% endblock %}
+{% block header_title %}{{ 'Modifier' if is_edit else 'Créer' }} un utilisateur{% endblock %}
+{% block content %}
+<a href="{{ url_for('admin.users') }}" class="text-sm text-teal-600 hover:text-teal-500">← Retour</a>
+<div class="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h1 class="text-xl font-semibold text-slate-900">{{ 'Modifier' if is_edit else 'Créer' }} un utilisateur</h1>
+    <form method="post" enctype="multipart/form-data" class="mt-6 space-y-5">
+        {{ form.hidden_tag() }}
+        <div class="flex items-center gap-4">
+            {% if is_edit and user.avatar_filename %}
+            <span class="inline-flex h-16 w-16 overflow-hidden rounded-2xl shadow-soft">
+                <img src="{{ url_for('static', filename='uploads/' ~ user.avatar_filename) }}" alt="Avatar de {{ user.username }}" class="h-16 w-16 object-cover" />
+            </span>
+            {% else %}
+            <span class="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-lg font-semibold uppercase tracking-wide text-slate-500 shadow-soft">
+                {{ form.username.data[:2].upper() if form.username.data else 'AA' }}
+            </span>
+            {% endif %}
+            <div class="flex-1 space-y-2 text-sm text-slate-600">
+                {{ form.avatar.label(class_='text-sm font-medium text-slate-600') }}
+                {{ form.avatar(class_='block w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600 focus:border-teal-500 focus:ring-teal-500') }}
+                <p class="text-xs text-slate-400">Formats acceptés : JPG, PNG, GIF. Taille max 5&nbsp;Mo.</p>
+                {% for error in form.avatar.errors %}
+                <p class="text-xs text-rose-400">{{ error }}</p>
+                {% endfor %}
+                {% if is_edit and user.avatar_filename %}
+                <label class="inline-flex items-center gap-2 text-xs text-slate-500">
+                    {{ form.remove_avatar() }} Supprimer la photo actuelle
+                </label>
+                {% endif %}
+            </div>
+        </div>
+        <div>
+            {{ form.username.label(class_='text-sm text-slate-600') }}
+            {{ form.username(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+            {% for error in form.username.errors %}
+            <p class="mt-1 text-xs text-rose-400">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <div>
+            {{ form.email.label(class_='text-sm text-slate-600') }}
+            {{ form.email(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+            {% for error in form.email.errors %}
+            <p class="mt-1 text-xs text-rose-400">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <div>
+            {{ form.role.label(class_='text-sm text-slate-600') }}
+            {{ form.role(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+        </div>
+        <div>
+            {{ form.password.label(class_='text-sm text-slate-600') }}
+            {{ form.password(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+            <p class="mt-1 text-xs text-slate-500">Laisser vide pour conserver le mot de passe actuel.</p>
+            {% for error in form.password.errors %}
+            <p class="mt-1 text-xs text-rose-400">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <div>
+            {{ form.confirm_password.label(class_='text-sm text-slate-600') }}
+            {{ form.confirm_password(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+            {% for error in form.confirm_password.errors %}
+            <p class="mt-1 text-xs text-rose-400">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-500">
+            {% if user and user.username == 'admin' %}
+            {{ form.active(class_='cursor-not-allowed', disabled=True) }}
+            <label class="text-slate-400">Actif (obligatoire)</label>
+            {% else %}
+            {{ form.active() }}
+            {{ form.active.label(class_='cursor-pointer select-none') }}
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-500">
+            {{ form.twofa_enabled() }}
+            {{ form.twofa_enabled.label(class_='cursor-pointer select-none') }}
+        </div>
+        <div class="flex items-center justify-end gap-3 pt-2">
+            <a href="{{ url_for('admin.users') }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                </svg>
+                Annuler
+            </a>
+            {{ form.submit(class_='inline-flex items-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-teal-400') }}
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-slate-100 text-slate-900">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/180.png') }}" />
+    <meta name="theme-color" content="#0ea5e9" />
+    <title>{% block title %}{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="flex min-h-screen flex-col bg-gradient-to-br from-slate-100 via-white to-sky-50">
+    <main class="flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
+        <div class="relative w-full max-w-md">
+            <div class="absolute inset-0 -z-10 rounded-3xl bg-gradient-to-r from-sky-200 via-teal-100 to-sky-200 blur-2xl opacity-50 sm:opacity-60"></div>
+            <div class="rounded-3xl border border-slate-200/80 bg-white/95 p-6 shadow-xl shadow-sky-100 backdrop-blur sm:p-8">
+                {% block card_content %}{% endblock %}
+            </div>
+        </div>
+    </main>
+</body>
+</html>

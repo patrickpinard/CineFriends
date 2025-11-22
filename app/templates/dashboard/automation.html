@@ -1,0 +1,427 @@
+{% extends 'base.html' %}
+{% block title %}Automatisation{% endblock %}
+{% block header_title %}Automatisation{% endblock %}
+{% block content %}
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-semibold text-slate-900">{{ form_title or 'Créer une règle' }}</h2>
+                {% if form_subtitle %}
+                <p class="mt-1 text-sm text-slate-500">{{ form_subtitle }}</p>
+                {% endif %}
+            </div>
+            {% if cancel_url %}
+            <a href="{{ cancel_url }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 shadow-sm transition hover:bg-slate-100">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+                Annuler
+            </a>
+            {% endif %}
+        </div>
+        <form id="automation-create-form" method="post" action="{{ form_action or url_for('main.automation') }}" class="mt-6 space-y-5 text-[0.98rem] text-slate-700">
+            {{ form.hidden_tag() }}
+            <div>
+                {{ form.name.label(class_='text-sm font-medium text-slate-600') }}
+                {{ form.name(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                {% for error in form.name.errors %}
+                <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                {% endfor %}
+            </div>
+            <div>
+                <div class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                    <div>
+                        {{ form.sensor_type.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.sensor_type(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        <select name="sensor_id" class="hidden" data-selected="{{ form.sensor_id.data or '' }}"></select>
+                    </div>
+                    <div class="grid gap-4 md:grid-cols-[120px,120px,1fr]">
+                        <div>
+                            {{ form.sensor_metric.label(class_='text-sm font-medium text-slate-600') }}
+                            {{ form.sensor_metric(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        </div>
+                        <div>
+                            {{ form.operator.label(class_='text-sm font-medium text-slate-600') }}
+                            {{ form.operator(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        </div>
+                        <div>
+                            {{ form.threshold.label(class_='text-sm font-medium text-slate-600') }}
+                            {{ form.threshold(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', step='0.1') }}
+                            {% for error in form.threshold.errors %}
+                <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid gap-5 sm:grid-cols-2">
+                <div class="max-w-[14rem]">
+                    <label for="cooldown_seconds" class="text-sm font-medium text-slate-600">
+                        Délai entre mesures (s)
+                        <span class="group relative inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-slate-300 text-[11px] font-semibold text-slate-500 align-middle">
+                            i
+                            <span class="pointer-events-none absolute right-0 top-full z-10 mt-2 w-60 translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                                Temps minimum à respecter avant un nouveau déclenchement de cette règle après une mesure. Valeur par défaut définie dans les paramètres de l’application.
+                            </span>
+                        </span>
+                    </label>
+                    {{ form.cooldown_seconds(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                    {% for error in form.cooldown_seconds.errors %}
+                    <p class="automation-error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <label class="automation-toggle">
+                    {{ form.enabled(class_='automation-toggle__input') }}
+                    <span class="automation-toggle__label">Activer cette règle</span>
+                </label>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-700">Commande des relais</p>
+                        <p class="text-xs text-slate-500">Activez ou désactivez complètement l’action sur les relais.</p>
+                    </div>
+                    <label class="automation-toggle">
+                        {{ form.relay_action_enabled(class_='automation-toggle__input', **{'data-relay-action-toggle': 'true'}) }}
+                        <span class="automation-toggle__label">Activer</span>
+                    </label>
+                </div>
+                <div class="mt-4 grid gap-4 md:grid-cols-2" data-relay-action-fields>
+                    <div>
+                        {{ form.relay_channel.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.relay_channel(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', **{'data-relay-action-field': 'true'}) }}
+            </div>
+            <div>
+                        {{ form.relay_action.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.relay_action(class_='mt-1 w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', **{'data-relay-action-field': 'true'}) }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                <p class="text-sm font-semibold text-slate-700">Notification email</p>
+                <p class="mt-1 text-xs text-slate-500">
+                    Choisissez un utilisateur actif à prévenir lorsque la règle se déclenche. Par défaut aucun email n’est envoyé.
+                </p>
+                <div class="mt-4 max-w-md">
+                    {{ form.notify_user_id(class_='w-full rounded-lg border border-slate-200 bg-white text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                    {% for error in form.notify_user_id.errors %}
+                <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                {% endfor %}
+                </div>
+            </div>
+            {{ form.trigger() }}
+            {{ form.action() }}
+            <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600">
+                <p class="font-semibold text-slate-700">Aperçu de la règle</p>
+                <p class="mt-2 text-sm">
+                    Déclencheur&nbsp;: <code id="trigger-preview" class="block rounded bg-white px-2 py-1 text-xs text-slate-700"></code><br>
+                    Action&nbsp;: <code id="action-preview" class="block rounded bg-white px-2 py-1 text-xs text-slate-700 whitespace-pre-wrap"></code>
+                </p>
+                <p class="mt-2 text-xs text-slate-500">
+                    Les champs ci-dessus génèrent automatiquement l’expression d’automatisation.
+                </p>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    {{ submit_label or 'Enregistrer' }}
+                </button>
+            </div>
+        </form>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-200 px-6 py-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2 class="text-lg font-semibold text-slate-900">Règles existantes</h2>
+                <form method="get" class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center" data-filter-form>
+                    <div class="flex h-10 w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm text-slate-600 sm:w-64">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.2-5.2M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z" />
+                        </svg>
+                        <input type="search" name="q" value="{{ filters.q }}" placeholder="Rechercher une règle…" class="h-8 flex-1 border-none bg-transparent focus:ring-0" />
+                    </div>
+                    <input type="hidden" name="owner" value="{{ filters.owner }}" />
+                    <input type="hidden" name="sort" value="{{ filters.sort }}" />
+                    <div class="flex items-center gap-2 sm:justify-end">
+                        <button type="submit" class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400">
+                            Chercher
+                        </button>
+                        {% if filters.q %}
+                        <a href="{{ url_for('main.automation') }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
+                            Réinitialiser
+                        </a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+        <ul class="space-y-4 px-6 py-5">
+            {% if rules %}
+            {% for rule in rules %}
+            <li class="rounded-2xl border p-5 shadow-sm transition {{ 'border-teal-300 bg-teal-50/60 ring-1 ring-teal-200' if editing_rule_id == rule.id else 'border-slate-100 bg-slate-50/50' }}">
+                {% set base_edit_url = url_for('main.edit_rule', rule_id=rule.id) %}
+                {% set edit_url = base_edit_url + ('?' + filters_query if filters_query else '') %}
+                <div class="flex flex-col gap-5">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 9.75 12 3l9 6.75M4.5 10.5V21h15V10.5" />
+                                </svg>
+                            </span>
+                            <div class="space-y-1">
+                                <p class="text-lg font-semibold text-slate-900">{{ rule.name }}</p>
+                                <p class="text-xs uppercase tracking-wide text-slate-400">Créée le {{ rule.created_at|local_datetime }}</p>
+                                {% if rule.updated_at and rule.updated_at != rule.created_at %}
+                                <p class="text-[11px] uppercase tracking-wide text-slate-300">Modifiée le {{ rule.updated_at|local_datetime if rule.updated_at else '' }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                            {% if editing_rule_id == rule.id %}
+                            <span class="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-500/10 px-4 py-2 text-sm font-semibold text-teal-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487a2.25 2.25 0 1 1 3.182 3.182L7.125 20.588l-4.068.452a.563.563 0 0 1-.621-.621l.452-4.068L16.862 4.487z" />
+                                </svg>
+                                En édition
+                            </span>
+                            {% else %}
+                            <a href="{{ edit_url }}"
+                               class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487a2.25 2.25 0 1 1 3.182 3.182L7.125 20.588l-4.068.452a.563.563 0 0 1-.621-.621l.452-4.068L16.862 4.487z" />
+                                </svg>
+                                Modifier
+                            </a>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('main.delete_rule', rule_id=rule.id) }}" data-confirm="Confirmer la suppression ?\nRègle : {{ rule.name }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-600 shadow-sm transition hover:bg-rose-100" type="submit">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9.017a2.25 2.25 0 0 1-2.244 2.133h-1.3a2.25 2.25 0 0 1-2.244-2.133L8.26 9m9.49-3.75h-3.25l-.568-1.704A1.125 1.125 0 0 0 12.873 3h-1.746a1.125 1.125 0 0 0-1.059.746L9.5 5.25h-3.25M5.25 5.25h13.5" />
+                                    </svg>
+                                    Supprimer
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold {{ 'bg-emerald-100 text-emerald-700' if rule.enabled else 'bg-slate-200 text-slate-500' }}">
+                            <span class="h-2.5 w-2.5 rounded-full {{ 'bg-emerald-500' if rule.enabled else 'bg-slate-400' }}"></span>
+                            {{ 'Active' if rule.enabled else 'Inactive' }}
+                        </span>
+                        <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                            <span class="automation-badge automation-badge--pill">Délai min. : {{ rule.cooldown_seconds or 0 }} s</span>
+                        </span>
+                        {% if rule.last_triggered_at %}
+                        <span class="inline-flex items-center gap-2 rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-700">
+                            Dernier déclenchement : {{ rule.last_triggered_at|local_datetime if rule.last_triggered_at else '' }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                            Jamais déclenchée
+                        </span>
+                        {% endif %}
+                        </div>
+
+                    <div class="flex flex-col gap-4 md:flex-row">
+                        <div class="flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-inner">
+                            <div class="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
+                                    </svg>
+                                </span>
+                                <span>Déclencheur</span>
+                            </div>
+                            <p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700">{{ rule.trigger }}</p>
+                        </div>
+                        <div class="flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-inner">
+                            <div class="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12h15m-7.5 7.5V4.5" />
+                                    </svg>
+                                </span>
+                                <span>Action</span>
+                            </div>
+                            {% set action_text = (rule.action or '').strip() %}
+                            <p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700">
+                                {{ 'Aucune action programmée' if action_text == 'noop' else action_text }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            {% else %}
+            <li class="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m12 6.75 8.954 5.746a.75.75 0 0 1 0 1.29L12 19.536l-8.954-5.75a.75.75 0 0 1 0-1.29L12 6.75z" />
+                </svg>
+                <p class="mt-3 text-sm font-semibold text-slate-700">Aucune règle ne correspond à votre recherche.</p>
+                <p class="mt-1 text-xs text-slate-400">Essayez d’ajuster les filtres ou créez une nouvelle règle.</p>
+                <div class="mt-4">
+                    <a href="#"
+                       class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400"
+                       onclick="document.querySelector('form[action=\'{{ url_for('main.automation') }}\']')?.scrollIntoView({ behavior: 'smooth' }); return false;">
+                        Créer une règle
+                    </a>
+                </div>
+            </li>
+            {% endfor %}
+            {% endif %}
+        </ul>
+    </div>
+</div>
+<a href="#" class="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-teal-500 text-white shadow-card transition hover:bg-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-300 lg:hidden" onclick="document.getElementById('automation-create-form')?.scrollIntoView({ behavior: 'smooth' }); return false;" aria-label="Créer une règle">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
+    </svg>
+</a>
+{% if editing_rule_id %}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const form = document.getElementById("automation-create-form");
+        if (form) {
+            form.scrollIntoView({ behavior: "smooth", block: "start" });
+            const originalShadow = form.style.boxShadow;
+            const originalRadius = form.style.borderRadius;
+            form.style.boxShadow = "0 0 0 4px rgba(20, 184, 166, 0.35)";
+            if (!form.style.borderRadius) {
+                form.style.borderRadius = "1rem";
+            }
+            setTimeout(() => {
+                form.style.boxShadow = originalShadow;
+                form.style.borderRadius = originalRadius;
+            }, 1800);
+        }
+    });
+</script>
+{% endif %}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const registry = {{ sensor_registry_json | safe }};
+        const form = document.getElementById("automation-create-form");
+        if (!form) return;
+
+        const sensorTypeSelect = form.querySelector("[name='sensor_type']");
+        const sensorIdSelect = form.querySelector("[name='sensor_id']");
+        const metricSelect = form.querySelector("[name='sensor_metric']");
+        const operatorSelect = form.querySelector("[name='operator']");
+        const thresholdInput = form.querySelector("[name='threshold']");
+        const relayChannelSelect = form.querySelector("[name='relay_channel']");
+        const relayActionSelect = form.querySelector("[name='relay_action']");
+        const relayActionToggle = form.querySelector("[data-relay-action-toggle]");
+        const relayActionFields = form.querySelectorAll("[data-relay-action-field]");
+        const notifySelect = form.querySelector("[name='notify_user_id']");
+        const triggerField = form.querySelector("[name='trigger']");
+        const actionField = form.querySelector("[name='action']");
+        const triggerPreview = document.getElementById("trigger-preview");
+        const actionPreview = document.getElementById("action-preview");
+
+        function hydrateForType(sensorType) {
+            const entry = registry[sensorType] || {};
+            const ids = [["", "Tous les capteurs"], ...((entry.ids || []).map(id => [id, id.toUpperCase()]))];
+            sensorIdSelect.innerHTML = "";
+            const storedId = sensorIdSelect.dataset.selected || "";
+            let matchedId = false;
+            ids.forEach(([value, label]) => {
+                const option = new Option(label, value);
+                if (value === storedId) {
+                    option.selected = true;
+                    matchedId = true;
+                }
+                sensorIdSelect.add(option);
+            });
+
+            if (!matchedId) {
+                sensorIdSelect.selectedIndex = 0;
+                sensorIdSelect.dataset.selected = sensorIdSelect.value;
+            }
+
+            const metrics = entry.metrics || [];
+            metricSelect.innerHTML = "";
+            metrics.forEach(metric => {
+                const label = {
+                    temperature: "Température",
+                    humidity: "Humidité",
+                }[metric] || metric;
+                const option = new Option(label, metric);
+                metricSelect.add(option);
+            });
+        }
+
+        function buildExpressions() {
+            const sensorType = sensorTypeSelect.value;
+            const sensorId = sensorIdSelect.value;
+            const metric = metricSelect.value;
+            const operator = operatorSelect.value;
+            const threshold = thresholdInput.value || "0";
+            const relayChannel = relayChannelSelect?.value;
+            const relayAction = relayActionSelect?.value;
+            const relayEnabled = relayActionToggle ? relayActionToggle.checked : true;
+            const actions = [];
+
+            let trigger = `sensor:${sensorType}.${metric}`;
+            if (sensorId) {
+                trigger += `@${sensorId}`;
+            }
+            trigger += ` ${operator} ${threshold}`;
+
+            sensorIdSelect.dataset.selected = sensorId;
+            triggerField.value = trigger;
+
+            if (triggerPreview) triggerPreview.textContent = trigger;
+            if (relayEnabled && relayChannel && relayAction) {
+                actions.push(`relay:${relayChannel}=${relayAction}`);
+            }
+            if (notifySelect && notifySelect.value && notifySelect.value !== "0") {
+                actions.push(`email:user=${notifySelect.value}`);
+            }
+            const actionValue = actions.length ? actions.join("\n") : "noop";
+            const actionDisplay = actions.length ? actions.join("\n") : "Aucune action programmée";
+            actionField.value = actionValue;
+            if (actionPreview) actionPreview.textContent = actionDisplay;
+        }
+
+        if (sensorTypeSelect) {
+            hydrateForType(sensorTypeSelect.value);
+            sensorTypeSelect.addEventListener("change", () => {
+                hydrateForType(sensorTypeSelect.value);
+                buildExpressions();
+            });
+        }
+
+        [sensorIdSelect, metricSelect, operatorSelect, thresholdInput, relayChannelSelect, relayActionSelect, notifySelect].forEach(el => {
+            if (!el) return;
+            el.addEventListener("change", buildExpressions);
+            el.addEventListener("input", buildExpressions);
+        });
+
+        function syncRelayFieldsState() {
+            const enabled = relayActionToggle ? relayActionToggle.checked : true;
+            relayActionFields.forEach((el) => {
+                el.toggleAttribute("disabled", !enabled);
+                el.classList.toggle("opacity-60", !enabled);
+            });
+        }
+
+        if (relayActionToggle) {
+            relayActionToggle.addEventListener("change", () => {
+                syncRelayFieldsState();
+                buildExpressions();
+            });
+        }
+
+        syncRelayFieldsState();
+
+        buildExpressions();
+        form.addEventListener("submit", buildExpressions);
+    });
+</script>
+{% endblock %}

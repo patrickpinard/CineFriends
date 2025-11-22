@@ -1,0 +1,12 @@
+Bonjour {{ user.username }},
+
+Votre accès au Dashboard a été désactivé par un administrateur. Vous ne pouvez plus vous connecter pour le moment.
+
+Si vous pensez qu’il s’agit d’une erreur ou que vous souhaitez une réactivation, contactez votre administrateur.
+
+Merci de votre compréhension,
+L’équipe Dashboard Automatisation
+
+---
+Cet email est généré automatiquement, merci de ne pas y répondre.
+

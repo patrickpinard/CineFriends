@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+{% block title %}Paramètres{% endblock %}
+{% block header_title %}Paramètres{% endblock %}
+{% block content %}
+<div class="space-y-8">
+    <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="flex flex-wrap gap-4 border-b border-slate-200 px-6 py-5">
+            <div class="flex w-full flex-wrap items-start justify-between gap-4">
+                <h2 class="text-lg font-semibold text-slate-900">Diagnostic Raspberry Pi</h2>
+                <div class="flex flex-wrap items-center gap-3">
+                    <form method="post">
+                        {{ form.csrf_token }}
+                        <input type="hidden" name="refresh_hardware" value="1">
+                        <button type="submit" class="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 transition hover:border-teal-400 hover:text-teal-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 4.5v6h6M19.5 19.5v-6h-6M5 19a9 9 0 0014-1.5M19 5a9 9 0 00-14 1.5" />
+                            </svg>
+                            Relancer le test
+                        </button>
+                    </form>
+                    <button type="submit" form="settings-form" class="inline-flex items-center gap-2 rounded-full bg-teal-600 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        Enregistrer les paramètres
+                    </button>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.128 1.152.493V7.5c4.075 0 7.5 3.425 7.5 7.5 0 1.091-.238 2.128-.665 3.059-.222.486-.918.478-1.17-.013A4.5 4.5 0 0017.25 15h-.75a.75.75 0 00-.75.75v.75c0 2.25-1.5 4.5-4.5 4.5" />
+                        </svg>
+                        Contrôle matériel
+                    </span>
+                </div>
+            </div>
+            <p class="w-full text-sm text-slate-500">
+                Vérifiez en un coup d’œil l’état de communication avec les actionneurs et capteurs connectés au Raspberry Pi.
+            </p>
+        </div>
+        <div class="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3" style="padding-top: 0;">
+            {% for status in hardware_status %}
+            {% set badge_classes = {
+                'ok': 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+                'warning': 'bg-amber-100 text-amber-700 border border-amber-200',
+                'error': 'bg-rose-100 text-rose-700 border border-rose-200'
+            }[status.status] %}
+            <div class="rounded-2xl border border-slate-100/70 bg-slate-50/70 p-5 shadow-inner">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-800">{{ status.label }}</p>
+                        <p class="mt-1 text-sm text-slate-600">{{ status.message }}</p>
+                        {% if status.id == 'host' and status.details %}
+                        <div class="mt-4 space-y-2">
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Charge CPU (1 min)</p>
+                                    <p class="text-xs text-slate-500">Moyenne glissante</p>
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">{{ status.details.cpu if status.details.cpu is not none else '—' }}</p>
+                            </div>
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">RAM utilisée</p>
+                                    {% if status.details.ram_used and status.details.ram_total %}
+                                    <p class="text-xs text-slate-500">
+                                        {{ (status.details.ram_used/1024/1024/1024)|round(1) }} Go / {{ (status.details.ram_total/1024/1024/1024)|round(1) }} Go
+                                    </p>
+                                    {% endif %}
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">
+                                    {{ status.details.ram_percent if status.details.ram_percent is not none else '—' }} %
+                                </p>
+                            </div>
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Stockage libre</p>
+                                    {% if status.details.disk_free and status.details.disk_total %}
+                                    <p class="text-xs text-slate-500">
+                                        {{ (status.details.disk_free/1024/1024/1024)|round(1) }} Go / {{ (status.details.disk_total/1024/1024/1024)|round(1) }} Go
+                                    </p>
+                                    {% endif %}
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">
+                                    {% if status.details.disk_percent is not none %}
+                                        {{ (100 - status.details.disk_percent)|round(1) }} %
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm">
+            <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Température CPU</p>
+                                    <p class="text-xs text-slate-500">Sonde interne</p>
+                                </div>
+                                <p class="text-base font-semibold text-slate-900">
+                                    {{ status.details.temperature if status.details.temperature is not none else '—' }} °C
+                                </p>
+                            </div>
+                        </div>
+                        {% elif status.details %}
+                        <div class="mt-4 space-y-2">
+                            {% for key, value in status.details.items() %}
+                            <div class="flex items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 shadow-sm">
+                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ key|replace("_", " ")|title }}</span>
+                                <span class="text-sm font-semibold text-slate-800">{{ value if value is not none else '—' }}</span>
+                            </div>
+                {% endfor %}
+            </div>
+                        {% endif %}
+                        {% if status.configured %}
+                        <p class="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">{{ status.configured }}</p>
+                        {% endif %}
+                    </div>
+                    <span class="inline-flex min-w-[6rem] justify-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide {{ badge_classes }}">
+                        {{ status.status }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <form method="post" id="settings-form" class="space-y-8">
+        {{ form.csrf_token }}
+        <section class="grid gap-6 xl:grid-cols-2">
+            {% for group in hardware_groups %}
+            <div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-200 px-6 py-5">
+                    <h2 class="text-lg font-semibold text-slate-900">{{ group.title }}</h2>
+                    <p class="mt-1 text-sm text-slate-500">{{ group.subtitle }}</p>
+                </div>
+                <div class="space-y-5 p-6">
+                    {% for item in group.parameters %}
+                    {% if item.is_group %}
+                    <div class="rounded-2xl border border-slate-200/60 bg-slate-50/60 p-5 shadow-sm">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-semibold text-slate-800">{{ item.title or item.entries[0].label }}</p>
+                                <p class="mt-1 text-xs text-slate-500">{{ item.subtitle or item.entries[0].description }}</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 grid gap-5 md:grid-cols-2">
+                            {% for entry in item.entries %}
+                            <div>
+                                <label class="text-sm font-medium text-slate-600" for="{{ entry.key }}">{{ entry.label }}</label>
+                                <input id="{{ entry.key }}" name="setting__{{ entry.key }}" value="{{ entry.value }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-200" />
+                                {% if entry.description %}
+                                <p class="mt-1 text-xs text-slate-500">{{ entry.description }}</p>
+                                {% endif %}
+                                {% if entry.updated_at %}
+                                <p class="mt-1 text-[11px] uppercase tracking-wide text-slate-400">Mis à jour le {{ entry.updated_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+            {% else %}
+                    <div class="rounded-2xl border border-slate-200/60 bg-slate-50/50 p-5 shadow-sm">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <label class="text-sm font-semibold text-slate-800" for="{{ item.key }}">{{ item.label }}</label>
+                                <p class="mt-1 text-sm text-slate-500">{{ item.description }}</p>
+                            </div>
+                            {% if item.updated_at %}
+                            <span class="text-xs text-slate-400">Mis à jour le {{ item.updated_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="mt-4">
+                            <input id="{{ item.key }}" name="setting__{{ item.key }}" value="{{ item.value }}" class="w-full max-w-[14rem] rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm focus:border-teal-500 focus:outline-none focus:ring focus:ring-teal-200" />
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+    </form>
+
+</div>
+{% endblock %}
