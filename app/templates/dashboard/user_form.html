@@ -56,18 +56,11 @@
                         {% endfor %}
                     </div>
                 </div>
-                <div>
-                    {{ form.last_name.label(class_='text-sm font-medium text-slate-600') }}
-                    {{ form.last_name(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
-                    {% for error in form.last_name.errors %}
-                    <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
-                    {% endfor %}
-                </div>
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        {{ form.username.label(class_='text-sm font-medium text-slate-600') }}
-                        {{ form.username(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
-                        {% for error in form.username.errors %}
+                        {{ form.last_name.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.last_name(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        {% for error in form.last_name.errors %}
                         <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
                         {% endfor %}
                     </div>
@@ -79,9 +72,18 @@
                         {% endfor %}
                     </div>
                 </div>
-                <div class="md:w-1/2">
-                    {{ form.role.label(class_='text-sm font-medium text-slate-600') }}
-                    {{ form.role(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        {{ form.username.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.username(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        {% for error in form.username.errors %}
+                        <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ form.role.label(class_='text-sm font-medium text-slate-600') }}
+                        {{ form.role(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                    </div>
                 </div>
             </div>
         </div>
@@ -156,8 +158,8 @@
                         </div>
                     </div>
                     <div class="pt-2 border-t border-slate-200 space-y-4">
-                        <div class="flex items-center justify-between">
-                            <div class="flex-1">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div class="flex-1 min-w-0">
                                 <label class="text-sm font-medium text-slate-600 cursor-pointer select-none" for="active">
                                     {% if is_edit and user and user.username == 'admin' %}
                                     Actif <span class="text-xs text-slate-400">(obligatoire)</span>
@@ -165,9 +167,9 @@
                                     Actif
                                     {% endif %}
                                 </label>
-                                <p class="mt-1 text-xs text-slate-500 whitespace-nowrap">Le compte peut se connecter et utiliser le système.</p>
+                                <p class="mt-1 text-xs text-slate-500">Le compte peut se connecter et utiliser le système.</p>
                             </div>
-                            <label class="flex cursor-pointer items-center">
+                            <label class="flex cursor-pointer items-center flex-shrink-0">
                                 {% if is_edit and user and user.username == 'admin' %}
                                 <input type="checkbox" name="active" id="active" value="y" checked disabled class="relative h-5 w-10 cursor-not-allowed appearance-none rounded-full border border-slate-300 bg-slate-300 transition before:absolute before:left-0.5 before:top-1/2 before:h-4 before:w-4 before:-translate-y-1/2 before:rounded-full before:bg-slate-400 before:shadow-sm before:transition focus:outline-none focus:ring-2 focus:ring-slate-400" style="-webkit-appearance: none; -moz-appearance: none; pointer-events: none; opacity: 0.6;">
                                 <style>
@@ -180,12 +182,12 @@
                                 {% endif %}
                             </label>
                         </div>
-                        <div class="flex items-center justify-between">
-                            <div class="flex-1">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div class="flex-1 min-w-0">
                                 <label class="text-sm font-medium text-slate-600 cursor-pointer select-none" for="twofa_enabled">Activer la double authentification (2FA)</label>
-                                <p class="mt-1 text-xs text-slate-500 whitespace-nowrap">Un code de vérification sera envoyé par e-mail à chaque connexion.</p>
+                                <p class="mt-1 text-xs text-slate-500">Un code de vérification sera envoyé par e-mail à chaque connexion.</p>
                             </div>
-                            <label class="flex cursor-pointer items-center">
+                            <label class="flex cursor-pointer items-center flex-shrink-0">
                                 <input type="checkbox" name="twofa_enabled" id="twofa_enabled" value="y" {% if form.twofa_enabled.data or (is_edit and user and user.twofa_enabled) %}checked{% endif %} class="relative h-5 w-10 cursor-pointer appearance-none rounded-full border border-slate-300 bg-slate-200 transition before:absolute before:left-0.5 before:top-1/2 before:h-4 before:w-4 before:-translate-y-1/2 before:rounded-full before:bg-white before:shadow-sm before:transition checked:bg-teal-500 checked:before:translate-x-5 focus:outline-none focus:ring-2 focus:ring-teal-400" style="-webkit-appearance: none; -moz-appearance: none;">
                             </label>
                         </div>
