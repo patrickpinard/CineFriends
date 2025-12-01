@@ -83,6 +83,9 @@ def create_user():
                 flash("Un email est requis pour activer la 2FA.", "danger")
                 return render_template("dashboard/user_form.html", form=form, is_edit=False, user=None)
             user = User(
+                title=form.title.data.strip() if form.title.data else None,
+                first_name=form.first_name.data.strip() if form.first_name.data else None,
+                last_name=form.last_name.data.strip() if form.last_name.data else None,
                 username=form.username.data,
                 email=form.email.data.strip() if form.email.data else None,
                 role=form.role.data,
@@ -90,6 +93,11 @@ def create_user():
             )
             if form.avatar.data:
                 user.avatar_filename = save_avatar(form.avatar.data)
+            user.street = form.street.data.strip() if form.street.data else None
+            user.postal_code = form.postal_code.data.strip() if form.postal_code.data else None
+            user.city = form.city.data.strip() if form.city.data else None
+            user.country = form.country.data.strip() if form.country.data else None
+            user.phone = form.phone.data.strip() if form.phone.data else None
             user.twofa_enabled = form.twofa_enabled.data
             if not user.twofa_enabled:
                 user.twofa_code_hash = None
@@ -180,9 +188,17 @@ def edit_user(user_id: int):
             elif form.avatar.data:
                 delete_avatar(user.avatar_filename)
                 user.avatar_filename = save_avatar(form.avatar.data)
+            user.title = form.title.data.strip() if form.title.data else None
+            user.first_name = form.first_name.data.strip() if form.first_name.data else None
+            user.last_name = form.last_name.data.strip() if form.last_name.data else None
             user.username = form.username.data
             user.email = form.email.data.strip() if form.email.data else None
             user.role = form.role.data
+            user.street = form.street.data.strip() if form.street.data else None
+            user.postal_code = form.postal_code.data.strip() if form.postal_code.data else None
+            user.city = form.city.data.strip() if form.city.data else None
+            user.country = form.country.data.strip() if form.country.data else None
+            user.phone = form.phone.data.strip() if form.phone.data else None
             if user.username == "admin":
                 user.active = True
             else:

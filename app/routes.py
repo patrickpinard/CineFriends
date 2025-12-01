@@ -3,15 +3,17 @@ from __future__ import annotations
 import json
 import threading
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Generator, Tuple, Optional, Union
 
 from flask import (Blueprint, Response, current_app, flash, jsonify, redirect,
-                   render_template, request, url_for)
+                   render_template, request, send_from_directory, url_for)
 from flask_login import current_user, login_required
 from sqlalchemy import func
 from urllib.parse import urlencode
 
 from . import db, schedule_sensor_poll, schedule_lcd_auto_scroll, invalidate_lcd_display_seconds_cache
+from . import csrf
 from .forms import AutomationRuleForm, ProfileForm, SettingForm
 from .models import AutomationRule, JournalEntry, Notification, RelayState, SensorReading, Setting, User
 from .services import create_notification
@@ -192,13 +194,118 @@ def _extract_relay_action_description(line: str) -> str:
     try:
         _, command = line.split(":", 1)
         channel_part, state_part = command.split("=", 1)
-        channel = channel_part.strip()
+        channel = int(channel_part.strip())
         state = state_part.strip().lower()
         state_map = {"on": "Allumer", "off": "Éteindre", "toggle": "Basculer"}
         label = state_map.get(state, state.upper())
-        return f"Relais {channel} → {label}"
+        # Utiliser le nom du relais au lieu du numéro
+        relay_labels = get_relay_labels()
+        relay_name = relay_labels.get(channel, f"Relais {channel}")
+        return f"{relay_name} → {label}"
     except Exception:
         return line.strip()
+
+
+def _format_action_text(action: str) -> str:
+    """Formate le texte d'action en remplaçant les références de relais par leurs noms."""
+    if not action or action.strip() == "noop":
+        return "Aucune action programmée"
+    
+    relay_labels = get_relay_labels()
+    lines = []
+    for line in action.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        
+        if line.lower().startswith("relay:"):
+            try:
+                _, command = line.split(":", 1)
+                channel_part, state_part = command.split("=", 1)
+                channel = int(channel_part.strip())
+                state = state_part.strip().lower()
+                state_map = {"on": "Allumer", "off": "Éteindre", "toggle": "Basculer"}
+                label = state_map.get(state, state.upper())
+                relay_name = relay_labels.get(channel, f"Relais {channel}")
+                lines.append(f"{relay_name} → {label}")
+            except Exception:
+                lines.append(line)
+        elif line.lower().startswith("email:"):
+            try:
+                _, command = line.split(":", 1)
+                if "=" in command:
+                    user_part, user_id = command.split("=", 1)
+                    if user_part.strip() == "user":
+                        from .models import User
+                        user = User.query.get(int(user_id.strip()))
+                        if user:
+                            lines.append(f"Email → {user.username}")
+                        else:
+                            lines.append(line)
+                    else:
+                        lines.append(line)
+                else:
+                    lines.append(line)
+            except Exception:
+                lines.append(line)
+        else:
+            lines.append(line)
+    
+    return "\n".join(lines) if lines else "Aucune action programmée"
+
+
+def _format_trigger_text(trigger_str: str) -> dict[str, str]:
+    """Formate le texte de déclencheur pour l'affichage."""
+    trigger = parse_trigger(trigger_str)
+    if not trigger:
+        return {
+            "formatted": trigger_str,
+            "sensor_type": None,
+            "metric": None,
+            "operator": None,
+            "threshold": None,
+            "sensor_id": None,
+        }
+    
+    sensor_name = get_sensor_display_name(trigger.sensor_type)
+    metric_label = METRIC_LABELS.get(trigger.metric, trigger.metric.title())
+    
+    # Formater l'opérateur pour l'affichage
+    operator_map = {
+        ">=": "≥",
+        "<=": "≤",
+        ">": ">",
+        "<": "<",
+        "==": "=",
+        "!=": "≠",
+    }
+    operator_display = operator_map.get(trigger.operator, trigger.operator)
+    
+    # Formater le seuil avec unité si nécessaire
+    threshold_str = str(trigger.threshold)
+    if trigger.metric == "temperature":
+        threshold_str = f"{trigger.threshold}°C"
+    elif trigger.metric == "humidity":
+        threshold_str = f"{trigger.threshold}%"
+    
+    # Construire le texte formaté
+    parts = [sensor_name, metric_label.lower()]
+    if trigger.sensor_id:
+        parts.append(f"({trigger.sensor_id.upper()})")
+    formatted = f"{' '.join(parts)} {operator_display} {threshold_str}"
+    
+    return {
+        "formatted": formatted,
+        "sensor_type": trigger.sensor_type,
+        "metric": trigger.metric,
+        "operator": trigger.operator,
+        "operator_display": operator_display,
+        "threshold": trigger.threshold,
+        "threshold_str": threshold_str,
+        "sensor_id": trigger.sensor_id,
+        "sensor_name": sensor_name,
+        "metric_label": metric_label,
+    }
 
 
 def _collect_relay_states_with_fallback(relay_pins: dict[int, int]) -> dict[int, str]:
@@ -542,8 +649,43 @@ HARDWARE_SETTING_GROUPS = [
 ]
 
 
+def _generate_error_image(message: str = "Caméra indisponible") -> bytes:
+    """Génère une image JPEG d'erreur avec un message texte"""
+    if cv2 is None or np is None:
+        # Retourner une image JPEG minimale si OpenCV n'est pas disponible
+        return b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x01\x01\x11\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x14\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\xff\xc4\x00\x14\x10\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xaa\xff\xd9'
+    
+    try:
+        # Créer une image noire 640x480
+        img = np.zeros((480, 640, 3), dtype=np.uint8)
+        
+        # Ajouter le texte d'erreur
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        color = (255, 255, 255)  # Blanc
+        thickness = 2
+        
+        # Centrer le texte
+        text = message
+        text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
+        text_x = (640 - text_size[0]) // 2
+        text_y = (480 + text_size[1]) // 2
+        
+        cv2.putText(img, text, (text_x, text_y), font, font_scale, color, thickness)
+        
+        # Encoder en JPEG
+        ret, buffer = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if ret:
+            return buffer.tobytes()
+    except Exception:
+        pass
+    
+    # En cas d'erreur, retourner l'image JPEG minimale
+    return b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x01\x01\x11\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x14\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\xff\xc4\x00\x14\x10\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xaa\xff\xd9'
+
+
 def _camera_stream(device_index: int = 0) -> Generator[bytes, None, None]:
-    """Générateur pour le flux vidéo de la caméra USB
+    """Générateur pour le flux vidéo de la caméra USB avec reconnexion automatique
     
     Args:
         device_index: Index du périphérique caméra (défaut: 0)
@@ -553,31 +695,240 @@ def _camera_stream(device_index: int = 0) -> Generator[bytes, None, None]:
             current_app.logger.error("OpenCV n'est pas installé pour le streaming caméra.")
         except RuntimeError:
             print("OpenCV n'est pas installé pour le streaming caméra.")
-        raise RuntimeError("Camera indisponible")
-
-    capture = cv2.VideoCapture(device_index)
-    if not capture.isOpened():
-        try:
-            current_app.logger.error("Impossible d'ouvrir la caméra USB.")
-        except RuntimeError:
-            print("Impossible d'ouvrir la caméra USB.")
-        raise RuntimeError("Camera indisponible")
-
-    try:
+        # Générer une image d'erreur au lieu de lever une exception
+        error_image = _generate_error_image("OpenCV non disponible")
         while True:
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+            import time
+            time.sleep(2.0)
+        return
+
+    import time
+    global _shared_camera_frame
+    
+    capture = None
+    consecutive_failures = 0
+    max_consecutive_failures = 5  # Nombre d'échecs avant reconnexion (réduit pour réagir plus vite)
+    reconnect_delay = 0.5  # Délai avant reconnexion (secondes) - réduit pour reconnexion plus rapide
+    check_interval = 15  # Vérifier la connexion toutes les 15 frames (plus fréquent)
+    last_successful_frame = time.time()  # Timestamp de la dernière frame réussie
+    max_time_without_frame = 5.0  # Maximum 5 secondes sans frame avant reconnexion
+    
+    def open_camera():
+        """Ouvre la caméra avec plusieurs tentatives et détection automatique de l'index"""
+        nonlocal capture
+        max_attempts = 3
+        
+        # Essayer d'abord l'index configuré, puis d'autres indices (0, 1, 2)
+        indices_to_try = [device_index]
+        if device_index != 0:
+            indices_to_try.append(0)
+        for i in range(1, 4):
+            if i not in indices_to_try:
+                indices_to_try.append(i)
+        
+        for camera_idx in indices_to_try:
+            for attempt in range(max_attempts):
+                try:
+                    if capture is not None:
+                        try:
+                            capture.release()
+                        except:
+                            pass
+                        capture = None
+                    
+                    capture = cv2.VideoCapture(camera_idx)
+                    if capture.isOpened():
+                        # Attendre un peu pour que la caméra soit prête
+                        time.sleep(0.3)
+                        # Lire quelques frames pour initialiser et vérifier que ça fonctionne
+                        success_count = 0
+                        for _ in range(5):
+                            ret, _ = capture.read()
+                            if ret:
+                                success_count += 1
+                            time.sleep(0.1)
+                        
+                        if success_count > 0:
+                            try:
+                                current_app.logger.info(f"Caméra ouverte avec succès sur l'index {camera_idx}")
+                            except RuntimeError:
+                                pass
+                            return True
+                        else:
+                            # La caméra est ouverte mais ne peut pas lire de frames
+                            try:
+                                current_app.logger.warning(f"Caméra index {camera_idx} ouverte mais ne peut pas lire de frames")
+                            except RuntimeError:
+                                pass
+                            if capture:
+                                try:
+                                    capture.release()
+                                except:
+                                    pass
+                                capture = None
+                except Exception as e:
+                    try:
+                        current_app.logger.warning(f"Tentative d'ouverture caméra index {camera_idx} échouée: {e}")
+                    except RuntimeError:
+                        pass
+                    if capture:
+                        try:
+                            capture.release()
+                        except:
+                            pass
+                        capture = None
+                
+                if attempt < max_attempts - 1:
+                    time.sleep(0.5)
+        
+        return False
+    
+    # Ouvrir la caméra initialement
+    if not open_camera():
+        try:
+            current_app.logger.error("Impossible d'ouvrir la caméra USB. Vérifiez que la caméra est connectée et accessible.")
+        except RuntimeError:
+            print("Impossible d'ouvrir la caméra USB. Vérifiez que la caméra est connectée et accessible.")
+        # Retourner une image d'erreur au lieu de lever une exception
+        error_image = _generate_error_image("Caméra indisponible")
+        retry_count = 0
+        max_retries = 30  # Réessayer pendant 30 secondes avant d'abandonner
+        while retry_count < max_retries:
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+            time.sleep(1.0)  # Attendre 1 seconde avant de réessayer
+            retry_count += 1
+            # Réessayer d'ouvrir la caméra périodiquement
+            if open_camera():
+                try:
+                    current_app.logger.info("Caméra reconnectée avec succès après tentative de réouverture")
+                except RuntimeError:
+                    pass
+                break
+        
+        # Si toujours pas de caméra après les tentatives, continuer à envoyer l'image d'erreur
+        if not (capture and capture.isOpened()):
+            while True:
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                time.sleep(2.0)  # Attendre 2 secondes entre les tentatives
+                if open_camera():
+                    break
+            # Une fois la caméra ouverte, continuer avec le flux normal
+            if not (capture and capture.isOpened()):
+                return  # Sortir si toujours pas de caméra
+    
+    try:
+        frame_count = 0
+        while True:
+            # Vérifier périodiquement que la caméra est toujours ouverte
+            if frame_count % check_interval == 0:
+                if capture is None or not capture.isOpened():
+                    try:
+                        current_app.logger.warning("Caméra fermée, tentative de reconnexion...")
+                    except RuntimeError:
+                        pass
+                    if not open_camera():
+                        consecutive_failures += 1
+                        if consecutive_failures >= max_consecutive_failures:
+                            try:
+                                current_app.logger.error("Trop d'échecs de connexion à la caméra. Envoi d'image d'erreur.")
+                            except RuntimeError:
+                                pass
+                            # Envoyer une image d'erreur au lieu de lever une exception
+                            error_image = _generate_error_image("Caméra déconnectée")
+                            for _ in range(10):  # Envoyer l'image d'erreur pendant 10 secondes
+                                yield (b"--frame\r\n"
+                                       b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                                time.sleep(1.0)
+                            # Réessayer d'ouvrir la caméra
+                            if open_camera():
+                                consecutive_failures = 0
+                                continue
+                            else:
+                                # Si toujours pas de caméra, continuer à envoyer l'image d'erreur
+                                while True:
+                                    yield (b"--frame\r\n"
+                                           b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                                    time.sleep(2.0)
+                                    if open_camera():
+                                        consecutive_failures = 0
+                                        break
+                        time.sleep(reconnect_delay)
+                        continue
+                    consecutive_failures = 0
+            
+            # Lire la frame
             success, frame = capture.read()
+            
             if not success:
+                consecutive_failures += 1
+                # Si trop d'échecs consécutifs, réessayer d'ouvrir la caméra
+                if consecutive_failures >= max_consecutive_failures:
+                    try:
+                        current_app.logger.warning(f"{consecutive_failures} échecs consécutifs, reconnexion à la caméra...")
+                    except RuntimeError:
+                        pass
+                    if not open_camera():
+                        try:
+                            current_app.logger.error("Impossible de reconnecter la caméra. Envoi d'image d'erreur.")
+                        except RuntimeError:
+                            pass
+                        # Envoyer une image d'erreur au lieu de lever une exception
+                        error_image = _generate_error_image("Caméra déconnectée")
+                        for _ in range(10):  # Envoyer l'image d'erreur pendant 10 secondes
+                            yield (b"--frame\r\n"
+                                   b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                            time.sleep(1.0)
+                        # Réessayer d'ouvrir la caméra
+                        if open_camera():
+                            consecutive_failures = 0
+                            continue
+                        else:
+                            # Si toujours pas de caméra, continuer à envoyer l'image d'erreur
+                            while True:
+                                yield (b"--frame\r\n"
+                                       b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                                time.sleep(2.0)
+                                if open_camera():
+                                    consecutive_failures = 0
+                                    break
+                    consecutive_failures = 0
+                    continue
+                
+                time.sleep(0.1)  # Petite pause avant de réessayer
                 continue
 
-            ret, buffer = cv2.imencode(".jpg", frame)
+            # Réinitialiser le compteur d'échecs en cas de succès
+            consecutive_failures = 0
+            last_successful_frame = time.time()  # Mettre à jour le timestamp de la dernière frame réussie
+            frame_count += 1
+            
+            # Stocker la dernière frame pour la capture photo
+            with _shared_frame_lock:
+                _shared_camera_frame = frame.copy() if frame is not None else None
+            
+            # Encoder l'image en JPEG avec une qualité raisonnable
+            ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             if not ret:
                 continue
 
             frame_bytes = buffer.tobytes()
             yield (b"--frame\r\n"
                    b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+            
+            # Petite pause pour éviter de surcharger le CPU (~30 FPS)
+            time.sleep(0.033)
     finally:
-        capture.release()
+        if capture is not None:
+            try:
+                capture.release()
+            except:
+                pass
+        with _shared_frame_lock:
+            _shared_camera_frame = None
 
 
 @main_bp.route("/")
@@ -666,12 +1017,30 @@ def dashboard_highlights_api():
     return jsonify({"cards": cards})
 
 
-@main_bp.route("/api/relays/states")
+@main_bp.route("/api/relays/states", methods=["GET", "OPTIONS"])
 @login_required
 def relays_states_api():
+    # Gérer les requêtes OPTIONS (preflight CORS)
+    if request.method == "OPTIONS":
+        response = Response()
+        origin = request.headers.get('Origin', '*')
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRFToken, X-Requested-With')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response
+    
     relay_pins = get_configured_relay_pins()
     states = _collect_relay_states_with_fallback(relay_pins)
-    return jsonify({"states": states, "timestamp": datetime.utcnow().isoformat()})
+    response = jsonify({"states": states, "timestamp": datetime.utcnow().isoformat()})
+    # Ajouter les headers CORS explicitement pour cette route
+    origin = request.headers.get('Origin', '*')
+    response.headers.add('Access-Control-Allow-Origin', origin)
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRFToken, X-Requested-With')
+    return response
 
 
 @main_bp.route("/graphiques", methods=["GET"])
@@ -960,6 +1329,94 @@ def charts():
             },
         )
         series_entry["data"].append({"x": timestamp_ms, "y": value})
+
+    # Ajouter la dernière valeur brute de chaque capteur pour garantir la cohérence avec le dashboard
+    # Cela évite les différences dues à l'agrégation des données
+    latest_readings = {}
+    for sensor_type in ["ds18b20", "am2315"]:
+        for metric in ["temperature", "humidity"]:
+            if sensor_type == "ds18b20" and metric == "humidity":
+                continue  # DS18B20 ne mesure que la température
+            latest = (
+                SensorReading.query.filter(
+                    SensorReading.sensor_type == sensor_type,
+                    SensorReading.metric == metric,
+                    SensorReading.value.isnot(None),
+                )
+                .order_by(SensorReading.created_at.desc())
+                .first()
+            )
+            if latest:
+                key = (sensor_type, metric)
+                latest_readings[key] = {
+                    "value": float(latest.value),
+                    "timestamp_utc": latest.created_at,
+                }
+    
+    # Ajouter les dernières valeurs brutes aux séries correspondantes
+    for key, latest_data in latest_readings.items():
+        sensor_type, metric = key
+        
+        # Déterminer le nom de la série comme dans le code précédent
+        if sensor_type == "ds18b20":
+            alias = get_sensor_display_name("ds18b20")
+            series_name = alias or "Température DS18B20"
+        elif sensor_type == "am2315":
+            if metric == "temperature":
+                alias = get_sensor_display_name("am2315")
+                series_name = alias or "Température AM2315"
+            elif metric == "humidity":
+                alias = get_sensor_display_name("am2315")
+                series_name = f"Humidité {alias}" if alias else "Humidité AM2315"
+            else:
+                continue
+        else:
+            continue
+        
+        # Trouver la série correspondante
+        series_entry = None
+        for series in series_map.values():
+            meta = series.get("meta", {})
+            if meta.get("sensor_type") == sensor_type and meta.get("metric") == metric:
+                series_entry = series
+                break
+        
+        if series_entry:
+            # Convertir le timestamp UTC en millisecondes Unix
+            timestamp_ms = utc_to_unix_ms_for_chart(latest_data["timestamp_utc"])
+            value = round(latest_data["value"], 2)
+            
+            data_points = series_entry.get("data", [])
+            
+            # Trouver le dernier point existant (le plus récent)
+            last_point_index = None
+            last_point_timestamp = None
+            if data_points:
+                # Les points sont déjà triés par timestamp croissant
+                for i, point in enumerate(data_points):
+                    point_ts = point.get("x", 0)
+                    if last_point_timestamp is None or point_ts > last_point_timestamp:
+                        last_point_timestamp = point_ts
+                        last_point_index = i
+            
+            # Si la dernière valeur brute est plus récente que le dernier point agrégé, la remplacer
+            # Sinon, l'ajouter seulement si elle n'existe pas déjà
+            if last_point_index is not None and timestamp_ms >= last_point_timestamp:
+                # Remplacer le dernier point par la valeur brute la plus récente
+                data_points[last_point_index] = {"x": timestamp_ms, "y": value}
+            else:
+                # Vérifier si cette valeur n'est pas déjà présente (pour éviter les doublons)
+                is_duplicate = False
+                for point in data_points:
+                    if point.get("x") == timestamp_ms and point.get("y") == value:
+                        is_duplicate = True
+                        break
+                
+                # Ajouter seulement si ce n'est pas un doublon
+                if not is_duplicate:
+                    data_points.append({"x": timestamp_ms, "y": value})
+                    # Trier par timestamp pour maintenir l'ordre chronologique
+                    data_points.sort(key=lambda p: p.get("x", 0))
 
     chart_series: list[dict[str, object]] = list(series_map.values())
     
@@ -1282,6 +1739,7 @@ def automation():
 
     sensor_registry = _build_sensor_registry()
     relay_pins = get_configured_relay_pins()
+    relay_labels = get_relay_labels()
     _hydrate_rule_form(form, sensor_registry, relay_pins)
 
     search = request.args.get("q", "").strip()
@@ -1312,6 +1770,87 @@ def automation():
     filters_query = urlencode({k: v for k, v in filters.items() if v})
 
     if form.validate_on_submit():
+        # Validation personnalisée : au moins une action doit être configurée
+        relay_enabled = bool(form.relay_action_enabled.data)
+        notify_user = form.notify_user_id.data or None
+        
+        if relay_enabled:
+            if not form.relay_channel.data or not form.relay_action.data:
+                flash("Si la commande relais est activée, le relais et l'action doivent être sélectionnés.", "warning")
+                _hydrate_rule_form(form, sensor_registry, relay_pins)
+                rules = query.all()
+                formatted_rules = []
+                for r in rules:
+                    trigger_formatted = _format_trigger_text(r.trigger)
+                    rule_dict = {
+                        'id': r.id,
+                        'name': r.name,
+                        'trigger': r.trigger,
+                        'trigger_formatted': trigger_formatted,
+                        'action': r.action,
+                        'action_formatted': _format_action_text(r.action),
+                        'enabled': r.enabled,
+                        'cooldown_seconds': r.cooldown_seconds,
+                        'created_at': r.created_at,
+                        'updated_at': r.updated_at,
+                        'last_triggered_at': r.last_triggered_at,
+                        'owner': r.owner,
+                    }
+                    formatted_rules.append(rule_dict)
+                return render_template(
+                    "dashboard/automation.html",
+                    form=form,
+                    rules=formatted_rules,
+                    filters=filters,
+                    filters_query=filters_query,
+                    form_action=url_for("main.automation") + ("?" + filters_query if filters_query else ""),
+                    form_title="Créer une règle",
+                    form_subtitle="Définissez les déclencheurs et actions pour automatiser vos scénarios.",
+                    submit_label="Enregistrer",
+                    cancel_url=None,
+                    editing_rule_id=None,
+                    sensor_registry_json=json.dumps(sensor_registry),
+                    relay_labels_json=json.dumps(relay_labels),
+                )
+        
+        if not relay_enabled and (not notify_user or notify_user == 0):
+            flash("Au moins une action doit être configurée : commande relais ou notification par email.", "warning")
+            _hydrate_rule_form(form, sensor_registry, relay_pins)
+            rules = query.all()
+            formatted_rules = []
+            for r in rules:
+                trigger_formatted = _format_trigger_text(r.trigger)
+                rule_dict = {
+                    'id': r.id,
+                    'name': r.name,
+                    'trigger': r.trigger,
+                    'trigger_formatted': trigger_formatted,
+                    'action': r.action,
+                    'action_formatted': _format_action_text(r.action),
+                    'enabled': r.enabled,
+                    'cooldown_seconds': r.cooldown_seconds,
+                    'created_at': r.created_at,
+                    'updated_at': r.updated_at,
+                    'last_triggered_at': r.last_triggered_at,
+                    'owner': r.owner,
+                }
+                formatted_rules.append(rule_dict)
+            return render_template(
+                "dashboard/automation.html",
+                form=form,
+                rules=formatted_rules,
+                filters=filters,
+                filters_query=filters_query,
+                form_action=url_for("main.automation") + ("?" + filters_query if filters_query else ""),
+                form_title="Créer une règle",
+                form_subtitle="Définissez les déclencheurs et actions pour automatiser vos scénarios.",
+                submit_label="Enregistrer",
+                cancel_url=None,
+                editing_rule_id=None,
+                sensor_registry_json=json.dumps(sensor_registry),
+                relay_labels_json=json.dumps(relay_labels),
+            )
+        
         cooldown = form.cooldown_seconds.data if form.cooldown_seconds.data is not None else 300
         trigger_str = build_trigger_expression(
             sensor_type=form.sensor_type.data,
@@ -1320,8 +1859,6 @@ def automation():
             operator=form.operator.data,
             threshold=form.threshold.data,
         )
-        relay_enabled = bool(form.relay_action_enabled.data)
-        notify_user = form.notify_user_id.data or None
         action_str = build_action_expression(
             channel=form.relay_channel.data,
             command=form.relay_action.data,
@@ -1344,10 +1881,34 @@ def automation():
         return redirect(redirect_url)
 
     rules = query.all()
+    # Formater les actions et déclencheurs pour l'affichage
+    formatted_rules = []
+    for rule in rules:
+        trigger_formatted = _format_trigger_text(rule.trigger)
+        rule_dict = {
+            'id': rule.id,
+            'name': rule.name,
+            'trigger': rule.trigger,
+            'trigger_formatted': trigger_formatted,
+            'action': rule.action,
+            'action_formatted': _format_action_text(rule.action),
+            'enabled': rule.enabled,
+            'cooldown_seconds': rule.cooldown_seconds,
+            'created_at': rule.created_at,
+            'updated_at': rule.updated_at,
+            'last_triggered_at': rule.last_triggered_at,
+            'owner': rule.owner,
+        }
+        formatted_rules.append(rule_dict)
+    
+    # S'assurer que relay_labels est défini
+    if 'relay_labels' not in locals():
+        relay_labels = get_relay_labels()
+    
     return render_template(
         "dashboard/automation.html",
         form=form,
-        rules=rules,
+        rules=formatted_rules,
         filters=filters,
         filters_query=filters_query,
         form_action=url_for("main.automation") + ("?" + filters_query if filters_query else ""),
@@ -1357,6 +1918,7 @@ def automation():
         cancel_url=None,
         editing_rule_id=None,
         sensor_registry_json=json.dumps(sensor_registry),
+        relay_labels_json=json.dumps(relay_labels),
     )
 
 
@@ -1375,6 +1937,7 @@ def edit_rule(rule_id: int):
 
     sensor_registry = _build_sensor_registry()
     relay_pins = get_configured_relay_pins()
+    relay_labels = get_relay_labels()
 
     if request.method == "GET":
         form.name.data = rule.name
@@ -1427,6 +1990,101 @@ def edit_rule(rule_id: int):
     filters_query = urlencode({k: v for k, v in filters.items() if v})
 
     if form.validate_on_submit():
+        # Validation personnalisée : au moins une action doit être configurée
+        relay_enabled = bool(form.relay_action_enabled.data)
+        notify_user = form.notify_user_id.data or None
+        
+        if relay_enabled:
+            if not form.relay_channel.data or not form.relay_action.data:
+                flash("Si la commande relais est activée, le relais et l'action doivent être sélectionnés.", "warning")
+                _hydrate_rule_form(form, sensor_registry, relay_pins)
+                rules = query.all()
+                formatted_rules = []
+                for r in rules:
+                    trigger_formatted = _format_trigger_text(r.trigger)
+                    rule_dict = {
+                        'id': r.id,
+                        'name': r.name,
+                        'trigger': r.trigger,
+                        'trigger_formatted': trigger_formatted,
+                        'action': r.action,
+                        'action_formatted': _format_action_text(r.action),
+                        'enabled': r.enabled,
+                        'cooldown_seconds': r.cooldown_seconds,
+                        'created_at': r.created_at,
+                        'updated_at': r.updated_at,
+                        'last_triggered_at': r.last_triggered_at,
+                        'owner': r.owner,
+                    }
+                    formatted_rules.append(rule_dict)
+                form_action = url_for("main.edit_rule", rule_id=rule.id)
+                cancel_url = url_for("main.automation")
+                if filters_query:
+                    form_action = f"{form_action}?{filters_query}"
+                    cancel_url = f"{cancel_url}?{filters_query}"
+                if 'relay_labels' not in locals():
+                    relay_labels = get_relay_labels()
+                return render_template(
+                    "dashboard/automation.html",
+                    form=form,
+                    rules=formatted_rules,
+                    filters=filters,
+                    filters_query=filters_query,
+                    form_action=form_action,
+                    form_title="Modifier la règle",
+                    form_subtitle=f"Dernière mise à jour le {format_local_datetime(rule.updated_at if rule.updated_at else rule.created_at)}",
+                    submit_label="Mettre à jour",
+                    cancel_url=cancel_url,
+                    editing_rule_id=rule.id,
+                    sensor_registry_json=json.dumps(sensor_registry),
+                    relay_labels_json=json.dumps(relay_labels),
+                )
+        
+        if not relay_enabled and (not notify_user or notify_user == 0):
+            flash("Au moins une action doit être configurée : commande relais ou notification par email.", "warning")
+            _hydrate_rule_form(form, sensor_registry, relay_pins)
+            rules = query.all()
+            formatted_rules = []
+            for r in rules:
+                trigger_formatted = _format_trigger_text(r.trigger)
+                rule_dict = {
+                    'id': r.id,
+                    'name': r.name,
+                    'trigger': r.trigger,
+                    'trigger_formatted': trigger_formatted,
+                    'action': r.action,
+                    'action_formatted': _format_action_text(r.action),
+                    'enabled': r.enabled,
+                    'cooldown_seconds': r.cooldown_seconds,
+                    'created_at': r.created_at,
+                    'updated_at': r.updated_at,
+                    'last_triggered_at': r.last_triggered_at,
+                    'owner': r.owner,
+                }
+                formatted_rules.append(rule_dict)
+            form_action = url_for("main.edit_rule", rule_id=rule.id)
+            cancel_url = url_for("main.automation")
+            if filters_query:
+                form_action = f"{form_action}?{filters_query}"
+                cancel_url = f"{cancel_url}?{filters_query}"
+            if 'relay_labels' not in locals():
+                relay_labels = get_relay_labels()
+            return render_template(
+                "dashboard/automation.html",
+                form=form,
+                rules=formatted_rules,
+                filters=filters,
+                filters_query=filters_query,
+                form_action=form_action,
+                form_title="Modifier la règle",
+                form_subtitle=f"Dernière mise à jour le {format_local_datetime(rule.updated_at if rule.updated_at else rule.created_at)}",
+                submit_label="Mettre à jour",
+                cancel_url=cancel_url,
+                editing_rule_id=rule.id,
+                sensor_registry_json=json.dumps(sensor_registry),
+                relay_labels_json=json.dumps(relay_labels),
+            )
+        
         cooldown = form.cooldown_seconds.data if form.cooldown_seconds.data is not None else 300
         trigger_str = build_trigger_expression(
             sensor_type=form.sensor_type.data,
@@ -1435,8 +2093,6 @@ def edit_rule(rule_id: int):
             operator=form.operator.data,
             threshold=form.threshold.data,
         )
-        relay_enabled = bool(form.relay_action_enabled.data)
-        notify_user = form.notify_user_id.data or None
         action_str = build_action_expression(
             channel=form.relay_channel.data,
             command=form.relay_action.data,
@@ -1485,6 +2141,29 @@ def edit_rule(rule_id: int):
         return redirect(redirect_url)
 
     rules = query.all()
+    # Formater les actions et déclencheurs pour l'affichage
+    formatted_rules = []
+    for r in rules:
+        trigger_formatted = _format_trigger_text(r.trigger)
+        rule_dict = {
+            'id': r.id,
+            'name': r.name,
+            'trigger': r.trigger,
+            'trigger_formatted': trigger_formatted,
+            'action': r.action,
+            'action_formatted': _format_action_text(r.action),
+            'enabled': r.enabled,
+            'cooldown_seconds': r.cooldown_seconds,
+            'created_at': r.created_at,
+            'updated_at': r.updated_at,
+            'last_triggered_at': r.last_triggered_at,
+            'owner': r.owner,
+        }
+        formatted_rules.append(rule_dict)
+
+    # S'assurer que relay_labels est défini
+    if 'relay_labels' not in locals():
+        relay_labels = get_relay_labels()
 
     form_action = url_for("main.edit_rule", rule_id=rule.id)
     cancel_url = url_for("main.automation")
@@ -1495,7 +2174,7 @@ def edit_rule(rule_id: int):
     return render_template(
         "dashboard/automation.html",
         form=form,
-        rules=rules,
+        rules=formatted_rules,
         filters=filters,
         filters_query=filters_query,
         form_action=form_action,
@@ -1505,6 +2184,7 @@ def edit_rule(rule_id: int):
         cancel_url=cancel_url,
         editing_rule_id=rule.id,
         sensor_registry_json=json.dumps(sensor_registry),
+        relay_labels_json=json.dumps(relay_labels),
     )
 
 
@@ -1529,19 +2209,593 @@ def delete_rule(rule_id: int):
 @login_required
 def camera():
     camera_available = current_app.config.get("CAMERA_AVAILABLE", False)
-    return render_template("dashboard/camera.html", camera_available=bool(camera_available))
+    
+    # Récupérer les captures récentes
+    captures_folder = current_app.config.get("CAPTURES_FOLDER")
+    if captures_folder:
+        captures_dir = Path(captures_folder)
+    else:
+        static_folder = current_app.static_folder or "app/static"
+        captures_dir = Path(static_folder) / "captures"
+    captures_dir.mkdir(parents=True, exist_ok=True)
+    
+    captures = []
+    if captures_dir.exists():
+        for file_path in sorted(captures_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
+            if file_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".mp4", ".avi", ".mov"}:
+                captures.append({
+                    "filename": file_path.name,
+                    "type": "video" if file_path.suffix.lower() in {".mp4", ".avi", ".mov"} else "photo",
+                    "size": file_path.stat().st_size,
+                    "created_at": datetime.fromtimestamp(file_path.stat().st_mtime),
+                    "filepath": str(file_path),
+                })
+    
+    return render_template("dashboard/camera.html", camera_available=bool(camera_available), captures=captures)
 
 
 @main_bp.route("/camera/flux")
 @login_required
 def camera_feed():
+    # Vérifier si la caméra est connectée
+    global _camera_connected
+    if not _camera_connected:
+        # Retourner une image placeholder quand le flux est désactivé
+        def placeholder_stream():
+            placeholder_image = _generate_error_image("Flux vidéo désactivé")
+            while True:
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n\r\n" + placeholder_image + b"\r\n")
+                import time
+                time.sleep(2.0)
+        response = Response(
+            placeholder_stream(),
+            mimetype="multipart/x-mixed-replace; boundary=frame"
+        )
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Connection'] = 'keep-alive'
+        return response
+    
     try:
+        # Vérifier que cv2 est disponible
+        if cv2 is None:
+            current_app.logger.error("OpenCV n'est pas disponible pour le streaming caméra.")
+            # Retourner un stream d'erreur au lieu de 503
+            def error_stream():
+                error_image = _generate_error_image("OpenCV non disponible")
+                while True:
+                    yield (b"--frame\r\n"
+                           b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                    import time
+                    time.sleep(2.0)
+            response = Response(
+                error_stream(),
+                mimetype="multipart/x-mixed-replace; boundary=frame"
+            )
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['Connection'] = 'keep-alive'
+            return response
+        
         # Capturer l'index du périphérique avant de créer le générateur pour éviter les problèmes de contexte
         device_index = current_app.config.get("CAMERA_DEVICE_INDEX", 0)
-        return Response(_camera_stream(device_index=device_index), mimetype="multipart/x-mixed-replace; boundary=frame")
-    except RuntimeError:
-        flash("Caméra indisponible.", "danger")
-        return redirect(url_for("main.camera"))
+        
+        # Créer la réponse avec les bons headers pour le streaming MJPEG
+        response = Response(
+            _camera_stream(device_index=device_index),
+            mimetype="multipart/x-mixed-replace; boundary=frame"
+        )
+        # Ajouter des headers pour éviter la mise en cache et permettre la reconnexion
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Connection'] = 'keep-alive'
+        return response
+    except RuntimeError as e:
+        current_app.logger.error(f"Erreur lors du streaming caméra: {e}")
+        # Générer une image d'erreur et la retourner en streaming
+        error_image = _generate_error_image("Caméra indisponible")
+        def error_stream():
+            while True:
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                import time
+                time.sleep(2.0)
+        response = Response(
+            error_stream(),
+            mimetype="multipart/x-mixed-replace; boundary=frame"
+        )
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Connection'] = 'keep-alive'
+        return response
+    except Exception as e:
+        current_app.logger.error(f"Erreur inattendue lors du streaming caméra: {e}", exc_info=True)
+        # Retourner un stream d'erreur au lieu de 500
+        error_image = _generate_error_image("Erreur caméra")
+        def error_stream():
+            while True:
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n\r\n" + error_image + b"\r\n")
+                import time
+                time.sleep(2.0)
+        response = Response(
+            error_stream(),
+            mimetype="multipart/x-mixed-replace; boundary=frame"
+        )
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Connection'] = 'keep-alive'
+        return response
+
+
+# Verrou pour partager l'accès à la caméra entre le flux MJPEG et les captures
+_camera_lock = threading.Lock()
+# Dernière frame capturée pour permettre la capture photo sans ouvrir une nouvelle instance
+_shared_camera_frame: Optional[Any] = None
+_shared_frame_lock = threading.Lock()
+# État du flux vidéo (True = flux actif, False = flux désactivé)
+_camera_connected = False  # Par défaut, le flux vidéo est désactivé pour économiser les ressources
+
+
+@main_bp.route("/camera/capture/photo", methods=["POST"])
+@login_required
+def capture_photo():
+    """Capture une photo depuis la caméra"""
+    try:
+        import cv2  # type: ignore
+        import time
+        
+        device_index = current_app.config.get("CAMERA_DEVICE_INDEX", 0)
+        
+        # Essayer d'abord d'utiliser la frame partagée du flux MJPEG
+        frame = None
+        with _shared_frame_lock:
+            if _shared_camera_frame is not None:
+                frame = _shared_camera_frame.copy()
+        
+        # Si pas de frame partagée disponible, essayer d'ouvrir la caméra directement
+        if frame is None:
+            # Utiliser un verrou pour éviter les conflits avec le flux MJPEG
+            # Attendre jusqu'à 2 secondes pour obtenir le verrou
+            if not _camera_lock.acquire(timeout=2.0):
+                return jsonify({"error": "Caméra temporairement indisponible (utilisée par le flux vidéo)"}), 503
+            
+            try:
+                # Essayer d'ouvrir la caméra avec plusieurs tentatives
+                capture = None
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    capture = cv2.VideoCapture(device_index)
+                    if capture.isOpened():
+                        # Attendre un peu pour que la caméra soit prête
+                        time.sleep(0.2)
+                        break
+                    if capture:
+                        capture.release()
+                    if attempt < max_attempts - 1:
+                        time.sleep(0.3)  # Attendre avant de réessayer
+                
+                if capture is None or not capture.isOpened():
+                    return jsonify({"error": "Caméra indisponible"}), 500
+                
+                # Lire plusieurs frames pour s'assurer d'avoir une image valide
+                success = False
+                for _ in range(3):
+                    ret, test_frame = capture.read()
+                    if ret:
+                        success = True
+                        frame = test_frame
+                        time.sleep(0.1)  # Petite pause entre les frames
+                
+                capture.release()
+                
+                if not success or frame is None:
+                    return jsonify({"error": "Impossible de capturer l'image depuis la caméra"}), 500
+            finally:
+                _camera_lock.release()
+        
+        # Créer le dossier de captures s'il n'existe pas
+        captures_folder = current_app.config.get("CAPTURES_FOLDER")
+        if captures_folder:
+            captures_dir = Path(captures_folder)
+        else:
+            static_folder = current_app.static_folder or "app/static"
+            captures_dir = Path(static_folder) / "captures"
+        captures_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Générer un nom de fichier avec timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"photo_{timestamp}.jpg"
+        filepath = captures_dir / filename
+        
+        # Sauvegarder l'image
+        cv2.imwrite(str(filepath), frame)
+        
+        # Enregistrer dans le journal
+        filepath_str = str(filepath)
+        db.session.add(JournalEntry(
+            level="info",
+            message=f"📷 Photo capturée : {filename}",
+            details={
+                "filename": filename,
+                "filepath": filepath_str,
+                "directory": str(captures_dir),
+                "type": "photo",
+                "captured_by": current_user.username,
+                "action": "photo_captured"
+            }
+        ))
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "filepath": filepath_str,
+            "url": url_for("main.serve_capture", filename=filename)
+        })
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la capture photo: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+_recording_threads: dict[str, threading.Thread] = {}
+_recording_stop_flags: dict[str, bool] = {}
+
+
+def _record_video_thread(recording_id: str, device_index: int, filepath: Path, filename: str, username: str):
+    """Thread pour enregistrer la vidéo en continu"""
+    try:
+        import cv2  # type: ignore
+        import time
+        
+        # Utiliser le verrou pour éviter les conflits avec le flux MJPEG
+        # Attendre jusqu'à 5 secondes pour obtenir le verrou
+        if not _camera_lock.acquire(timeout=5.0):
+            _recording_stop_flags[recording_id] = True
+            return
+        
+        try:
+            capture = cv2.VideoCapture(device_index)
+            if not capture.isOpened():
+                _recording_stop_flags[recording_id] = True
+                return
+            
+            # Obtenir les dimensions de la caméra
+            width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = int(capture.get(cv2.CAP_PROP_FPS)) or 30
+            
+            # Créer le writer vidéo
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(str(filepath), fourcc, fps, (width, height))
+            
+            while not _recording_stop_flags.get(recording_id, False):
+                success, frame = capture.read()
+                if not success:
+                    continue
+                out.write(frame)
+            
+            # Libérer les ressources
+            out.release()
+            capture.release()
+        finally:
+            _camera_lock.release()
+        
+        # Enregistrer dans le journal
+        from flask import current_app
+        with current_app.app_context():
+            filepath_str = str(filepath)
+            captures_dir = filepath.parent
+            db.session.add(JournalEntry(
+                level="info",
+                message=f"🎬 Vidéo enregistrée : {filename}",
+                details={
+                    "filename": filename,
+                    "filepath": filepath_str,
+                    "directory": str(captures_dir),
+                    "type": "video",
+                    "recorded_by": username,
+                    "action": "video_recording_completed"
+                }
+            ))
+            db.session.commit()
+        
+        # Nettoyer
+        if recording_id in _recording_threads:
+            del _recording_threads[recording_id]
+        if recording_id in _recording_stop_flags:
+            del _recording_stop_flags[recording_id]
+    except Exception as e:
+        from flask import current_app
+        try:
+            current_app.logger.error(f"Erreur dans le thread d'enregistrement: {e}", exc_info=True)
+        except RuntimeError:
+            print(f"Erreur dans le thread d'enregistrement: {e}")
+        if recording_id in _recording_threads:
+            del _recording_threads[recording_id]
+        if recording_id in _recording_stop_flags:
+            del _recording_stop_flags[recording_id]
+
+
+@main_bp.route("/camera/capture/video/start", methods=["POST"])
+@login_required
+def start_video_recording():
+    """Démarre l'enregistrement vidéo"""
+    try:
+        import cv2  # type: ignore
+        
+        device_index = current_app.config.get("CAMERA_DEVICE_INDEX", 0)
+        
+        # Vérifier rapidement que la caméra est disponible (sans verrou pour ne pas bloquer)
+        import time
+        test_capture = cv2.VideoCapture(device_index)
+        if not test_capture.isOpened():
+            test_capture.release()
+            return jsonify({"error": "Caméra indisponible"}), 500
+        test_capture.release()
+        
+        # Créer le dossier de captures s'il n'existe pas
+        captures_folder = current_app.config.get("CAPTURES_FOLDER")
+        if captures_folder:
+            captures_dir = Path(captures_folder)
+        else:
+            static_folder = current_app.static_folder or "app/static"
+            captures_dir = Path(static_folder) / "captures"
+        captures_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Générer un nom de fichier avec timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"video_{timestamp}.mp4"
+        filepath = captures_dir / filename
+        
+        # Créer un ID unique pour cet enregistrement
+        recording_id = f"recording_{timestamp}_{current_user.id}"
+        
+        # Initialiser le flag d'arrêt
+        _recording_stop_flags[recording_id] = False
+        
+        # Démarrer le thread d'enregistrement
+        thread = threading.Thread(
+            target=_record_video_thread,
+            args=(recording_id, device_index, filepath, filename, current_user.username),
+            daemon=True
+        )
+        thread.start()
+        _recording_threads[recording_id] = thread
+        
+        filepath_str = str(filepath)
+        
+        # Enregistrer le démarrage dans le journal
+        db.session.add(JournalEntry(
+            level="info",
+            message=f"🎥 Démarrage enregistrement vidéo : {filename}",
+            details={
+                "filename": filename,
+                "filepath": filepath_str,
+                "directory": str(captures_dir),
+                "type": "video",
+                "status": "started",
+                "recorded_by": current_user.username,
+                "action": "video_recording_started"
+            }
+        ))
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "recording_id": recording_id,
+            "filename": filename,
+            "filepath": filepath_str
+        })
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors du démarrage de l'enregistrement: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route("/camera/capture/video/stop", methods=["POST"])
+@login_required
+def stop_video_recording():
+    """Arrête l'enregistrement vidéo"""
+    try:
+        data = request.get_json()
+        recording_id = data.get("recording_id")
+        
+        if not recording_id or recording_id not in _recording_stop_flags:
+            return jsonify({"error": "Aucun enregistrement actif"}), 400
+        
+        # Signaler l'arrêt
+        _recording_stop_flags[recording_id] = True
+        
+        # Attendre que le thread se termine (max 5 secondes)
+        if recording_id in _recording_threads:
+            _recording_threads[recording_id].join(timeout=5)
+        
+        # Enregistrer l'arrêt dans le journal
+        # Le nom du fichier est dans le recording_id (format: recording_TIMESTAMP_userid)
+        # On peut extraire le timestamp pour reconstruire le nom de fichier
+        filename = None
+        filepath_str = None
+        try:
+            parts = recording_id.split('_')
+            if len(parts) >= 2:
+                timestamp = '_'.join(parts[1:-1])  # Exclure 'recording' et l'userid
+                filename = f"video_{timestamp}.mp4"
+                captures_folder = current_app.config.get("CAPTURES_FOLDER")
+                if captures_folder:
+                    captures_dir = Path(captures_folder)
+                else:
+                    static_folder = current_app.static_folder or "app/static"
+                    captures_dir = Path(static_folder) / "captures"
+                filepath = captures_dir / filename
+                filepath_str = str(filepath)
+                
+                db.session.add(JournalEntry(
+                    level="info",
+                    message=f"⏹️ Arrêt enregistrement vidéo : {filename}",
+                    details={
+                        "filename": filename,
+                        "filepath": filepath_str,
+                        "directory": str(captures_dir),
+                        "type": "video",
+                        "status": "stopped",
+                        "recorded_by": current_user.username,
+                        "action": "video_recording_stopped"
+                    }
+                ))
+                db.session.commit()
+        except Exception as e:
+            current_app.logger.warning(f"Impossible d'enregistrer l'arrêt dans le journal: {e}")
+        
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "filepath": filepath_str
+        })
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de l'arrêt de l'enregistrement: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route("/camera/capture/delete/<path:filename>", methods=["POST"])
+@login_required
+def delete_capture(filename: str):
+    """Supprime une capture (photo ou vidéo)"""
+    try:
+        import os
+        
+        captures_folder = current_app.config.get("CAPTURES_FOLDER")
+        if captures_folder:
+            captures_dir = Path(captures_folder)
+        else:
+            static_folder = current_app.static_folder or "app/static"
+            captures_dir = Path(static_folder) / "captures"
+        
+        # Sécuriser le nom de fichier pour éviter les accès en dehors du dossier
+        safe_filename = os.path.basename(filename)
+        filepath = captures_dir / safe_filename
+        
+        if not filepath.exists():
+            return jsonify({"error": "Fichier introuvable"}), 404
+        
+        # Vérifier que le fichier est bien dans le dossier de captures
+        try:
+            filepath.resolve().relative_to(captures_dir.resolve())
+        except ValueError:
+            return jsonify({"error": "Accès non autorisé"}), 403
+        
+        # Supprimer le fichier
+        filepath.unlink()
+        
+        # Enregistrer dans le journal
+        db.session.add(JournalEntry(
+            level="info",
+            message=f"🗑️ Capture supprimée : {safe_filename}",
+            details={
+                "filename": safe_filename,
+                "filepath": str(filepath),
+                "deleted_by": current_user.username,
+                "action": "capture_deleted"
+            }
+        ))
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Capture supprimée avec succès"
+        })
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de la suppression de la capture: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route("/camera/captures/<path:filename>")
+@login_required
+def serve_capture(filename: str):
+    """Sert les fichiers de capture depuis le dossier de captures"""
+    try:
+        import os
+        
+        captures_folder = current_app.config.get("CAPTURES_FOLDER")
+        if captures_folder:
+            captures_dir = Path(captures_folder)
+        else:
+            static_folder = current_app.static_folder or "app/static"
+            captures_dir = Path(static_folder) / "captures"
+        
+        # Sécuriser le nom de fichier pour éviter les accès en dehors du dossier
+        safe_filename = os.path.basename(filename)
+        filepath = captures_dir / safe_filename
+        
+        if not filepath.exists():
+            return "Fichier introuvable", 404
+        
+        # Vérifier que le fichier est bien dans le dossier de captures
+        try:
+            filepath.resolve().relative_to(captures_dir.resolve())
+        except ValueError:
+            return "Accès non autorisé", 403
+        
+        return send_from_directory(captures_dir, safe_filename)
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors du service de la capture: {e}", exc_info=True)
+        return "Erreur", 500
+
+
+@main_bp.route("/camera/stream/toggle", methods=["POST"])
+@login_required
+def camera_stream_toggle():
+    """Active ou désactive le flux vidéo de la caméra"""
+    global _camera_connected
+    
+    try:
+        # Le token CSRF est validé automatiquement par Flask-WTF via le header X-CSRFToken
+        data = request.get_json() or {}
+        action = data.get("action", "toggle")
+        
+        if action == "start":
+            _camera_connected = True
+            message = "Flux vidéo activé"
+        elif action == "stop":
+            _camera_connected = False
+            # Libérer la frame partagée si elle existe
+            with _shared_frame_lock:
+                _shared_camera_frame = None
+            message = "Flux vidéo désactivé"
+        else:  # toggle
+            _camera_connected = not _camera_connected
+            if not _camera_connected:
+                # Libérer la frame partagée si elle existe
+                with _shared_frame_lock:
+                    _shared_camera_frame = None
+            message = "Flux vidéo activé" if _camera_connected else "Flux vidéo désactivé"
+        
+        current_app.logger.info(f"État flux vidéo modifié: {message} (utilisateur: {current_user.username})")
+        
+        return jsonify({
+            "success": True,
+            "streaming": _camera_connected,
+            "message": message
+        })
+    except Exception as e:
+        current_app.logger.error(f"Erreur lors de l'activation/désactivation du flux vidéo: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route("/camera/status", methods=["GET"])
+@login_required
+def camera_status():
+    """Récupère l'état du flux vidéo de la caméra"""
+    global _camera_connected
+    return jsonify({
+        "streaming": _camera_connected,
+        "available": current_app.config.get("CAMERA_AVAILABLE", False)
+    })
 
 
 @main_bp.route("/parametres", methods=["GET", "POST"])
@@ -1732,15 +2986,23 @@ def settings():
 @login_required
 def journal():
     if current_user.role != "admin":
-        flash("Accès réservé à l’administrateur.", "danger")
+        flash("Accès réservé à l'administrateur.", "danger")
         return redirect(url_for("main.dashboard"))
     search = request.args.get("q", "").strip()
     level = request.args.get("level", "")
     sort = request.args.get("sort", "recent")
+    
+    # Récupérer la date sélectionnée (par défaut aujourd'hui)
+    now_local = datetime.now()
+    today = now_local.date()
+    selected_date_str = request.args.get("date", today.isoformat())
+    try:
+        selected_date = datetime.fromisoformat(selected_date_str).date()
+    except (ValueError, AttributeError):
+        selected_date = today
+    
     page = max(int(request.args.get("page", 1)), 1)
-    per_page = max(min(int(request.args.get("per_page", 25)), 100), 5)
-    from_date = request.args.get("from", "")
-    to_date = request.args.get("to", "")
+    per_page = max(min(int(request.args.get("per_page", 100)), 100), 5)
 
     query = JournalEntry.query
 
@@ -1751,50 +3013,45 @@ def journal():
     if level in {"info", "warning", "danger"}:
         query = query.filter_by(level=level)
 
-    if from_date:
-        try:
-            start = datetime.fromisoformat(from_date)
-            query = query.filter(JournalEntry.created_at >= start)
-        except ValueError:
-            pass
-
-    if to_date:
-        try:
-            end = datetime.fromisoformat(to_date)
-            query = query.filter(JournalEntry.created_at <= end)
-        except ValueError:
-            pass
-
     if sort == "oldest":
         query = query.order_by(JournalEntry.created_at.asc())
     else:
         query = query.order_by(JournalEntry.created_at.desc())
 
-    # Si aucun filtre de date n'est appliqué, récupérer tous les événements des 25 derniers jours
-    view_mode = request.args.get("view_mode", "compact" if not (from_date or to_date) else "detailed")
-    show_last_25_days = view_mode == "compact" and not (from_date or to_date)
+    # Filtrer pour le jour sélectionné uniquement (de 00:00:00 à 23:59:59 en heure locale)
+    # Convertir la date locale en UTC pour le filtrage
+    # Calculer l'offset entre UTC et l'heure locale
+    now_utc = datetime.utcnow()
+    now_local = datetime.now()
+    offset_seconds = (now_local - now_utc).total_seconds()
     
-    if show_last_25_days:
-        # Récupérer tous les événements des 25 derniers jours sans pagination
-        from_date_25_days = (datetime.utcnow() - timedelta(days=25)).date()
-        query = query.filter(JournalEntry.created_at >= datetime.combine(from_date_25_days, datetime.min.time()))
-        entries = query.all()
-        # Créer une pagination factice pour la compatibilité
-        class FakePagination:
-            def __init__(self, items, total):
-                self.items = items
-                self.total = total
-                self.page = 1
-                self.pages = 1
-                self.per_page = len(items)
-                self.has_prev = False
-                self.has_next = False
-                self.prev_num = None
-                self.next_num = None
-        pagination = FakePagination(entries, len(entries))
-    else:
-        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-        entries = pagination.items
+    # Créer les limites du jour en heure locale
+    start_of_day_local = datetime.combine(selected_date, datetime.min.time())
+    end_of_day_local = datetime.combine(selected_date, datetime.max.time())
+    
+    # Convertir en UTC en soustrayant l'offset
+    start_of_day_utc = start_of_day_local - timedelta(seconds=offset_seconds)
+    end_of_day_utc = end_of_day_local - timedelta(seconds=offset_seconds)
+    
+    query = query.filter(JournalEntry.created_at >= start_of_day_utc)
+    query = query.filter(JournalEntry.created_at <= end_of_day_utc)
+    
+    # Récupérer tous les événements du jour (sans pagination)
+    entries = query.all()
+    
+    # Créer une pagination factice pour la compatibilité
+    class FakePagination:
+        def __init__(self, items, total):
+            self.items = items
+            self.total = total
+            self.page = 1
+            self.pages = 1
+            self.per_page = len(items)
+            self.has_prev = False
+            self.has_next = False
+            self.prev_num = None
+            self.next_num = None
+    pagination = FakePagination(entries, len(entries))
     query_args = request.args.to_dict()
     relay_label_map = get_relay_labels()
     sensor_alias_cache: dict[str, str] = {}
@@ -1873,128 +3130,59 @@ def journal():
 
         detailed_entries.append(formatted)
 
+    # Formater les timestamps en heure locale pour chaque entrée
+    for entry in detailed_entries:
+        local_timestamp = utc_to_local(entry["timestamp"])
+        entry["time_label"] = local_timestamp.strftime("%H:%M")
+
     # Utiliser l'heure locale pour déterminer aujourd'hui et hier
-    now_local = datetime.now()
-    today = now_local.date()
     yesterday = today - timedelta(days=1)
     
-    grouped_entries: list[dict[str, Any]] = []
+    # Créer le label du jour sélectionné
+    day_label = selected_date.strftime("%A %d %B %Y").capitalize()
+    if selected_date == today:
+        day_label = "Aujourd'hui"
+    elif selected_date == yesterday:
+        day_label = "Hier"
+
+    # Créer les URLs pour la pagination jour précédent/suivant
+    prev_day = selected_date - timedelta(days=1)
+    next_day = selected_date + timedelta(days=1)
     
-    if show_last_25_days:
-        # Créer une entrée pour chaque jour des 25 derniers jours
-        days_map: dict[str, dict[str, Any]] = {}
-        for i in range(25):
-            day_date = today - timedelta(days=i)
-            day_key = day_date.isoformat()
-            label = day_date.strftime("%A %d %B %Y").capitalize()
-            if day_date == today:
-                label = "Aujourd'hui"
-            elif day_date == yesterday:
-                label = "Hier"
-            days_map[day_key] = {
-                "date": day_key,
-                "label": label,
-                "entries": [],
-                "collapsed": i > 1,  # Seuls aujourd'hui et hier sont ouverts par défaut
-                "event_count": 0,
-            }
-        
-        # Répartir les événements dans les jours correspondants
-        for entry in detailed_entries:
-            # Convertir le timestamp UTC en local pour le groupement par jour
-            local_timestamp = utc_to_local(entry["timestamp"])
-            day = local_timestamp.date()
-            day_key = day.isoformat()
-            if day_key in days_map:
-                entry["time_label"] = local_timestamp.strftime("%H:%M")
-                days_map[day_key]["entries"].append(entry)
-                days_map[day_key]["event_count"] += 1
-        
-        # Trier par date décroissante (du plus récent au plus ancien)
-        grouped_entries = [days_map[day_key] for day_key in sorted(days_map.keys(), reverse=True)]
-    else:
-        # Mode détaillé avec pagination (comportement original)
-        current_group_key = None
-        current_group: Optional[Dict[str, Any]] = None
-
-        for entry in detailed_entries:
-            # Convertir le timestamp UTC en local pour le groupement par jour
-            local_timestamp = utc_to_local(entry["timestamp"])
-            day = local_timestamp.date()
-            if current_group_key != day:
-                if current_group:
-                    grouped_entries.append(current_group)
-                label = day.strftime("%A %d %B %Y").capitalize()
-                if day == today:
-                    label = "Aujourd'hui"
-                elif day == yesterday:
-                    label = "Hier"
-                is_collapsed = day < yesterday
-                current_group = {
-                    "date": day.isoformat(),
-                    "label": label,
-                    "entries": [],
-                    "collapsed": is_collapsed,
-                    "event_count": 0,
-                }
-                current_group_key = day
-            entry["time_label"] = local_timestamp.strftime("%H:%M")
-            current_group["entries"].append(entry)  # type: ignore[arg-type]
-            current_group["event_count"] = len(current_group["entries"])  # type: ignore[union-attr]
-
-        if current_group:
-            grouped_entries.append(current_group)
-
-    prev_url = None
-    next_url = None
-    if pagination.has_prev:
-        params = query_args.copy()
-        params["page"] = pagination.prev_num
-        prev_url = url_for("main.journal", **params)
-    if pagination.has_next:
-        params = query_args.copy()
-        params["page"] = pagination.next_num
-        next_url = url_for("main.journal", **params)
+    # Vérifier si le jour suivant est dans le futur
+    if next_day > today:
+        next_day = None
+    
+    query_args = request.args.to_dict()
+    prev_day_url = None
+    next_day_url = None
+    
+    if prev_day:
+        prev_params = {k: v for k, v in query_args.items() if k not in {"date", "page"}}
+        prev_params["date"] = prev_day.isoformat()
+        prev_day_url = url_for("main.journal", **prev_params)
+    
+    if next_day:
+        next_params = {k: v for k, v in query_args.items() if k not in {"date", "page"}}
+        next_params["date"] = next_day.isoformat()
+        next_day_url = url_for("main.journal", **next_params)
 
     compact = request.args.get("compact", "0") == "1"
-    filters_active = bool(search or level or from_date or to_date)
-    reset_filters_url = url_for("main.journal")
+    filters_active = bool(search or level)
+    reset_filters_url = url_for("main.journal", date=selected_date.isoformat())
     toggle_args = query_args.copy()
     toggle_args["compact"] = "0" if compact else "1"
     toggle_compact_url = url_for("main.journal", **toggle_args)
-    today_str = today.isoformat()
-    today_view_url = url_for(
-        "main.journal",
-        **{
-            **{k: v for k, v in query_args.items() if k in {"compact"}},
-            "from": today_str,
-            "to": today_str,
-            "page": 1,
-        },
-    )
-
-    # Créer les URLs pour basculer entre vue compacte et détaillée
-    detailed_view_url = None
-    compact_view_url = None
-    if show_last_25_days:
-        # Créer l'URL pour passer en mode détaillé
-        detailed_params = {k: v for k, v in query_args.items() if k != "view_mode"}
-        detailed_params["view_mode"] = "detailed"
-        detailed_view_url = url_for("main.journal", **detailed_params)
-    else:
-        # Créer l'URL pour passer en mode compact
-        compact_params = {k: v for k, v in query_args.items() if k != "view_mode"}
-        compact_params["view_mode"] = "compact"
-        compact_view_url = url_for("main.journal", **compact_params)
+    today_view_url = url_for("main.journal", date=today.isoformat())
 
     return render_template(
         "dashboard/journal.html",
-        entries=grouped_entries,
+        entries=detailed_entries,
+        selected_date=selected_date.isoformat(),
+        day_label=day_label,
         filters={
             "q": search,
             "level": level,
-            "from": from_date,
-            "to": to_date,
             "compact": compact,
         },
         filters_active=filters_active,
@@ -2002,26 +3190,12 @@ def journal():
             "page_count": len(detailed_entries),
             "total": pagination.total,
         },
-        pagination={
-            "page": pagination.page,
-            "pages": pagination.pages,
-            "total": pagination.total,
-            "per_page": pagination.per_page,
-            "has_prev": pagination.has_prev,
-            "has_next": pagination.has_next,
-            "prev_num": pagination.prev_num,
-            "next_num": pagination.next_num,
-            "prev_url": prev_url,
-            "next_url": next_url,
-        },
-        next_url=next_url,
         compact=compact,
         reset_filters_url=reset_filters_url,
         toggle_compact_url=toggle_compact_url,
         today_view_url=today_view_url,
-        show_last_25_days=show_last_25_days,
-        detailed_view_url=detailed_view_url,
-        compact_view_url=compact_view_url,
+        prev_day_url=prev_day_url,
+        next_day_url=next_day_url,
     )
 
 
@@ -2173,10 +3347,19 @@ def lcd_preview():
 @main_bp.route("/profil", methods=["GET", "POST"])
 @login_required
 def profile():
-    form = ProfileForm(obj=current_user)
+    form = ProfileForm()
     if request.method == "GET":
+        form.title.data = getattr(current_user, 'title', None)
+        form.first_name.data = getattr(current_user, 'first_name', None)
+        form.last_name.data = getattr(current_user, 'last_name', None)
         form.username.data = current_user.username
         form.email.data = current_user.email
+        # Utiliser getattr pour gérer les cas où les colonnes n'existent pas encore dans la DB
+        form.street.data = getattr(current_user, 'street', None)
+        form.postal_code.data = getattr(current_user, 'postal_code', None)
+        form.city.data = getattr(current_user, 'city', None)
+        form.country.data = getattr(current_user, 'country', None)
+        form.phone.data = getattr(current_user, 'phone', None)
         form.twofa_enabled.data = current_user.twofa_enabled
 
     if form.validate_on_submit():
@@ -2213,8 +3396,16 @@ def profile():
             elif form.avatar.data:
                 delete_avatar(current_user.avatar_filename)
                 current_user.avatar_filename = save_avatar(form.avatar.data)
+            current_user.title = form.title.data.strip() if form.title.data else None
+            current_user.first_name = form.first_name.data.strip() if form.first_name.data else None
+            current_user.last_name = form.last_name.data.strip() if form.last_name.data else None
             current_user.username = form.username.data
             current_user.email = form.email.data.strip() if form.email.data else None
+            current_user.street = form.street.data.strip() if form.street.data else None
+            current_user.postal_code = form.postal_code.data.strip() if form.postal_code.data else None
+            current_user.city = form.city.data.strip() if form.city.data else None
+            current_user.country = form.country.data.strip() if form.country.data else None
+            current_user.phone = form.phone.data.strip() if form.phone.data else None
             if form.twofa_enabled.data:
                 current_user.twofa_enabled = True
             else:
@@ -2263,6 +3454,8 @@ def profile():
                     action_endpoint="main.profile",
                 )
             db.session.commit()
+            # Expirer l'objet pour forcer le rechargement depuis la DB lors de la prochaine requête
+            db.session.expire(current_user)
             flash("Profil mis à jour.", "success")
             return redirect(url_for("main.profile"))
 
@@ -2321,6 +3514,56 @@ def notifications_clear():
     return jsonify({"status": "ok", "cleared": cleared_ids})
 
 
+@main_bp.route("/icon/<int:size>.png", endpoint="generate_icon")
+def generate_icon(size: int):
+    """Génère une icône avec fond blanc pour iOS/iPad."""
+    try:
+        from PIL import Image
+        
+        from pathlib import Path
+        logo_path = Path(current_app.static_folder) / "img" / "logo.png"
+        if not logo_path.exists():
+            return send_from_directory(current_app.static_folder, "img/logo.png"), 404
+        
+        # Ouvrir le logo
+        logo = Image.open(logo_path)
+        
+        # Créer une image avec fond blanc
+        icon = Image.new("RGB", (size, size), color="white")
+        
+        # Calculer la taille et position pour centrer le logo
+        logo_size = min(size - 40, logo.width, logo.height)  # Marge de 20px de chaque côté
+        logo_resized = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+        
+        # Centrer le logo sur le fond blanc
+        x = (size - logo_size) // 2
+        y = (size - logo_size) // 2
+        
+        # Coller le logo sur le fond blanc (gérer la transparence)
+        if logo.mode == "RGBA":
+            icon.paste(logo_resized, (x, y), logo_resized)
+        else:
+            icon.paste(logo_resized, (x, y))
+        
+        # Retourner l'image
+        from io import BytesIO
+        output = BytesIO()
+        icon.save(output, format="PNG")
+        output.seek(0)
+        
+        return current_app.response_class(
+            output.read(),
+            mimetype="image/png",
+            headers={"Cache-Control": "public, max-age=31536000"}
+        )
+    except ImportError:
+        # Si PIL n'est pas disponible, servir le logo original
+        return send_from_directory(current_app.static_folder, "img/logo.png")
+    except Exception as exc:
+        current_app.logger.error(f"Erreur génération icône {size}x{size}: {exc}")
+        return send_from_directory(current_app.static_folder, "img/logo.png")
+
+
 @main_bp.route("/manifest.json")
 def manifest():
     manifest_data = {
@@ -2328,29 +3571,33 @@ def manifest():
         "short_name": "Dashboard",
         "start_url": "/",
         "display": "standalone",
-        "background_color": "#0f172a",
+        "background_color": "#ffffff",
         "theme_color": "#0f172a",
         "lang": "fr",
         "icons": [
             {
-                "src": url_for("static", filename="img/icon-128.png", _external=True),
-                "sizes": "128x128",
-                "type": "image/png"
+                "src": url_for("main.generate_icon", size=180, _external=True),
+                "sizes": "180x180",
+                "type": "image/png",
+                "purpose": "any"
             },
             {
-                "src": url_for("static", filename="img/192.png", _external=True),
+                "src": url_for("main.generate_icon", size=192, _external=True),
                 "sizes": "192x192",
-                "type": "image/png"
+                "type": "image/png",
+                "purpose": "any"
             },
             {
-                "src": url_for("static", filename="img/256.png", _external=True),
+                "src": url_for("main.generate_icon", size=256, _external=True),
                 "sizes": "256x256",
-                "type": "image/png"
+                "type": "image/png",
+                "purpose": "any"
             },
             {
-                "src": url_for("static", filename="img/icon-512.png", _external=True),
+                "src": url_for("main.generate_icon", size=512, _external=True),
                 "sizes": "512x512",
-                "type": "image/png"
+                "type": "image/png",
+                "purpose": "any"
             }
         ]
     }

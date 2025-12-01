@@ -13,6 +13,7 @@ from sqlalchemy import text
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 
 from config import Config
 
@@ -22,7 +23,7 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "UTC"))
 
-from .tasks import collect_sensor_readings
+from .tasks import collect_sensor_readings, cleanup_old_captures
 
 # Cache pour le délai d'affichage LCD (évite les requêtes DB répétées)
 _lcd_display_seconds_cache: Optional[float] = None
@@ -204,9 +205,19 @@ def create_app():
     cors_origins = os.getenv("CORS_ORIGINS")
     if cors_origins:
         origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
-        CORS(app, resources={r"/*": {"origins": origins}}, supports_credentials=True)
+        CORS(app, resources={r"/*": {
+            "origins": origins,
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-CSRFToken", "X-Requested-With"],
+            "supports_credentials": True
+        }})
     else:
-        CORS(app, resources={r"/*": {"origins": "*"}})
+        CORS(app, resources={r"/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-CSRFToken", "X-Requested-With"],
+            "supports_credentials": True
+        }})
 
     # Vérifier et corriger l'URI de la base de données avant d'initialiser SQLAlchemy
     final_db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
@@ -236,6 +247,8 @@ def create_app():
     app.jinja_env.filters["local_datetime"] = local_datetime_filter
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    captures_folder = app.config.get("CAPTURES_FOLDER", str(Path(app.static_folder) / "captures"))
+    os.makedirs(captures_folder, exist_ok=True)
 
     from .routes import main_bp
     from .auth import auth_bp
@@ -309,6 +322,19 @@ def create_app():
             app.logger.warning("Impossible de lire Sensor_Poll_Interval_Minutes: %s", exc)
 
         schedule_sensor_poll(app, interval)
+        
+        # Planifier le nettoyage des captures (tous les jours à minuit)
+        job_id = "cleanup_captures"
+        if scheduler.get_job(job_id):
+            scheduler.reschedule_job(job_id, trigger=CronTrigger(hour=0, minute=0))
+        else:
+            scheduler.add_job(
+                func=lambda: cleanup_old_captures(app),
+                trigger=CronTrigger(hour=0, minute=0),
+                id=job_id,
+                replace_existing=True,
+                max_instances=1,
+            )
 
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         _start_scheduler()
@@ -379,45 +405,135 @@ def create_app():
                 )
                 db.session.commit()
 
+            # Migration de la table user - IMPORTANT: doit être fait avant toute utilisation du modèle User
             user_cols = {
                 row[1]
                 for row in db.session.execute(text("PRAGMA table_info(user)"))
             }
+            
+            migrations_applied = []
+            
             if "last_login" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN last_login DATETIME")
                 )
                 db.session.commit()
+                migrations_applied.append("last_login")
+            
             if "avatar_filename" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN avatar_filename VARCHAR(255)")
                 )
                 db.session.commit()
+                migrations_applied.append("avatar_filename")
+            
             if "twofa_enabled" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN twofa_enabled BOOLEAN DEFAULT 0")
                 )
                 db.session.commit()
+                migrations_applied.append("twofa_enabled")
+            
             if "twofa_code_hash" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN twofa_code_hash VARCHAR(255)")
                 )
                 db.session.commit()
+                migrations_applied.append("twofa_code_hash")
+            
             if "twofa_code_sent_at" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN twofa_code_sent_at DATETIME")
                 )
                 db.session.commit()
+                migrations_applied.append("twofa_code_sent_at")
+            
             if "twofa_trusted_token_hash" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN twofa_trusted_token_hash VARCHAR(255)")
                 )
                 db.session.commit()
+                migrations_applied.append("twofa_trusted_token_hash")
+            
             if "twofa_trusted_created_at" not in user_cols:
                 db.session.execute(
                     text("ALTER TABLE user ADD COLUMN twofa_trusted_created_at DATETIME")
                 )
                 db.session.commit()
+                migrations_applied.append("twofa_trusted_created_at")
+            
+            if "address" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN address VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("address")
+            
+            if "street" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN street VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("street")
+            
+            if "postal_code" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN postal_code VARCHAR(20)")
+                )
+                db.session.commit()
+                migrations_applied.append("postal_code")
+            
+            if "city_country" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN city_country VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("city_country")
+            
+            if "city" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN city VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("city")
+            
+            if "country" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN country VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("country")
+            
+            if "phone" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN phone VARCHAR(50)")
+                )
+                db.session.commit()
+                migrations_applied.append("phone")
+            
+            if "first_name" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN first_name VARCHAR(100)")
+                )
+                db.session.commit()
+                migrations_applied.append("first_name")
+            
+            if "last_name" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN last_name VARCHAR(100)")
+                )
+                db.session.commit()
+                migrations_applied.append("last_name")
+            
+            if "title" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN title VARCHAR(20)")
+                )
+                db.session.commit()
+                migrations_applied.append("title")
+            
+            if migrations_applied:
+                app.logger.info(f"Migrations appliquées sur la table 'user': {', '.join(migrations_applied)}")
 
             automation_cols = {
                 row[1]

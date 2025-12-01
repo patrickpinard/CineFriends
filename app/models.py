@@ -11,6 +11,9 @@ from . import db, login_manager
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(20), nullable=True)  # Monsieur/Madame
+    first_name = db.Column(db.String(100), nullable=True)
+    last_name = db.Column(db.String(100), nullable=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
     role = db.Column(db.String(20), default="user")
@@ -19,6 +22,13 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
     avatar_filename = db.Column(db.String(255), nullable=True)
+    address = db.Column(db.String(255), nullable=True)  # Ancien champ, conservé pour compatibilité
+    street = db.Column(db.String(255), nullable=True)
+    postal_code = db.Column(db.String(20), nullable=True)
+    city_country = db.Column(db.String(255), nullable=True)  # Ancien champ, conservé pour compatibilité
+    city = db.Column(db.String(255), nullable=True)
+    country = db.Column(db.String(255), nullable=True)
+    phone = db.Column(db.String(50), nullable=True)
     twofa_enabled = db.Column(db.Boolean, default=False)
     twofa_code_hash = db.Column(db.String(255), nullable=True)
     twofa_code_sent_at = db.Column(db.DateTime, nullable=True)

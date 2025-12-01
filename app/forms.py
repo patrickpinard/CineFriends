@@ -32,11 +32,11 @@ class AutomationRuleForm(FlaskForm):
         validators=[DataRequired()],
     )
     threshold = DecimalField("Seuil", places=2, validators=[DataRequired()], default=0)
-    relay_channel = SelectField("Relais à commander", coerce=int, validators=[DataRequired()])
+    relay_channel = SelectField("Relais à commander", coerce=int, validators=[Optional()])
     relay_action = SelectField(
         "Action",
         choices=[("on", "Allumer"), ("off", "Éteindre"), ("toggle", "Basculer")],
-        validators=[DataRequired()],
+        validators=[Optional()],
     )
     relay_action_enabled = BooleanField("Activer la commande relais", default=True)
     notify_user_id = SelectField(
@@ -57,7 +57,10 @@ class AutomationRuleForm(FlaskForm):
 
 
 class UserForm(FlaskForm):
-    username = StringField("Nom d’utilisateur", validators=[DataRequired(), Length(min=3, max=80)])
+    title = SelectField("Civilité", choices=[("", ""), ("Monsieur", "Monsieur"), ("Madame", "Madame")], validators=[Optional()])
+    first_name = StringField("Prénom", validators=[Optional(), Length(max=100)])
+    last_name = StringField("Nom", validators=[Optional(), Length(max=100)])
+    username = StringField("Nom d'utilisateur", validators=[DataRequired(), Length(min=3, max=80)])
     email = StringField("Email", validators=[Optional(), Email(), Length(max=120)])
     role = SelectField("Rôle", choices=[("admin", "Administrateur"), ("user", "Utilisateur")])
     password = PasswordField("Mot de passe", validators=[Optional(), Length(min=4, max=128)])
@@ -68,6 +71,11 @@ class UserForm(FlaskForm):
     active = BooleanField("Actif", default=True)
     avatar = FileField("Avatar", validators=[Optional(), FileAllowed(["jpg", "jpeg", "png", "gif"], "Formats autorisés: jpg, png, gif.")])
     remove_avatar = BooleanField("Supprimer la photo")
+    street = StringField("Rue", validators=[Optional(), Length(max=255)])
+    postal_code = StringField("NPA", validators=[Optional(), Length(max=20)])
+    city = StringField("Ville", validators=[Optional(), Length(max=255)])
+    country = StringField("Pays", validators=[Optional(), Length(max=255)])
+    phone = StringField("Téléphone", validators=[Optional(), Length(max=50)])
     twofa_enabled = BooleanField("Activer la double authentification (2FA)")
     submit = SubmitField("Enregistrer")
 
@@ -79,7 +87,10 @@ class SettingForm(FlaskForm):
 
 
 class ProfileForm(FlaskForm):
-    username = StringField("Nom d’utilisateur", validators=[DataRequired(), Length(min=3, max=80)])
+    title = SelectField("Civilité", choices=[("", ""), ("Monsieur", "Monsieur"), ("Madame", "Madame")], validators=[Optional()])
+    first_name = StringField("Prénom", validators=[Optional(), Length(max=100)])
+    last_name = StringField("Nom", validators=[Optional(), Length(max=100)])
+    username = StringField("Nom d'utilisateur", validators=[DataRequired(), Length(min=3, max=80)])
     email = StringField("Email", validators=[Optional(), Email(), Length(max=120)])
     password = PasswordField("Nouveau mot de passe", validators=[Optional(), Length(min=4, max=128)])
     confirm_password = PasswordField(
@@ -91,6 +102,11 @@ class ProfileForm(FlaskForm):
     )
     avatar = FileField("Photo de profil", validators=[Optional(), FileAllowed(["jpg", "jpeg", "png", "gif"], "Formats autorisés: jpg, png, gif.")])
     remove_avatar = BooleanField("Supprimer la photo actuelle")
+    street = StringField("Rue", validators=[Optional(), Length(max=255)])
+    postal_code = StringField("NPA", validators=[Optional(), Length(max=20)])
+    city = StringField("Ville", validators=[Optional(), Length(max=255)])
+    country = StringField("Pays", validators=[Optional(), Length(max=255)])
+    phone = StringField("Téléphone", validators=[Optional(), Length(max=50)])
     twofa_enabled = BooleanField("Activer la double authentification (2FA)")
     submit = SubmitField("Enregistrer le profil")
 
