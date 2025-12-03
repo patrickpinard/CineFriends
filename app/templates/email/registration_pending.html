@@ -78,7 +78,7 @@
                 <div class="logo">
                     <img src="{{ url_for('static', filename='img/logo.png', _external=True) }}" alt="Logo TemplateApp" />
                 </div>
-                <h1>Bonjour {{ user.username }},</h1>
+                <h1>Bonjour {{ user.first_name if user.first_name else user.username }},</h1>
                 <div class="badge">Demande reçue</div>
             </div>
             <div class="divider"></div>

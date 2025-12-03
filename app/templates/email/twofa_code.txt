@@ -1,4 +1,4 @@
-Bonjour {{ user.username }},
+Bonjour {{ user.first_name if user.first_name else user.username }},
 
 Une tentative de connexion à TemplateApp a été effectuée avec votre compte. Pour finaliser la connexion, veuillez saisir le code de vérification suivant :
 

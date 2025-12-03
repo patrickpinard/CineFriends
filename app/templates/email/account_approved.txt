@@ -1,4 +1,4 @@
-Bonjour {{ user.username }},
+Bonjour {{ user.first_name if user.first_name else user.username }},
 
 Votre demande d'accès à TemplateApp a été approuvée par un administrateur. Votre compte est désormais actif et vous pouvez vous connecter avec vos identifiants.
 

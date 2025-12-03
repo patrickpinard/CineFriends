@@ -1,4 +1,4 @@
-Bonjour {{ user.username }},
+Bonjour {{ user.first_name if user.first_name else user.username }},
 
 Nous vous informons que votre accès à TemplateApp a été temporairement désactivé par un administrateur. Vous ne pouvez plus vous connecter pour le moment.
 

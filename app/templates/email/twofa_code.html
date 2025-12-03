@@ -26,7 +26,7 @@
                 <h1>Code de vérification</h1>
             </div>
             <div class="content">
-                <p>Bonjour {{ user.username }},</p>
+                <p>Bonjour {{ user.first_name if user.first_name else user.username }},</p>
                 <p>Une tentative de connexion à TemplateApp a été effectuée avec votre compte. Pour finaliser la connexion, veuillez saisir le code de vérification ci-dessous :</p>
                 <div style="text-align: center;">
                     <div class="code">{{ code }}</div>

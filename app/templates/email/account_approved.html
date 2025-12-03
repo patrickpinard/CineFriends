@@ -62,13 +62,13 @@
                 <div class="logo">
                     <img src="{{ url_for('static', filename='img/logo.png', _external=True) }}" alt="Logo TemplateApp" />
                 </div>
-                <h1>Bienvenue {{ user.username }} !</h1>
+                <h1>Bienvenue {{ user.first_name if user.first_name else user.username }} !</h1>
                 <p class="subtitle">Votre accès à TemplateApp est prêt.</p>
                 <div class="badge">Compte activé</div>
             </div>
             <div class="divider"></div>
             <div style="padding: 0 32px 32px;">
-                <p>Bonjour {{ user.username }},</p>
+                <p>Bonjour {{ user.first_name if user.first_name else user.username }},</p>
                 <p>Votre demande d'accès à TemplateApp a été approuvée par un administrateur. Votre compte est désormais actif et vous pouvez vous connecter avec vos identifiants.</p>
                 <p>Pour des raisons de sécurité, nous vous recommandons de modifier votre mot de passe régulièrement et de conserver vos identifiants en lieu sûr.</p>
                 <div style="text-align: center; margin: 32px 0;">

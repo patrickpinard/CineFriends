@@ -1,4 +1,4 @@
-Bonjour {{ user.username }},
+Bonjour {{ user.first_name if user.first_name else user.username }},
 
 Nous accusons réception de votre demande d'accès à TemplateApp. Votre demande a été enregistrée et est en cours d'examen par un administrateur.
 
