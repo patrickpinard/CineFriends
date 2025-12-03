@@ -337,7 +337,7 @@ Dashboard/
 ### Logs
 
 Les logs sont disponibles dans le dossier `logs/` :
-- `dashboard.log` - Logs principaux de l'application
+- `app.log` - Logs principaux de l'application
 
 ### Mode debug
 
