@@ -20,6 +20,7 @@ TemplateApp/
 │   ├── mailer.py           # Service d'envoi d'emails
 │   ├── services.py         # Services (notifications)
 │   ├── utils.py            # Fonctions utilitaires
+│   ├── logging_config.py   # Configuration du logging structuré
 │   ├── seed.py             # Initialisation données par défaut
 │   ├── templates/          # Templates Jinja2
 │   └── static/             # Fichiers statiques (CSS, JS, images)
@@ -614,7 +615,51 @@ def notify_admins(
 
 ---
 
-### 10. `app/seed.py`
+### 10. `app/logging_config.py`
+
+**Rôle** : Configuration du logging structuré pour l'application.
+
+#### **Classe `StructuredLogger`**
+
+**Description** : Logger personnalisé qui ajoute un contexte structuré aux logs.
+
+**Méthodes** :
+- `debug(message: str, **kwargs)` : Log debug avec contexte
+- `info(message: str, **kwargs)` : Log info avec contexte
+- `warning(message: str, **kwargs)` : Log warning avec contexte
+- `error(message: str, **kwargs)` : Log error avec contexte
+- `exception(message: str, **kwargs)` : Log exception avec traceback et contexte
+
+**Contexte automatique** :
+- Timestamp UTC
+- Informations de requête (method, path, endpoint, remote_addr) si disponible
+- Informations utilisateur (id, username, role) si authentifié
+- Contexte personnalisé via `**kwargs`
+
+#### **Fonctions** :
+
+1. **`get_logger(name: Optional[str] = None) -> StructuredLogger`**
+   - **Description** : Récupère un logger structuré
+   - **Paramètres** :
+     - `name` : Nom du logger (optionnel, utilise le nom du module appelant par défaut)
+   - **Retour** : Instance de `StructuredLogger`
+
+2. **`get_app_logger() -> StructuredLogger`**
+   - **Description** : Récupère le logger de l'application Flask actuelle
+   - **Fonctionnalités** :
+     - Utilise `current_app.logger` si disponible
+     - Fallback vers un logger générique si pas de contexte de requête
+   - **Retour** : Instance de `StructuredLogger`
+
+**Format des logs** :
+Les logs sont formatés en JSON pour faciliter le parsing et l'analyse :
+```
+Message | Context: {"timestamp": "...", "request": {...}, "user": {...}, ...}
+```
+
+---
+
+### 11. `app/seed.py`
 
 **Rôle** : Initialisation des données par défaut.
 
@@ -634,7 +679,7 @@ def notify_admins(
 
 ---
 
-### 11. `config.py`
+### 12. `config.py`
 
 **Rôle** : Configuration centralisée de l'application.
 
@@ -684,7 +729,7 @@ def notify_admins(
 
 ---
 
-### 12. `run.py`
+### 13. `run.py`
 
 **Rôle** : Point d'entrée de l'application.
 
