@@ -1,9 +1,7 @@
-import atexit
 import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from flask import Flask, url_for
 from flask_sqlalchemy import SQLAlchemy
@@ -11,9 +9,6 @@ from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from sqlalchemy import text
 from flask_cors import CORS
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.triggers.cron import CronTrigger
 
 from config import Config
 
@@ -21,134 +16,6 @@ from config import Config
 db = SQLAlchemy()
 login_manager = LoginManager()
 csrf = CSRFProtect()
-scheduler = BackgroundScheduler(timezone=os.getenv("TZ", "UTC"))
-
-from .tasks import collect_sensor_readings, cleanup_old_captures
-
-# Cache pour le délai d'affichage LCD (évite les requêtes DB répétées)
-_lcd_display_seconds_cache: Optional[float] = None
-_lcd_display_seconds_cache_timestamp: Optional[datetime] = None
-LCD_DISPLAY_SECONDS_CACHE_TTL = 300  # 5 minutes
-
-
-def get_lcd_display_seconds(app: Flask, use_cache: bool = True) -> float:
-    """Récupère le délai d'affichage LCD depuis la DB avec cache
-    
-    Args:
-        app: Instance Flask
-        use_cache: Si True, utilise le cache si disponible et valide
-    
-    Returns:
-        Délai en secondes (entre 1 et 60)
-    """
-    global _lcd_display_seconds_cache, _lcd_display_seconds_cache_timestamp
-    
-    now = datetime.utcnow()
-    
-    # Vérifier le cache
-    if use_cache and _lcd_display_seconds_cache is not None and _lcd_display_seconds_cache_timestamp:
-        cache_age = (now - _lcd_display_seconds_cache_timestamp).total_seconds()
-        if cache_age < LCD_DISPLAY_SECONDS_CACHE_TTL:
-            return _lcd_display_seconds_cache
-    
-    # Lire depuis la DB
-    display_seconds = 3.0  # Valeur par défaut
-    try:
-        with app.app_context():
-            from .models import Setting
-            setting = Setting.query.filter_by(key="LCD_Page_Display_Seconds").first()
-            if setting and setting.value:
-                try:
-                    display_seconds = float(str(setting.value).strip())
-                    display_seconds = max(1.0, min(60.0, display_seconds))  # Limiter entre 1 et 60
-                except (ValueError, TypeError):
-                    pass
-    except Exception:
-        pass
-    
-    # Mettre à jour le cache
-    _lcd_display_seconds_cache = display_seconds
-    _lcd_display_seconds_cache_timestamp = now
-    
-    return display_seconds
-
-
-def invalidate_lcd_display_seconds_cache() -> None:
-    """Invalide le cache du délai d'affichage LCD"""
-    global _lcd_display_seconds_cache, _lcd_display_seconds_cache_timestamp
-    _lcd_display_seconds_cache = None
-    _lcd_display_seconds_cache_timestamp = None
-
-
-def schedule_sensor_poll(app: Flask, minutes: int) -> None:
-    minutes = max(1, int(minutes))
-    job_id = "sensor_readings"
-    trigger = IntervalTrigger(minutes=minutes)
-
-    if scheduler.get_job(job_id):
-        scheduler.reschedule_job(job_id, trigger=trigger)
-    else:
-        scheduler.add_job(
-            func=lambda: collect_sensor_readings(app),
-            trigger=trigger,
-            id=job_id,
-            replace_existing=True,
-            max_instances=1,
-        )
-
-    if not scheduler.running:
-        scheduler.start()
-        if not app.config.get("SCHEDULER_SHUTDOWN_REGISTERED"):
-            atexit.register(lambda: scheduler.shutdown(wait=False))
-            app.config["SCHEDULER_SHUTDOWN_REGISTERED"] = True
-
-    app.config["SCHEDULER_STARTED"] = True
-    app.config["SENSOR_POLL_INTERVAL_MINUTES"] = minutes
-    app.logger.info("Scheduler capteurs configuré (%s min).", minutes)
-
-
-def schedule_lcd_auto_scroll(app: Flask, force_refresh: bool = False) -> None:
-    """Planifie le défilement automatique des pages LCD avec un délai configurable
-    
-    Args:
-        app: Instance Flask
-        force_refresh: Si True, ignore le cache et lit depuis la DB
-    """
-    if not app.config.get("LCD_ENABLED", False):
-        app.logger.info("Défilement LCD automatique désactivé (LCD_ENABLED=False).")
-        return
-    
-    # Récupérer le délai depuis les paramètres avec cache
-    display_seconds = get_lcd_display_seconds(app, use_cache=not force_refresh)
-    
-    job_id = "lcd_auto_scroll"
-    trigger = IntervalTrigger(seconds=int(display_seconds))
-    
-    if scheduler.get_job(job_id):
-        scheduler.reschedule_job(job_id, trigger=trigger)
-    else:
-        scheduler.add_job(
-            func=lambda: _run_lcd_auto_scroll(app),
-            trigger=trigger,
-            id=job_id,
-            replace_existing=True,
-            max_instances=1,
-        )
-    
-    if not scheduler.running:
-        scheduler.start()
-        if not app.config.get("SCHEDULER_SHUTDOWN_REGISTERED"):
-            atexit.register(lambda: scheduler.shutdown(wait=False))
-            app.config["SCHEDULER_SHUTDOWN_REGISTERED"] = True
-    
-    app.logger.info("Défilement LCD automatique configuré (toutes les %s secondes).", int(display_seconds))
-
-
-def _run_lcd_auto_scroll(app: Flask) -> None:
-    """Wrapper pour exécuter le défilement LCD dans le contexte de l'application"""
-    with app.app_context():
-        from .lcd_display import auto_scroll_lcd_pages
-        auto_scroll_lcd_pages()
 
 
 def create_app():
@@ -247,8 +114,6 @@ def create_app():
     app.jinja_env.filters["local_datetime"] = local_datetime_filter
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-    captures_folder = app.config.get("CAPTURES_FOLDER", str(Path(app.static_folder) / "captures"))
-    os.makedirs(captures_folder, exist_ok=True)
 
     from .routes import main_bp
     from .auth import auth_bp
@@ -298,54 +163,6 @@ def create_app():
 
     app.jinja_env.globals["avatar_palette"] = avatar_palette
 
-    def _start_scheduler():
-        if app.config.get("SCHEDULER_STARTED"):
-            return
-        
-        # Planifier le défilement automatique du LCD (indépendant de la collecte de capteurs)
-        schedule_lcd_auto_scroll(app)
-        
-        # Planifier la collecte de capteurs si activée
-        if not app.config.get("SENSOR_POLL_ENABLED", True):
-            app.logger.info("Scheduler capteurs désactivé par configuration.")
-            return
-        
-        interval = int(app.config.get("SENSOR_POLL_INTERVAL_MINUTES", 30))
-        try:
-            with app.app_context():
-                from .models import Setting
-
-                stored = Setting.query.filter_by(key="Sensor_Poll_Interval_Minutes").first()
-                if stored and stored.value:
-                    interval = int(str(stored.value).strip())
-        except Exception as exc:  # pragma: no cover - lecture optionnelle
-            app.logger.warning("Impossible de lire Sensor_Poll_Interval_Minutes: %s", exc)
-
-        schedule_sensor_poll(app, interval)
-        
-        # Planifier le nettoyage des captures (tous les jours à minuit)
-        job_id = "cleanup_captures"
-        if scheduler.get_job(job_id):
-            scheduler.reschedule_job(job_id, trigger=CronTrigger(hour=0, minute=0))
-        else:
-            scheduler.add_job(
-                func=lambda: cleanup_old_captures(app),
-                trigger=CronTrigger(hour=0, minute=0),
-                id=job_id,
-                replace_existing=True,
-                max_instances=1,
-            )
-
-    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        _start_scheduler()
-
-    def _ensure_scheduler_once():
-        _start_scheduler()
-
-    if hasattr(app, "before_first_request"):
-        app.before_first_request(_ensure_scheduler_once)
-    else:  # compat Flask >=3.1
-        app.before_request(_ensure_scheduler_once)
 
     with app.app_context():
         from . import seed
@@ -405,7 +222,7 @@ def create_app():
                 )
                 db.session.commit()
 
-            # Migration de la table user - IMPORTANT: doit être fait avant toute utilisation du modèle User
+            # Migration de la table user
             user_cols = {
                 row[1]
                 for row in db.session.execute(text("PRAGMA table_info(user)"))
@@ -532,28 +349,22 @@ def create_app():
                 db.session.commit()
                 migrations_applied.append("title")
             
+            if "reset_token_hash" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN reset_token_hash VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("reset_token_hash")
+            
+            if "reset_token_expires" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN reset_token_expires DATETIME")
+                )
+                db.session.commit()
+                migrations_applied.append("reset_token_expires")
+            
             if migrations_applied:
                 app.logger.info(f"Migrations appliquées sur la table 'user': {', '.join(migrations_applied)}")
-
-            automation_cols = {
-                row[1]
-                for row in db.session.execute(text("PRAGMA table_info(automation_rule)"))
-            }
-            if "enabled" not in automation_cols:
-                db.session.execute(
-                    text("ALTER TABLE automation_rule ADD COLUMN enabled BOOLEAN DEFAULT 1")
-                )
-                db.session.commit()
-            if "cooldown_seconds" not in automation_cols:
-                db.session.execute(
-                    text("ALTER TABLE automation_rule ADD COLUMN cooldown_seconds INTEGER DEFAULT 300")
-                )
-                db.session.commit()
-            if "last_triggered_at" not in automation_cols:
-                db.session.execute(
-                    text("ALTER TABLE automation_rule ADD COLUMN last_triggered_at DATETIME")
-                )
-                db.session.commit()
         except Exception as exc:  # pragma: no cover - dépend de l'état SQLite
             app.logger.warning("Impossible de vérifier les schémas SQLite: %s", exc)
         seed.ensure_default_admin()

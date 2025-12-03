@@ -1,14 +1,14 @@
 Bonjour {{ user.username }},
 
-Votre demande d’accès au Dashboard vient d’être approuvée. Votre compte est désormais actif.
+Votre demande d'accès à TemplateApp a été approuvée par un administrateur. Votre compte est désormais actif et vous pouvez vous connecter avec vos identifiants.
 
-Vous pouvez vous connecter dès maintenant : {{ url_for('auth.login', _external=True) }}
+Pour accéder à TemplateApp : {{ url_for('auth.login', _external=True) }}
 
-Pensez à garder vos identifiants en lieu sûr. Pour toute question, contactez votre administrateur.
+Pour des raisons de sécurité, nous vous recommandons de modifier votre mot de passe régulièrement et de conserver vos identifiants en lieu sûr.
 
-À très vite,
-L’équipe Dashboard Automatisation
+Cordialement,
+L'équipe TemplateApp
 
 ---
-Email automatique, merci de ne pas répondre.
+Cet email est généré automatiquement, merci de ne pas y répondre.
 

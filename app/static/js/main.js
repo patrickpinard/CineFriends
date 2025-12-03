@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Flash messages - utiliser la fonction createToast définie dans base.html
     function displayFlashMessages() {
-        const flashDataScript = document.getElementById('flash-data');
+    const flashDataScript = document.getElementById('flash-data');
         if (!flashDataScript) return;
 
         try {

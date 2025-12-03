@@ -1,3 +1,10 @@
+"""
+Modèles de données SQLAlchemy pour l'application TemplateApp.
+
+Ce module définit tous les modèles de données utilisés dans l'application,
+incluant les utilisateurs, les paramètres et les notifications.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -10,6 +17,46 @@ from . import db, login_manager
 
 
 class User(UserMixin, db.Model):
+    """
+    Modèle représentant un utilisateur du système.
+    
+    Hérite de UserMixin pour la compatibilité avec Flask-Login.
+    Gère l'authentification, les informations personnelles, l'adresse,
+    et la double authentification (2FA).
+    
+    Attributes:
+        id (int): Identifiant unique de l'utilisateur (clé primaire).
+        title (str): Civilité de l'utilisateur (Monsieur/Madame), optionnel.
+        first_name (str): Prénom de l'utilisateur, optionnel.
+        last_name (str): Nom de famille de l'utilisateur, optionnel.
+        username (str): Nom d'utilisateur unique, requis.
+        email (str): Adresse email unique, optionnelle.
+        role (str): Rôle de l'utilisateur ('admin' ou 'user'), défaut: 'user'.
+        password_hash (str): Hash du mot de passe (PBKDF2-SHA256), requis.
+        active (bool): Statut actif/inactif du compte, défaut: True.
+        created_at (datetime): Date et heure de création du compte.
+        last_login (datetime): Date et heure de la dernière connexion, optionnel.
+        avatar_filename (str): Nom du fichier avatar, optionnel.
+        address (str): Ancien champ d'adresse, conservé pour compatibilité.
+        street (str): Rue de l'adresse, optionnel.
+        postal_code (str): Code postal, optionnel.
+        city_country (str): Ancien champ ville/pays, conservé pour compatibilité.
+        city (str): Ville de l'adresse, optionnel.
+        country (str): Pays de l'adresse, optionnel.
+        phone (str): Numéro de téléphone, optionnel.
+        twofa_enabled (bool): Double authentification activée, défaut: False.
+        twofa_code_hash (str): Hash du code 2FA, optionnel.
+        twofa_code_sent_at (datetime): Date d'envoi du code 2FA, optionnel.
+        twofa_trusted_token_hash (str): Hash du token de confiance 2FA, optionnel.
+        twofa_trusted_created_at (datetime): Date de création du token de confiance, optionnel.
+        reset_token_hash (str): Hash du token de réinitialisation de mot de passe, optionnel.
+        reset_token_expires (datetime): Date d'expiration du token de réinitialisation, optionnel.
+    
+    Methods:
+        set_password(password: str): Hash et définit le mot de passe.
+        check_password(password: str): Vérifie si le mot de passe correspond.
+        is_active(): Retourne le statut actif du compte.
+    """
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(20), nullable=True)  # Monsieur/Madame
     first_name = db.Column(db.String(100), nullable=True)
@@ -34,73 +81,96 @@ class User(UserMixin, db.Model):
     twofa_code_sent_at = db.Column(db.DateTime, nullable=True)
     twofa_trusted_token_hash = db.Column(db.String(255), nullable=True)
     twofa_trusted_created_at = db.Column(db.DateTime, nullable=True)
-
-    automation_rules = db.relationship("AutomationRule", backref="owner", lazy=True)
+    reset_token_hash = db.Column(db.String(255), nullable=True)
+    reset_token_expires = db.Column(db.DateTime, nullable=True)
 
     def set_password(self, password: str) -> None:
+        """
+        Hash et définit le mot de passe de l'utilisateur.
+        
+        Utilise PBKDF2-SHA256 pour le hachage sécurisé du mot de passe.
+        
+        Args:
+            password: Mot de passe en clair à hasher.
+        """
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
 
     def check_password(self, password: str) -> bool:
+        """
+        Vérifie si le mot de passe fourni correspond au hash stocké.
+        
+        Args:
+            password: Mot de passe en clair à vérifier.
+        
+        Returns:
+            True si le mot de passe correspond, False sinon.
+        """
         return check_password_hash(self.password_hash, password)
 
     def is_active(self) -> bool:  # type: ignore[override]
+        """
+        Vérifie si le compte utilisateur est actif.
+        
+        Nécessaire pour Flask-Login.
+        
+        Returns:
+            True si le compte est actif, False sinon.
+        """
         return self.active
 
 
 @login_manager.user_loader
 def load_user(user_id: str) -> Optional[User]:
+    """
+    Charge un utilisateur depuis la base de données pour Flask-Login.
+    
+    Args:
+        user_id: Identifiant de l'utilisateur (chaîne).
+    
+    Returns:
+        Instance User si trouvé, None sinon.
+    """
     return User.query.get(int(user_id))
 
 
-class AutomationRule(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False)
-    trigger = db.Column(db.String(255), nullable=False)
-    action = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    enabled = db.Column(db.Boolean, default=True, index=True)
-    cooldown_seconds = db.Column(db.Integer, default=300)
-    last_triggered_at = db.Column(db.DateTime, nullable=True)
-
-    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
-
-
-class JournalEntry(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    level = db.Column(db.String(20), default="info", index=True)
-    message = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    details = db.Column(db.JSON, nullable=True)
-
-
 class Setting(db.Model):
+    """
+    Modèle représentant un paramètre de configuration du système.
+    
+    Permet de stocker des paramètres configurables de manière dynamique
+    sans modifier le code.
+    
+    Attributes:
+        id (int): Identifiant unique du paramètre (clé primaire).
+        key (str): Clé unique du paramètre, requis.
+        value (str): Valeur du paramètre, optionnelle.
+        updated_at (datetime): Date et heure de dernière mise à jour.
+    """
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(120), unique=True, nullable=False)
     value = db.Column(db.String(255), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class SensorReading(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    sensor_type = db.Column(db.String(50), nullable=False, index=True)
-    sensor_id = db.Column(db.String(120), nullable=True)
-    metric = db.Column(db.String(50), nullable=False, index=True)
-    value = db.Column(db.Float, nullable=True)
-    unit = db.Column(db.String(20), nullable=True)
-    extra = db.Column(db.JSON, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-
-
-class RelayState(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    channel = db.Column(db.Integer, nullable=False, index=True)
-    state = db.Column(db.String(8), nullable=False)
-    source = db.Column(db.String(120), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-
-
 class Notification(db.Model):
+    """
+    Modèle représentant une notification pour les utilisateurs.
+    
+    Permet d'afficher des notifications dans l'interface utilisateur.
+    
+    Attributes:
+        id (int): Identifiant unique de la notification (clé primaire).
+        user_id (int): Identifiant de l'utilisateur destinataire (FK vers User), optionnel.
+        audience (str): Audience de la notification ('user', 'admin', 'global'), défaut: 'user'.
+        level (str): Niveau de la notification ('info', 'warning', 'error'), défaut: 'info'.
+        title (str): Titre de la notification, requis.
+        message (str): Message de la notification, requis.
+        action_url (str): URL d'action associée, optionnelle.
+        created_at (datetime): Date et heure de création de la notification.
+        read (bool): Notification lue/non lue, défaut: False.
+        persistent (bool): Notification persistante (ne peut pas être supprimée), défaut: False.
+        user (User): Relation vers l'utilisateur destinataire (via backref).
+    """
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     audience = db.Column(db.String(50), default="user")  # user, admin, global

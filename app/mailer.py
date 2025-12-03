@@ -14,7 +14,7 @@ def send_email(
     body: str,
     html_body: str | None = None,
     bcc: Sequence[str] | None = None,
-) -> None:
+) -> bool:
     app = current_app
     if not app:
         raise RuntimeError("send_email doit être appelé dans un contexte d’application Flask.")
@@ -26,8 +26,13 @@ def send_email(
     sender = config.get("MAIL_DEFAULT_SENDER", username)
 
     if not server or not username or not password or not sender:
-        app.logger.warning("Configuration email incomplète, impossible d’envoyer le courriel.")
-        return
+        app.logger.error(
+            "Configuration email incomplète, impossible d'envoyer le courriel. "
+            f"MAIL_SERVER={bool(server)}, MAIL_USERNAME={bool(username)}, "
+            f"MAIL_PASSWORD={'***' if password else None}, MAIL_DEFAULT_SENDER={bool(sender)}. "
+            "Veuillez configurer MAIL_SERVER, MAIL_USERNAME, MAIL_PASSWORD et MAIL_DEFAULT_SENDER dans votre fichier .env"
+        )
+        return False
 
     if isinstance(recipients, str):
         recipients_list = [recipients]
@@ -35,8 +40,8 @@ def send_email(
         recipients_list = list(recipients)
 
     if not recipients_list:
-        app.logger.warning("Aucun destinataire fourni pour l’email.")
-        return
+        app.logger.warning("Aucun destinataire fourni pour l'email.")
+        return False
 
     message = EmailMessage()
     message["Subject"] = subject
@@ -71,6 +76,9 @@ def send_email(
                     smtp.starttls(context=context)
                 smtp.login(username, password)
                 smtp.send_message(message)
+        app.logger.info(f"Email envoyé avec succès à {', '.join(recipients_list)}")
+        return True
     except Exception as exc:  # pragma: no cover - dépend du serveur SMTP
-        app.logger.error("Erreur lors de l’envoi de l’email: %s", exc)
+        app.logger.error(f"Erreur lors de l'envoi de l'email à {', '.join(recipients_list)}: {exc}", exc_info=True)
+        return False
 

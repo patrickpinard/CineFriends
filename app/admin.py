@@ -4,10 +4,9 @@ from flask_login import current_user, login_required
 from . import db
 from .forms import UserForm
 from .mailer import send_email
-from .models import JournalEntry, User
+from .models import User
 from .services import create_notification, notify_admins
 from .utils import build_changes, delete_avatar, save_avatar
-from .routes import invalidate_settings_cache
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -112,27 +111,10 @@ def create_user():
                 return render_template("dashboard/user_form.html", form=form, is_edit=False)
             user.set_password(form.password.data)
             db.session.add(user)
-            db.session.add(
-                JournalEntry(
-                    level="info",
-                    message=f"Utilisateur créé: {user.username}",
-                    details={
-                        "user_id": user.id,
-                        "created_by": current_user.username,
-                        "changes": {
-                            "username": {"after": user.username},
-                            "email": {"after": user.email},
-                            "role": {"after": user.role},
-                            "active": {"after": user.active},
-                            "twofa_enabled": {"after": user.twofa_enabled},
-                        },
-                    },
-                )
-            )
             db.session.commit()
             if user.email:
                 create_notification(
-                    title="Bienvenue sur le Dashboard",
+                    title="Bienvenue sur TemplateApp",
                     message="Votre compte a été créé par un administrateur. Vous pouvez vous connecter avec vos identifiants.",
                     user=user,
                     level="info",
@@ -225,22 +207,8 @@ def edit_user(user_id: int):
                 "twofa_enabled": user.twofa_enabled,
                 "avatar_filename": user.avatar_filename,
             }
-            changes = build_changes(original_state, updated_state, list(original_state.keys()))
-            if changes:
-                db.session.add(
-                    JournalEntry(
-                        level="info",
-                        message=f"Utilisateur mis à jour: {user.username}",
-                        details={
-                            "user_id": user.id,
-                            "modified_by": current_user.username,
-                            "changes": changes,
-                        },
-                    )
-                )
             if twofa_before != user.twofa_enabled:
                 status = "activée" if user.twofa_enabled else "désactivée"
-                db.session.add(JournalEntry(level="info", message=f"2FA {status} pour {user.username}"))
                 if user.email:
                     create_notification(
                         user=user,
@@ -255,14 +223,14 @@ def edit_user(user_id: int):
                 text_body = render_template("email/account_approved.txt", user=user)
                 html_body = render_template("email/account_approved.html", user=user)
                 send_email(
-                    subject="Dashboard — Votre accès est activé",
+                    subject="TemplateApp — Votre accès est activé",
                     recipients=user.email,
                     body=text_body,
                     html_body=html_body,
                 )
                 create_notification(
                     title="Compte activé",
-                    message="Votre accès au Dashboard vient d’être activé.",
+                    message="Votre accès à TemplateApp vient d'être activé.",
                     user=user,
                     level="success",
                     action_endpoint="auth.login",
@@ -280,14 +248,14 @@ def edit_user(user_id: int):
                 text_body = render_template("email/account_deactivated.txt", user=user)
                 html_body = render_template("email/account_deactivated.html", user=user)
                 send_email(
-                    subject="Dashboard — Compte désactivé",
+                    subject="TemplateApp — Compte désactivé",
                     recipients=user.email,
                     body=text_body,
                     html_body=html_body,
                 )
                 create_notification(
                     title="Compte désactivé",
-                    message="Votre accès au Dashboard a été suspendu par un administrateur.",
+                    message="Votre accès à TemplateApp a été suspendu par un administrateur.",
                     user=user,
                     level="warning",
                     persistent=True,
@@ -322,7 +290,6 @@ def delete_user(user_id: int):
         return redirect(url_for("admin.users"))
     delete_avatar(user.avatar_filename)
     db.session.delete(user)
-    db.session.add(JournalEntry(level="warning", message=f"Utilisateur supprimé: {user.username}"))
     db.session.commit()
     notify_admins(
         title="Utilisateur supprimé",
@@ -333,84 +300,3 @@ def delete_user(user_id: int):
     )
     flash("Utilisateur supprimé.", "info")
     return redirect(url_for("admin.users"))
-
-
-@admin_bp.route("/purge-donnees", methods=["GET", "POST"])
-@login_required
-def purge_data():
-    """Page de gestion de la purge des données de capteurs"""
-    from .models import Setting, JournalEntry
-    from .utils import purge_sensor_data
-    
-    # Récupérer ou créer le paramètre de rétention
-    retention_setting = Setting.query.filter_by(key="Data_Retention_Days").first()
-    default_retention = 30
-    if retention_setting and retention_setting.value:
-        try:
-            default_retention = int(retention_setting.value)
-        except ValueError:
-            pass
-    
-    retention_days = default_retention
-    
-    if request.method == "POST":
-        if request.form.get("action") == "simulate":
-            # Simulation de la purge
-            try:
-                retention_days = int(request.form.get("retention_days", default_retention))
-                if retention_days < 1 or retention_days > 365:
-                    flash("La durée de conservation doit être entre 1 et 365 jours.", "danger")
-                    return redirect(url_for("admin.purge_data"))
-            except ValueError:
-                flash("Durée de conservation invalide.", "danger")
-                return redirect(url_for("admin.purge_data"))
-            
-            stats = purge_sensor_data(retention_days=retention_days, perform_purge=False)
-            return render_template("dashboard/purge_data.html", stats=stats, retention_days=retention_days)
-        
-        elif request.form.get("action") == "purge":
-            # Exécution de la purge
-            try:
-                retention_days = int(request.form.get("retention_days", default_retention))
-                if retention_days < 1 or retention_days > 365:
-                    flash("La durée de conservation doit être entre 1 et 365 jours.", "danger")
-                    return redirect(url_for("admin.purge_data"))
-            except ValueError:
-                flash("Durée de conservation invalide.", "danger")
-                return redirect(url_for("admin.purge_data"))
-            
-            stats = purge_sensor_data(retention_days=retention_days, perform_purge=True)
-            
-            # Mettre à jour le paramètre de rétention
-            if not retention_setting:
-                retention_setting = Setting(key="Data_Retention_Days", value=str(retention_days))
-                db.session.add(retention_setting)
-            else:
-                retention_setting.value = str(retention_days)
-            
-            # Enregistrer dans le journal
-            db.session.add(
-                JournalEntry(
-                    level="warning",
-                    message="Purge des données de capteurs",
-                    details={
-                        "retention_days": retention_days,
-                        "readings_deleted_old": stats.get("readings_deleted_old", 0),
-                        "readings_deleted_reduced": stats.get("readings_deleted_reduced", 0),
-                        "relay_states_deleted": stats.get("relay_states_deleted", 0),
-                        "performed_by": current_user.username,
-                    },
-                )
-            )
-            db.session.commit()
-            
-            # Invalider le cache des settings après modification
-            invalidate_settings_cache()
-            
-            total_deleted = stats.get("readings_deleted_old", 0) + stats.get("readings_deleted_reduced", 0) + stats.get("relay_states_deleted", 0)
-            flash(f"Purge effectuée : {total_deleted} enregistrement(s) supprimé(s).", "success")
-            return redirect(url_for("admin.purge_data"))
-    
-    # Mode GET : afficher les statistiques actuelles
-    stats = purge_sensor_data(retention_days=retention_days, perform_purge=False)
-    return render_template("dashboard/purge_data.html", stats=stats, retention_days=retention_days)

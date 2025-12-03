@@ -11,3 +11,4 @@ w1thermsensor==2.0.0
 apscheduler==3.10.4
 numpy==1.26.4
 smbus2==0.4.3
+Pillow==10.4.0

@@ -28,20 +28,12 @@
             text-align: center;
         }
         .logo {
-            width: 64px;
-            height: 64px;
-            border-radius: 18px;
-            background: linear-gradient(135deg, #0ea5e9, #14b8a6);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+            display: inline-block;
         }
-        .logo span {
-            font-size: 14px;
-            font-weight: 600;
-            letter-spacing: .4em;
-            color: #f8fafc;
-            text-transform: uppercase;
+        .logo img {
+            width: 72px;
+            height: 72px;
+            border-radius: 18px;
         }
         h1 {
             font-size: 24px;
@@ -84,20 +76,20 @@
         <div class="card">
             <div class="header">
                 <div class="logo">
-                    <span>DB</span>
+                    <img src="{{ url_for('static', filename='img/logo.png', _external=True) }}" alt="Logo TemplateApp" />
                 </div>
-                <h1>Merci {{ user.username }} !</h1>
+                <h1>Bonjour {{ user.username }},</h1>
                 <div class="badge">Demande reçue</div>
             </div>
             <div class="divider"></div>
             <div style="padding: 0 32px 32px;">
-                <p>Votre demande d’accès au Dashboard a bien été enregistrée. Un administrateur va la vérifier très prochainement.</p>
-                <p>Vous recevrez un email dès que votre compte sera activé. En attendant, vous pouvez conserver vos identifiants en lieu sûr.</p>
-                <p>Nous restons disponibles si vous avez des questions.</p>
-                <p>À bientôt,<br>L’équipe Dashboard Automatisation</p>
+                <p>Nous accusons réception de votre demande d'accès à TemplateApp. Votre demande a été enregistrée et est en cours d'examen par un administrateur.</p>
+                <p>Vous recevrez un email de confirmation dès que votre compte sera activé. En attendant, veuillez conserver vos identifiants en lieu sûr.</p>
+                <p>Pour toute question concernant votre demande, n'hésitez pas à contacter votre administrateur.</p>
+                <p>Cordialement,<br>L'équipe TemplateApp</p>
             </div>
             <div class="footer">
-                © {{ current_year if current_year else 2025 }} Dashboard Automatisation · Cet email est généré automatiquement, merci de ne pas y répondre.
+                © {{ current_year if current_year else 2025 }} TemplateApp · Cet email est généré automatiquement, merci de ne pas y répondre.
             </div>
         </div>
     </div>

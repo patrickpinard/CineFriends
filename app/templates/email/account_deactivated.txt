@@ -1,11 +1,11 @@
 Bonjour {{ user.username }},
 
-Votre accès au Dashboard a été désactivé par un administrateur. Vous ne pouvez plus vous connecter pour le moment.
+Nous vous informons que votre accès à TemplateApp a été temporairement désactivé par un administrateur. Vous ne pouvez plus vous connecter pour le moment.
 
-Si vous pensez qu’il s’agit d’une erreur ou que vous souhaitez une réactivation, contactez votre administrateur.
+Si vous pensez qu'il s'agit d'une erreur ou si vous souhaitez obtenir plus d'informations concernant cette désactivation, merci de contacter votre administrateur.
 
-Merci de votre compréhension,
-L’équipe Dashboard Automatisation
+Cordialement,
+L'équipe TemplateApp
 
 ---
 Cet email est généré automatiquement, merci de ne pas y répondre.

@@ -5,12 +5,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="TemplateApp" />
     <meta name="format-detection" content="telephone=no" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/180.png') }}" />
-    <meta name="theme-color" content="#0ea5e9" />
-    <title>{% block title %}Dashboard{% endblock %}</title>
+    <link rel="apple-touch-icon" href="{{ url_for('main.generate_icon', size=180) }}" />
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('main.generate_icon', size=180) }}" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="msapplication-TileColor" content="#ffffff" />
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='img/180.png') }}" />
+    <title>{% block title %}TemplateApp{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     <script>
         document.documentElement.classList.add('is-loading');
@@ -27,7 +31,7 @@
 
 <body class="h-full bg-gradient-to-br from-slate-100 via-white to-sky-50 antialiased">
     <div id="toast-container" class="pointer-events-none fixed inset-x-4 z-50 flex flex-col gap-3 md:items-end"
-        style="top: calc(var(--safe-area-top, 0px) + 1rem);"></div>
+        style="top: calc(env(safe-area-inset-top, 0px) + 4rem + 1rem);"></div>
     <div id="page-skeleton" role="status" aria-live="polite" aria-hidden="false">
         <div class="loading-shell">
             <div class="loading-spinner"></div>
@@ -46,9 +50,9 @@
             class="fixed inset-y-0 left-0 z-30 hidden border-r border-slate-200 bg-white/90 backdrop-blur lg:flex lg:flex-col"
             data-sidebar>
             <div class="flex items-center gap-3 px-6 pb-6" style="padding-top: calc(var(--safe-area-top) + 1.75rem);">
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo Dashboard"
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo TemplateApp"
                     class="h-10 w-10 rounded-2xl object-contain" />
-                <span class="sidebar-title text-xl font-semibold text-slate-900">Dashboard</span>
+                <span class="sidebar-title text-xl font-semibold text-slate-900">TemplateApp</span>
             </div>
             <nav class="flex-1 space-y-1 px-4 pb-6 text-sm font-medium text-slate-600">
                 <a href="{{ url_for('main.dashboard') }}"
@@ -164,19 +168,6 @@
                     </span>
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Utilisateurs</span>
                 </a>
-                <a href="{{ url_for('admin.purge_data') }}"
-                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'admin.purge_data' else '' }}"
-                    title="Purge des données">
-                    <span
-                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'admin.purge_data' else '' }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                    </span>
-                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Purge données</span>
-                </a>
                 {% endif %}
             </nav>
         </aside>
@@ -184,8 +175,8 @@
         <div class="layout-shell flex min-h-screen flex-1 flex-col">
             <header
                 class="fixed top-0 left-0 right-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur lg:left-72"
-                data-app-header style="padding-top: var(--safe-area-top);">
-                <div class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+                data-app-header style="padding-top: 0;">
+                <div class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8" style="padding-top: max(env(safe-area-inset-top, 0px), 0.5rem); min-height: calc(4rem + env(safe-area-inset-top, 0px));">
                     <div class="flex items-center gap-3 flex-1 min-w-0">
                         <button type="button"
                             class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 lg:hidden"
@@ -205,7 +196,7 @@
                                     d="M19.5 12h-15m0 0L9 6m-4.5 6L9 18" />
                             </svg>
                         </button>
-                        <div class="text-sm font-semibold uppercase tracking-wide text-slate-500 truncate">
+                        <div class="text-xs sm:text-sm font-semibold uppercase tracking-wide text-slate-500 truncate" style="line-height: 1.3;">
                             {% block header_title %}{% endblock %}
                         </div>
                     </div>
@@ -393,24 +384,21 @@
 
             <div class="flex-1 px-4 pt-8 pb-8 sm:px-6 lg:px-8 lg:pt-24 lg:pb-8">
                 {% set page_explanations = {
-                'main.dashboard': 'Vue d\'ensemble temps réel pour suivre capteurs, alertes et relais.',
-                'main.charts': 'Analyse détaillée des mesures historiques et des actions relais.',
-                'main.automation': 'Configurez vos règles pour piloter automatiquement les relais.',
-                'main.settings': 'Ajustez le matériel détecté, les noms et les paramètres système.',
-                'main.camera': 'Surveillez la caméra et capturez des images de votre installation.',
-                'main.journal': 'Consultez le journal des événements, alertes et actions automatiques.',
+                'main.dashboard': 'Page d\'accueil de TemplateApp.',
+                'main.charts': 'Page de graphiques.',
+                'main.automation': 'Page d\'automatisation.',
+                'main.settings': 'Page de paramètres.',
+                'main.camera': 'Page de caméra.',
+                'main.journal': 'Page de journal.',
                 'main.profile': 'Mettez à jour vos informations personnelles et de connexion.',
-                'main.lcd_preview': 'Visualisez l\'affichage LCD1602 et les données envoyées à l\'écran.',
-                'admin.users': 'Administrez les comptes utilisateurs autorisés à accéder au Dashboard.',
+                'main.lcd_preview': 'Page d\'affichage LCD.',
+                'admin.users': 'Administrez les comptes utilisateurs autorisés à accéder à TemplateApp.',
                 'admin.create_user': 'Créez un nouvel utilisateur avec les droits appropriés.',
                 'admin.edit_user': 'Modifiez les droits ou informations d\'un utilisateur existant.',
-                'admin.purge_data': 'Purgez les données anciennes de capteurs pour libérer de l\'espace et optimiser les
-                performances.',
                 } %}
-                {% set page_intro = page_explanations.get(request.endpoint, 'Surveillez et administrez votre
-                installation connectée en toute simplicité.') %}
+                {% set page_intro = page_explanations.get(request.endpoint, 'TemplateApp - Application template prête à être personnalisée.') %}
                 <div id="page-info-content" class="hidden">{{ page_intro }}</div>
-                <section>
+                <section class="w-full max-w-full overflow-x-hidden" style="box-sizing: border-box;">
                     {% block content %}{% endblock %}
                 </section>
             </div>
@@ -482,7 +470,7 @@
                     </svg>
                 </span>
                 <div class="space-y-2 text-sm text-slate-600">
-                    <h2 class="text-base font-semibold text-slate-900">Installer le Dashboard</h2>
+                    <h2 class="text-base font-semibold text-slate-900">Installer TemplateApp</h2>
                     <p data-install-description></p>
                 </div>
             </div>
@@ -513,7 +501,7 @@
                     <li class="flex items-start gap-2">
                         <span
                             class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">3</span>
-                        Validez le nom « Dashboard » puis touchez <span class="font-semibold">Ajouter</span>.
+                        Validez le nom « TemplateApp » puis touchez <span class="font-semibold">Ajouter</span>.
                     </li>
                 </ol>
             </div>
@@ -537,7 +525,7 @@
         <div class="px-6 pb-6" style="padding-top: calc(var(--safe-area-top) + 1.5rem);">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo Dashboard"
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo TemplateApp"
                         class="h-10 w-10 rounded-2xl object-contain" />
                     <span class="text-lg font-semibold text-slate-900">Navigation</span>
                 </div>
@@ -656,18 +644,6 @@
                     </svg>
                 </span>
                 <span>Utilisateurs</span>
-            </a>
-            <a href="{{ url_for('admin.purge_data') }}"
-                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'admin.purge_data' else '' }}">
-                <span
-                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                    </svg>
-                </span>
-                <span>Purge données</span>
             </a>
             {% endif %}
         </nav>

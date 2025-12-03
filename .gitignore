@@ -48,3 +48,7 @@ app/static/uploads/*.jpeg
 app/static/uploads/*.gif
 !app/static/uploads/.gitkeep
 
+# Captures (photos et vidéos)
+app/static/captures/*
+!app/static/captures/.gitkeep
+

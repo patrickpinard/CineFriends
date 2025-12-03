@@ -14,7 +14,7 @@ class Config:
     INSTANCE_DIR = BASE_DIR / "instance"
     
     # Construire l'URI de la base de données
-    # Si DATABASE_URL est défini dans .env, l'utiliser, sinon utiliser instance/dashboard.db
+    # Si DATABASE_URL est défini dans .env, l'utiliser, sinon utiliser instance/database.db
     _db_uri = os.getenv("DATABASE_URL")
     if not _db_uri:
         # S'assurer que le dossier instance existe avec les bonnes permissions
@@ -30,7 +30,7 @@ class Config:
             INSTANCE_DIR = BASE_DIR
         
         # Utiliser un chemin absolu avec le format SQLite correct
-        db_path = INSTANCE_DIR / "dashboard.db"
+        db_path = INSTANCE_DIR / "database.db"
         db_path_absolute = db_path.resolve()
         db_path_str = str(db_path_absolute)
         
@@ -39,13 +39,7 @@ class Config:
         
         # Pour SQLAlchemy avec SQLite, utiliser le format avec 4 slashes pour les chemins absolus
         # Format: sqlite:////chemin/absolu/vers/fichier.db
-        # Alternative: utiliser sqlite+pysqlite3://// pour forcer l'utilisation de pysqlite3
-        # Mais d'abord, essayons avec le format standard
         SQLALCHEMY_DATABASE_URI = f"sqlite:////{db_path_str}"
-        
-        # Si le format avec 4 slashes ne fonctionne pas, SQLAlchemy peut aussi accepter
-        # le format avec 3 slashes si on utilise un chemin relatif depuis le répertoire de travail
-        # Mais nous préférons le chemin absolu pour éviter les problèmes de répertoire de travail
     else:
         SQLALCHEMY_DATABASE_URI = _db_uri
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -59,7 +53,7 @@ class Config:
     TWOFA_CODE_TTL_SECONDS = int(os.getenv("TWOFA_CODE_TTL_SECONDS", "300"))
     TWOFA_RESEND_INTERVAL_SECONDS = int(os.getenv("TWOFA_RESEND_INTERVAL_SECONDS", "60"))
     TWOFA_REMEMBER_DAYS = int(os.getenv("TWOFA_REMEMBER_DAYS", "30"))
-    TWOFA_REMEMBER_COOKIE = os.getenv("TWOFA_REMEMBER_COOKIE", "dashboard_trusted_device")
+    TWOFA_REMEMBER_COOKIE = os.getenv("TWOFA_REMEMBER_COOKIE", "templateapp_trusted_device")
 
     MAIL_SERVER = os.getenv("MAIL_SERVER", "")
     MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
@@ -71,7 +65,3 @@ class Config:
     ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "")
     MAIL_MONITOR_ADDRESS = os.getenv("MAIL_MONITOR_ADDRESS", "")
 
-    SENSOR_POLL_INTERVAL_MINUTES = int(os.getenv("SENSOR_POLL_INTERVAL_MINUTES", "30"))
-    SENSOR_POLL_ENABLED = os.getenv("SENSOR_POLL_ENABLED", "true").lower() == "true"
-    LCD_ENABLED = os.getenv("LCD_ENABLED", "true").lower() == "true"
-    CAMERA_DEVICE_INDEX = int(os.getenv("CAMERA_DEVICE_INDEX", "0"))
