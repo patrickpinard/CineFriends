@@ -1,3 +1,22 @@
+"""
+Module de routes principales pour l'application TemplateApp.
+
+Ce module définit toutes les routes principales de l'application incluant :
+- Pages du tableau de bord (dashboard, graphiques, automatisation, etc.)
+- Gestion du profil utilisateur
+- Gestion des notifications
+- Génération d'icônes PWA
+- Manifest PWA
+- API de temps serveur
+- Service worker PWA
+- Gestionnaires d'erreurs
+
+Blueprint : main_bp (sans préfixe d'URL)
+
+Toutes les routes (sauf celles liées à PWA et erreurs) nécessitent une authentification
+via le décorateur @login_required.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -22,7 +41,20 @@ _settings_cache_timestamp: datetime | None = None
 
 
 def invalidate_settings_cache() -> None:
-    """Invalide le cache des settings (à appeler après modification)"""
+    """
+    Invalide le cache des paramètres système.
+    
+    Cette fonction réinitialise le cache des settings utilisé pour optimiser
+    les accès aux paramètres système. Elle doit être appelée après chaque
+    modification d'un paramètre pour garantir la cohérence des données.
+    
+    Note:
+        Le cache n'est actuellement pas utilisé dans l'application mais est
+        conservé pour une utilisation future.
+    
+    Returns:
+        None
+    """
     global _settings_cache, _settings_cache_timestamp
     _settings_cache.clear()
     _settings_cache_timestamp = None
@@ -31,56 +63,192 @@ def invalidate_settings_cache() -> None:
 @main_bp.route("/")
 @login_required
 def dashboard():
-    """Page d'accueil vide"""
+    """
+    Page d'accueil du tableau de bord.
+    
+    Route: GET /
+    Authentification: Requise
+    
+    Description:
+        Affiche la page d'accueil principale de l'application. Cette page
+        est actuellement vide et sert de template de base pour le développement.
+    
+    Returns:
+        Template HTML: dashboard/index.html
+    
+    Note:
+        Cette route est protégée par @login_required. Les utilisateurs non
+        authentifiés seront redirigés vers la page de connexion.
+    """
     return render_template("dashboard/index.html")
 
 
 @main_bp.route("/graphiques")
 @login_required
 def charts():
-    """Page graphiques vide"""
+    """
+    Page de graphiques.
+    
+    Route: GET /graphiques
+    Authentification: Requise
+    
+    Description:
+        Affiche la page des graphiques. Cette page est actuellement vide
+        et sert de template de base pour l'implémentation de graphiques.
+    
+    Returns:
+        Template HTML: dashboard/charts.html
+    """
     return render_template("dashboard/charts.html")
 
 
 @main_bp.route("/automatisation")
 @login_required
 def automation():
-    """Page automatisation vide"""
+    """
+    Page d'automatisation.
+    
+    Route: GET /automatisation
+    Authentification: Requise
+    
+    Description:
+        Affiche la page de gestion de l'automatisation. Cette page est
+        actuellement vide et sert de template de base pour l'implémentation
+        des règles d'automatisation.
+    
+    Returns:
+        Template HTML: dashboard/automation.html
+    """
     return render_template("dashboard/automation.html")
 
 
 @main_bp.route("/camera")
 @login_required
 def camera():
-    """Page caméra vide"""
+    """
+    Page de la caméra.
+    
+    Route: GET /camera
+    Authentification: Requise
+    
+    Description:
+        Affiche la page de visualisation de la caméra. Cette page est
+        actuellement vide et sert de template de base pour l'implémentation
+        du flux vidéo.
+    
+    Returns:
+        Template HTML: dashboard/camera.html
+    """
     return render_template("dashboard/camera.html")
 
 
 @main_bp.route("/parametres")
 @login_required
 def settings():
-    """Page paramètres vide"""
+    """
+    Page des paramètres.
+    
+    Route: GET /parametres
+    Authentification: Requise
+    
+    Description:
+        Affiche la page de gestion des paramètres système. Cette page est
+        actuellement vide et sert de template de base pour l'implémentation
+        de la configuration.
+    
+    Returns:
+        Template HTML: dashboard/settings.html
+    """
     return render_template("dashboard/settings.html")
 
 
 @main_bp.route("/journal")
 @login_required
 def journal():
-    """Page journal vide"""
+    """
+    Page du journal d'activité.
+    
+    Route: GET /journal
+    Authentification: Requise
+    
+    Description:
+        Affiche la page du journal d'activité. Cette page est actuellement
+        vide et sert de template de base pour l'implémentation de l'historique
+        des événements.
+    
+    Returns:
+        Template HTML: dashboard/journal.html
+    """
     return render_template("dashboard/journal.html")
 
 
 @main_bp.route("/affichage-lcd")
 @login_required
 def lcd_preview():
-    """Page affichage LCD vide"""
+    """
+    Page de prévisualisation de l'affichage LCD.
+    
+    Route: GET /affichage-lcd
+    Authentification: Requise
+    
+    Description:
+        Affiche la page de prévisualisation de l'affichage LCD. Cette page
+        est actuellement vide et sert de template de base pour l'implémentation
+        de la visualisation LCD.
+    
+    Returns:
+        Template HTML: dashboard/lcd_preview.html
+    """
     return render_template("dashboard/lcd_preview.html")
 
 
 @main_bp.route("/profil", methods=["GET", "POST"])
 @login_required
 def profile():
-    """Gestion du profil utilisateur"""
+    """
+    Gestion du profil utilisateur.
+    
+    Route: GET, POST /profil
+    Authentification: Requise
+    
+    Description:
+        Permet à l'utilisateur connecté de consulter et modifier son profil.
+        Les modifications incluent :
+        - Informations personnelles (civilité, prénom, nom)
+        - Identifiants (username, email)
+        - Mot de passe (optionnel)
+        - Adresse (rue, code postal, ville, pays)
+        - Téléphone
+        - Avatar (upload/suppression)
+        - Activation/désactivation de la 2FA
+    
+    Méthodes HTTP:
+        GET: Affiche le formulaire pré-rempli avec les données de l'utilisateur
+        POST: Traite la soumission du formulaire et met à jour le profil
+    
+    Validation:
+        - Vérifie l'unicité du username (si modifié)
+        - Vérifie l'unicité de l'email (si modifié)
+        - Vérifie la correspondance des mots de passe (si changement)
+        - Vérifie la présence d'un email pour activer la 2FA
+    
+    Fonctionnalités:
+        - Upload d'avatar avec génération de nom unique
+        - Suppression d'avatar existant
+        - Gestion de la 2FA (activation/désactivation avec nettoyage des tokens)
+        - Changement de mot de passe optionnel
+        - Messages flash pour informer l'utilisateur des résultats
+    
+    Returns:
+        GET: Template HTML avec formulaire pré-rempli
+        POST (succès): Redirection vers /profil avec message de succès
+        POST (erreur): Template HTML avec formulaire et messages d'erreur
+    
+    Flash Messages:
+        - "warning": Username ou email déjà utilisé
+        - "danger": Erreur de validation (mot de passe, 2FA)
+        - "success": Profil mis à jour ou 2FA activée/désactivée
+    """
     form = ProfileForm()
     if request.method == "GET":
         form.title.data = getattr(current_user, 'title', None)
@@ -155,7 +323,7 @@ def profile():
                 status = "activée" if current_user.twofa_enabled else "désactivée"
                 flash(f"Double authentification {status}.", "success")
             else:
-                flash("Profil mis à jour.", "success")
+            flash("Profil mis à jour.", "success")
             return redirect(url_for("main.profile"))
 
     return render_template("dashboard/profile.html", form=form)
@@ -164,7 +332,39 @@ def profile():
 @main_bp.route("/notifications/read", methods=["POST"])
 @login_required
 def notifications_mark_read():
-    """Marquer les notifications comme lues"""
+    """
+    Marque les notifications comme lues.
+    
+    Route: POST /notifications/read
+    Authentification: Requise
+    Content-Type: application/json
+    
+    Description:
+        Marque une ou plusieurs notifications comme lues. Si aucun ID n'est
+        fourni, toutes les notifications accessibles à l'utilisateur sont
+        marquées comme lues.
+    
+    Body JSON (optionnel):
+        {
+            "ids": [1, 2, 3]  // Liste d'IDs de notifications à marquer comme lues
+        }
+    
+    Logique de filtrage:
+        Les notifications accessibles à l'utilisateur sont :
+        - Notifications personnelles (user_id == current_user.id)
+        - Notifications globales (audience == "global")
+        - Notifications admin (audience == "admin" ET utilisateur est admin)
+    
+    Returns:
+        JSON: {"status": "ok"}
+    
+    Exemple de requête:
+        POST /notifications/read
+        Content-Type: application/json
+        {
+            "ids": [1, 2, 3]
+        }
+    """
     ids = request.json.get("ids") if request.is_json else None  # type: ignore[attr-defined]
     query = Notification.query.filter(
         (Notification.user_id == current_user.id)
@@ -183,7 +383,45 @@ def notifications_mark_read():
 @main_bp.route("/notifications/clear", methods=["POST"])
 @login_required
 def notifications_clear():
-    """Supprimer les notifications"""
+    """
+    Supprime les notifications.
+    
+    Route: POST /notifications/clear
+    Authentification: Requise
+    Content-Type: application/json
+    
+    Description:
+        Supprime les notifications personnelles de l'utilisateur ou marque
+        comme lues les notifications globales/admin (qui ne peuvent pas être
+        supprimées par l'utilisateur).
+    
+    Body JSON (optionnel):
+        {
+            "ids": [1, 2, 3]  // Liste d'IDs de notifications à supprimer
+        }
+    
+    Comportement:
+        - Notifications personnelles (user_id == current_user.id) : Suppression
+        - Notifications globales/admin : Marquage comme lues (ne peuvent pas être supprimées)
+        - Si aucun ID fourni : Traite toutes les notifications accessibles
+    
+    Validation:
+        - Convertit les IDs en entiers (ignore les valeurs invalides)
+        - Filtre uniquement les notifications accessibles à l'utilisateur
+    
+    Returns:
+        JSON: {
+            "status": "ok",
+            "cleared": [1, 2, 3]  // Liste des IDs de notifications traitées
+        }
+    
+    Exemple de requête:
+        POST /notifications/clear
+        Content-Type: application/json
+        {
+            "ids": [1, 2, 3]
+        }
+    """
     payload = request.get_json(silent=True) or {}
     ids = payload.get("ids")
 
@@ -217,7 +455,50 @@ def notifications_clear():
 
 @main_bp.route("/icon/<int:size>.png", endpoint="generate_icon")
 def generate_icon(size: int):
-    """Génère une icône avec fond blanc pour iOS/iPad."""
+    """
+    Génère une icône PWA avec fond blanc.
+    
+    Route: GET /icon/<size>.png
+    Authentification: Non requise (publique)
+    
+    Description:
+        Génère dynamiquement une icône PNG de la taille spécifiée en centrant
+        le logo de l'application sur un fond blanc. Utilisé pour les icônes
+        PWA et les favicons.
+    
+    Paramètres URL:
+        size (int): Taille de l'icône en pixels (ex: 180, 192, 256, 512)
+    
+    Fonctionnalités:
+        - Ouvre le logo depuis app/static/img/logo.png
+        - Crée une image carrée avec fond blanc
+        - Redimensionne le logo avec marge de 20px de chaque côté
+        - Centre le logo sur le fond blanc
+        - Gère la transparence du logo (mode RGBA)
+        - Utilise LANCZOS pour un redimensionnement de qualité
+        - Cache l'icône générée pendant 1 an (max-age=31536000)
+    
+    Fallback:
+        - Si PIL (Pillow) n'est pas disponible : sert le logo original
+        - Si le logo n'existe pas : retourne 404
+        - En cas d'erreur : sert le logo original
+    
+    Returns:
+        Response: Image PNG avec headers de cache
+        Status 404: Si le logo n'existe pas
+    
+    Headers:
+        Content-Type: image/png
+        Cache-Control: public, max-age=31536000
+    
+    Exemples:
+        GET /icon/180.png  → Icône 180x180 pixels
+        GET /icon/512.png  → Icône 512x512 pixels
+    
+    Note:
+        Cette route est publique et ne nécessite pas d'authentification car
+        les icônes PWA doivent être accessibles sans authentification.
+    """
     try:
         from PIL import Image
         
@@ -265,7 +546,55 @@ def generate_icon(size: int):
 
 @main_bp.route("/manifest.json")
 def manifest():
-    """Manifest PWA"""
+    """
+    Retourne le manifest PWA (Progressive Web App).
+    
+    Route: GET /manifest.json
+    Authentification: Non requise (publique)
+    
+    Description:
+        Retourne le fichier manifest JSON requis pour installer l'application
+        comme Progressive Web App (PWA) sur les appareils mobiles et desktop.
+    
+    Format JSON:
+        {
+            "name": "TemplateApp",
+            "short_name": "TemplateApp",
+            "start_url": "/",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#0f172a",
+            "lang": "fr",
+            "icons": [
+                {
+                    "src": "URL de l'icône",
+                    "sizes": "180x180",
+                    "type": "image/png",
+                    "purpose": "any"
+                },
+                ...
+            ]
+        }
+    
+    Icônes générées:
+        - 180x180 : Pour iOS/iPad
+        - 192x192 : Pour Android
+        - 256x256 : Pour desktop
+        - 512x512 : Pour splash screens
+    
+    Fonctionnalités PWA:
+        - Installation sur l'écran d'accueil
+        - Mode standalone (sans barre d'adresse)
+        - Thème de couleur personnalisé
+        - Icônes adaptatives
+    
+    Returns:
+        JSON: Manifest PWA conforme au standard W3C
+    
+    Note:
+        Cette route est publique et doit être accessible sans authentification
+        pour permettre l'installation PWA.
+    """
     manifest_data = {
         "name": "TemplateApp",
         "short_name": "TemplateApp",
@@ -307,7 +636,52 @@ def manifest():
 @main_bp.route("/api/server-time")
 @login_required
 def server_time():
-    """Retourne l'heure actuelle du serveur en heure locale"""
+    """
+    API retournant l'heure actuelle du serveur.
+    
+    Route: GET /api/server-time
+    Authentification: Requise
+    
+    Description:
+        Retourne l'heure actuelle du serveur en format JSON avec plusieurs
+        représentations (locale, UTC, format lisible) et l'offset de timezone.
+        Utile pour synchroniser l'heure côté client ou afficher l'heure serveur.
+    
+    Returns:
+        JSON: {
+            "timestamp": "2025-12-03T15:30:45.123456",  // ISO format (heure locale)
+            "utc": "2025-12-03T14:30:45.123456",         // ISO format (UTC)
+            "local": "15:30:45",                          // Format HH:MM:SS (heure locale)
+            "date": "03/12/2025",                         // Format DD/MM/YYYY (heure locale)
+            "timezone_offset": 1.0                        // Offset en heures (UTC+1)
+        }
+    
+    Format des dates:
+        - timestamp: Format ISO 8601 avec microsecondes (heure locale)
+        - utc: Format ISO 8601 avec microsecondes (UTC)
+        - local: Format HH:MM:SS (24 heures)
+        - date: Format DD/MM/YYYY
+    
+    Calcul de l'offset:
+        L'offset est calculé en comparant datetime.now() et datetime.utcnow()
+        et converti en heures (décimal). Positif si local est à l'est de UTC.
+    
+    Exemple de réponse:
+        {
+            "timestamp": "2025-12-03T15:30:45.123456",
+            "utc": "2025-12-03T14:30:45.123456",
+            "local": "15:30:45",
+            "date": "03/12/2025",
+            "timezone_offset": 1.0
+        }
+    
+    Usage:
+        Cette API peut être utilisée pour :
+        - Synchroniser l'heure côté client
+        - Afficher l'heure serveur dans l'interface
+        - Calculer les différences de timezone
+        - Valider les timestamps côté client
+    """
     server_now_local = datetime.now()
     server_now_utc = datetime.utcnow()
     
@@ -322,7 +696,39 @@ def server_time():
 
 @main_bp.route("/service-worker.js")
 def service_worker():
-    """Service worker pour PWA"""
+    """
+    Sert le fichier service worker pour PWA.
+    
+    Route: GET /service-worker.js
+    Authentification: Non requise (publique)
+    
+    Description:
+        Sert le fichier JavaScript du service worker nécessaire pour le
+        fonctionnement de l'application en mode PWA (mise en cache, fonctionnement
+        hors ligne, notifications push, etc.).
+    
+    Fichier source:
+        app/static/js/service-worker.js
+    
+    Headers:
+        Content-Type: application/javascript
+        Cache-Control: max-age=0 (pas de cache pour toujours servir la dernière version)
+    
+    Fonctionnalités du service worker:
+        - Mise en cache des ressources statiques
+        - Gestion du fonctionnement hors ligne
+        - Mise à jour automatique des ressources
+        - Gestion des notifications push (si implémenté)
+    
+    Returns:
+        Response: Contenu du fichier service-worker.js
+    
+    Note:
+        - Cette route est publique et doit être accessible sans authentification
+        - Le cache est désactivé pour garantir que les mises à jour du service
+          worker sont immédiatement prises en compte
+        - Le service worker doit être enregistré côté client dans le JavaScript
+    """
     response = current_app.response_class(
         current_app.open_resource("static/js/service-worker.js").read(),
         mimetype="application/javascript",
@@ -333,12 +739,59 @@ def service_worker():
 
 @main_bp.errorhandler(404)
 def not_found(error):  # type: ignore[override]
-    """Gestionnaire d'erreur 404"""
+    """
+    Gestionnaire d'erreur 404 (Page non trouvée).
+    
+    Description:
+        Gère les erreurs 404 lorsque une route n'est pas trouvée. Affiche
+        une page d'erreur personnalisée au lieu de la page d'erreur par défaut
+        de Flask.
+    
+    Args:
+        error: Exception Flask générée pour l'erreur 404
+    
+    Returns:
+        Tuple: (Template HTML, Status Code 404)
+            - Template: errors/404.html
+            - Status: 404
+    
+    Template:
+        errors/404.html : Page d'erreur personnalisée avec message et
+                          lien de retour vers l'accueil
+    """
     return render_template("errors/404.html"), 404
 
 
 @main_bp.errorhandler(500)
 def internal_error(error):  # type: ignore[override]
-    """Gestionnaire d'erreur 500"""
+    """
+    Gestionnaire d'erreur 500 (Erreur interne du serveur).
+    
+    Description:
+        Gère les erreurs 500 (erreurs internes du serveur). Effectue un
+        rollback de la session de base de données pour éviter les états
+        incohérents, puis affiche une page d'erreur personnalisée.
+    
+    Args:
+        error: Exception Flask générée pour l'erreur 500
+    
+    Fonctionnalités:
+        - Rollback de la session DB pour éviter la corruption des données
+        - Log de l'erreur (géré automatiquement par Flask)
+        - Affichage d'une page d'erreur conviviale
+    
+    Returns:
+        Tuple: (Template HTML, Status Code 500)
+            - Template: errors/500.html
+            - Status: 500
+    
+    Template:
+        errors/500.html : Page d'erreur personnalisée avec message d'excuse
+                          et instructions pour l'utilisateur
+    
+    Note:
+        Le rollback de la session DB est important pour éviter que les erreurs
+        laissent la base de données dans un état incohérent.
+    """
     db.session.rollback()
     return render_template("errors/500.html"), 500
