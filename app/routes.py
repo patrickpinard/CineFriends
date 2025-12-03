@@ -323,7 +323,7 @@ def profile():
                 status = "activée" if current_user.twofa_enabled else "désactivée"
                 flash(f"Double authentification {status}.", "success")
             else:
-            flash("Profil mis à jour.", "success")
+                flash("Profil mis à jour.", "success")
             return redirect(url_for("main.profile"))
 
     return render_template("dashboard/profile.html", form=form)
