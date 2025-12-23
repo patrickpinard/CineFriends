@@ -88,8 +88,8 @@
                 </div>
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        {{ form.username.label(class_='text-sm font-medium text-slate-600') }}
-                        {{ form.username(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                        {{ form.username.label(class_='text-sm font-medium ' ~ ('text-rose-600' if form.username.errors else 'text-slate-600')) }}
+                        {{ form.username(class_='mt-1 w-full rounded-xl border px-3 py-2 text-base text-slate-900 focus:ring-teal-500 ' ~ ('border-rose-300 bg-rose-50 focus:border-rose-500' if form.username.errors else 'border-slate-200 bg-white focus:border-teal-500')) }}
                         {% for error in form.username.errors %}
                         <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
                         {% endfor %}
@@ -156,18 +156,22 @@
                 <div class="space-y-4">
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
-                            {{ form.password.label(class_='text-sm font-medium text-slate-600') }}
-                            {{ form.password(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                            {{ form.password.label(class_='text-sm font-medium ' ~ ('text-rose-600' if form.password.errors else 'text-slate-600')) }}
+                            {{ form.password(class_='mt-1 w-full rounded-xl border px-3 py-2 text-base text-slate-900 focus:ring-teal-500 ' ~ ('border-rose-300 bg-rose-50 focus:border-rose-500' if form.password.errors else 'border-slate-200 bg-white focus:border-teal-500')) }}
+                            {% if is_edit %}
                             <p class="mt-1 text-xs text-slate-500">Laisser vide pour conserver le mot de passe actuel.</p>
+                            {% else %}
+                            <p class="mt-1 text-xs {{ 'text-rose-500' if form.password.errors else 'text-slate-500' }}">Le mot de passe est obligatoire pour créer un utilisateur.</p>
+                            {% endif %}
                             {% for error in form.password.errors %}
-                            <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                            <p class="mt-1 text-sm text-rose-500 font-medium">{{ error }}</p>
                             {% endfor %}
                         </div>
                         <div>
-                            {{ form.confirm_password.label(class_='text-sm font-medium text-slate-600') }}
-                            {{ form.confirm_password(class_='mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                            {{ form.confirm_password.label(class_='text-sm font-medium ' ~ ('text-rose-600' if form.confirm_password.errors else 'text-slate-600')) }}
+                            {{ form.confirm_password(class_='mt-1 w-full rounded-xl border px-3 py-2 text-base text-slate-900 focus:ring-teal-500 ' ~ ('border-rose-300 bg-rose-50 focus:border-rose-500' if form.confirm_password.errors else 'border-slate-200 bg-white focus:border-teal-500')) }}
                             {% for error in form.confirm_password.errors %}
-                            <p class="mt-1 text-sm text-rose-500">{{ error }}</p>
+                            <p class="mt-1 text-sm text-rose-500 font-medium">{{ error }}</p>
                             {% endfor %}
                         </div>
                     </div>

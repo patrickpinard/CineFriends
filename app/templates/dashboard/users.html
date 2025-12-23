@@ -38,11 +38,106 @@
     <table class="min-w-full divide-y divide-slate-200 text-sm">
         <thead class="bg-slate-50">
             <tr>
-                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Nom</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Email</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rôle</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Dernière activité</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <a href="{{ url_for('admin.users', sort='name', order='asc' if filters.sort != 'name' or filters.order == 'desc' else 'desc', q=filters.q, role=filters.role, status=filters.status) }}" class="flex items-center gap-2 hover:text-slate-700 transition">
+                        Nom
+                        {% if filters.sort == 'name' %}
+                            {% if filters.order == 'asc' %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                </svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            {% endif %}
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                            </svg>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <a href="{{ url_for('admin.users', sort='email', order='asc' if filters.sort != 'email' or filters.order == 'desc' else 'desc', q=filters.q, role=filters.role, status=filters.status) }}" class="flex items-center gap-2 hover:text-slate-700 transition">
+                        Email
+                        {% if filters.sort == 'email' %}
+                            {% if filters.order == 'asc' %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                </svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            {% endif %}
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                            </svg>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <a href="{{ url_for('admin.users', sort='role', order='asc' if filters.sort != 'role' or filters.order == 'desc' else 'desc', q=filters.q, role=filters.role, status=filters.status) }}" class="flex items-center gap-2 hover:text-slate-700 transition">
+                        Rôle
+                        {% if filters.sort == 'role' %}
+                            {% if filters.order == 'asc' %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                </svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            {% endif %}
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                            </svg>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <a href="{{ url_for('admin.users', sort='status', order='asc' if filters.sort != 'status' or filters.order == 'desc' else 'desc', q=filters.q, role=filters.role, status=filters.status) }}" class="flex items-center gap-2 hover:text-slate-700 transition">
+                        Statut
+                        {% if filters.sort == 'status' %}
+                            {% if filters.order == 'asc' %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                </svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            {% endif %}
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                            </svg>
+                        {% endif %}
+                    </a>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <a href="{{ url_for('admin.users', sort='last_login', order='asc' if filters.sort != 'last_login' or filters.order == 'desc' else 'desc', q=filters.q, role=filters.role, status=filters.status) }}" class="flex items-center gap-2 hover:text-slate-700 transition">
+                        Dernière activité
+                        {% if filters.sort == 'last_login' %}
+                            {% if filters.order == 'asc' %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                </svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            {% endif %}
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                            </svg>
+                        {% endif %}
+                    </a>
+                </th>
                 <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
             </tr>
         </thead>
@@ -238,4 +333,30 @@
     </div>
     {% endif %}
 </div>
+
+{% if pagination and pagination.pages > 1 %}
+<div class="mt-6 flex items-center justify-center gap-2">
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('admin.users', page=pagination.prev_num, q=filters.q, role=filters.role, status=filters.status, sort=filters.sort, order=filters.order) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+        </svg>
+        Précédent
+    </a>
+    {% endif %}
+    
+    <span class="text-sm text-slate-500">
+        Page {{ pagination.page }} sur {{ pagination.pages }}
+    </span>
+    
+    {% if pagination.has_next %}
+    <a href="{{ url_for('admin.users', page=pagination.next_num, q=filters.q, role=filters.role, status=filters.status, sort=filters.sort, order=filters.order) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+        Suivant
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+        </svg>
+    </a>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

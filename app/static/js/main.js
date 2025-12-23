@@ -1,101 +1,130 @@
-// Afficher le spinner immédiatement au chargement
-document.documentElement.classList.add('is-loading');
-
-// S'assurer que le spinner est visible dès le début
-(function() {
-    const skeleton = document.getElementById('page-skeleton');
-    if (skeleton) {
-        skeleton.removeAttribute('aria-hidden');
-    }
-})();
-
 document.addEventListener('DOMContentLoaded', function () {
-    const skeleton = document.getElementById('page-skeleton');
-    const startTime = Date.now();
-    const minDisplayTime = 500; // Minimum 500ms pour que le spinner soit visible
+    'use strict';
     
-    function hideSpinner() {
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, minDisplayTime - elapsed);
-        
-        setTimeout(() => {
-            document.documentElement.classList.remove('is-loading');
-            if (skeleton) {
-                skeleton.setAttribute('aria-hidden', 'true');
-            }
-        }, remaining);
-    }
     
-    // Attendre que la page soit complètement chargée
-    if (document.readyState === 'complete') {
-        hideSpinner();
-    } else {
-        window.addEventListener('load', hideSpinner);
-        // Fallback : masquer après 3 secondes maximum même si la page n'est pas complètement chargée
-        setTimeout(hideSpinner, 3000);
-    }
-
-    // Mise à jour de l'heure locale du Raspberry Pi
-    const timeElement = document.getElementById('header-time');
-    let serverTimeBase = null; // Timestamp de base du serveur
-    let serverTimeClientBase = null; // Timestamp client au moment de la synchronisation
-    
-    function updateTime() {
-        if (!timeElement || !serverTimeBase || !serverTimeClientBase) return;
-        
-        // Calculer l'heure actuelle du serveur en ajoutant l'écart de temps écoulé
-        const now = Date.now();
-        const elapsed = now - serverTimeClientBase;
-        const serverTimeNow = new Date(serverTimeBase.getTime() + elapsed);
-        
-        const hours = String(serverTimeNow.getHours()).padStart(2, '0');
-        const minutes = String(serverTimeNow.getMinutes()).padStart(2, '0');
-        const seconds = String(serverTimeNow.getSeconds()).padStart(2, '0');
-        const timeString = `${hours}:${minutes}:${seconds}`;
-        timeElement.textContent = timeString;
-        timeElement.setAttribute('datetime', serverTimeNow.toISOString());
-    }
-    
-    // Synchroniser avec l'heure locale du serveur (Raspberry Pi)
-    function syncServerTime() {
-        // Note: CSRF_TOKEN is defined in the template, but we might need to handle it if this script is external.
-        // For now, this fetch is a GET request so CSRF token is not strictly required in headers unless the endpoint enforces it.
-        // The original code used {{ url_for(...) }} which we can't use in a static JS file.
-        // We will need to pass the URL or use a relative path.
-        // Assuming /api/server-time or similar. Let's check the route.
-        // The original code was: fetch('{{ url_for("main.server_time") }}', ...
-        
-        // We will use a relative path assuming the app structure.
-        // Or better, we can keep the URL definition in a small inline script block in base.html and use a global variable.
-        
-        const serverTimeUrl = window.APP_URLS ? window.APP_URLS.server_time : '/api/server-time'; // Fallback
-
-        fetch(serverTimeUrl, {
-            headers: { 'Accept': 'application/json' },
-            credentials: 'same-origin',
-        })
-        .then(response => response.json())
-        .then(data => {
-            serverTimeBase = new Date(data.timestamp);
-            serverTimeClientBase = Date.now();
-            updateTime();
-        })
-        .catch((error) => {
-            console.warn('Erreur synchronisation heure serveur:', error);
-            serverTimeBase = new Date();
-            serverTimeClientBase = Date.now();
-            updateTime();
+    // Mettre en cache la page actuelle pour le mode offline
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const currentUrl = window.location.href;
+        navigator.serviceWorker.controller.postMessage({
+            type: 'CACHE_PAGE',
+            url: currentUrl
         });
     }
-    
-    // Initial sync
-    syncServerTime();
-    
-    // Update every second
-    setInterval(updateTime, 1000);
-    
-    // Re-sync every 5 minutes
-    setInterval(syncServerTime, 5 * 60 * 1000);
+
+    // --- Journal Accordéon (Ouvrir/Fermer par jour) ---
+    const dayToggles = document.querySelectorAll('[data-day-toggle]');
+    dayToggles.forEach(toggle => {
+        // Initialiser l'état : tous les jours sont fermés par défaut
+        const contentId = toggle.getAttribute('aria-controls');
+        const content = document.getElementById(contentId);
+        if (content && toggle.getAttribute('aria-expanded') === 'false') {
+            content.style.maxHeight = '0';
+            toggle.classList.add('rounded-xl');
+        }
+        
+        toggle.addEventListener('click', function() {
+            const isExpanded = this.getAttribute('aria-expanded') === 'true';
+            const contentId = this.getAttribute('aria-controls');
+            const content = document.getElementById(contentId);
+            const chevron = this.querySelector('[data-day-chevron]');
+            
+            if (isExpanded) {
+                // Fermer
+                this.setAttribute('aria-expanded', 'false');
+                // Utiliser la hauteur actuelle pour l'animation
+                const currentHeight = content.scrollHeight;
+                content.style.maxHeight = currentHeight + 'px';
+                // Forcer le reflow
+                void content.offsetHeight;
+                // Puis réduire à 0
+                requestAnimationFrame(() => {
+                    content.style.maxHeight = '0';
+                });
+                if (chevron) {
+                    chevron.classList.remove('rotate-180');
+                }
+                this.classList.add('rounded-b-xl');
+            } else {
+                // Ouvrir
+                this.setAttribute('aria-expanded', 'true');
+                // Calculer la hauteur réelle du contenu
+                content.style.maxHeight = '0';
+                const targetHeight = content.scrollHeight;
+                // Forcer le reflow
+                void content.offsetHeight;
+                // Puis animer vers la hauteur cible
+                requestAnimationFrame(() => {
+                    content.style.maxHeight = targetHeight + 'px';
+                });
+                // Une fois l'animation terminée, permettre l'expansion automatique
+                setTimeout(() => {
+                    if (this.getAttribute('aria-expanded') === 'true') {
+                        content.style.maxHeight = 'none';
+                    }
+                }, 300);
+                if (chevron) {
+                    chevron.classList.add('rotate-180');
+                }
+                this.classList.remove('rounded-b-xl');
+            }
+        });
+    });
+
+    // --- Journal Accordéon (Ouvrir/Fermer par mois) ---
+    const monthToggles = document.querySelectorAll('[data-month-toggle]');
+    monthToggles.forEach(toggle => {
+        // Initialiser l'état : tous les mois sont fermés par défaut
+        const contentId = toggle.getAttribute('aria-controls');
+        const content = document.getElementById(contentId);
+        if (content && toggle.getAttribute('aria-expanded') === 'false') {
+            content.style.maxHeight = '0';
+        }
+        
+        toggle.addEventListener('click', function() {
+            const isExpanded = this.getAttribute('aria-expanded') === 'true';
+            const contentId = this.getAttribute('aria-controls');
+            const content = document.getElementById(contentId);
+            const chevron = this.querySelector('[data-month-chevron]');
+            
+            if (isExpanded) {
+                // Fermer
+                this.setAttribute('aria-expanded', 'false');
+                // Utiliser la hauteur actuelle pour l'animation
+                const currentHeight = content.scrollHeight;
+                content.style.maxHeight = currentHeight + 'px';
+                // Forcer le reflow
+                void content.offsetHeight;
+                // Puis réduire à 0
+                requestAnimationFrame(() => {
+                    content.style.maxHeight = '0';
+                });
+                if (chevron) {
+                    chevron.classList.remove('rotate-180');
+                }
+            } else {
+                // Ouvrir
+                this.setAttribute('aria-expanded', 'true');
+                // Calculer la hauteur réelle du contenu
+                content.style.maxHeight = '0';
+                const targetHeight = content.scrollHeight;
+                // Forcer le reflow
+                void content.offsetHeight;
+                // Puis animer vers la hauteur cible
+                requestAnimationFrame(() => {
+                    content.style.maxHeight = targetHeight + 'px';
+                });
+                // Une fois l'animation terminée, permettre l'expansion automatique
+                setTimeout(() => {
+                    if (this.getAttribute('aria-expanded') === 'true') {
+                        content.style.maxHeight = 'none';
+                    }
+                }, 300);
+                if (chevron) {
+                    chevron.classList.add('rotate-180');
+                }
+            }
+        });
+    });
 
     // --- UI Logic (Notifications, Sidebar, Modals) ---
     
@@ -103,11 +132,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const body = document.body;
     const SIDEBAR_STORAGE_KEY = 'sidebar_collapsed';
     
-    const notificationToggle = document.querySelector('[data-notification-toggle]');
-    const notificationMenu = document.querySelector('[data-notification-menu]');
-    const notificationList = document.querySelector('[data-notification-list]');
-    const notificationMarkAllBtn = document.querySelector('[data-notification-mark-all]');
-    const notificationEmptyTemplate = document.getElementById('notification-empty-template');
     
     const profileToggle = document.querySelector('[data-profile-toggle]');
     const profileMenu = document.querySelector('[data-profile-menu]');
@@ -123,341 +147,70 @@ document.addEventListener('DOMContentLoaded', function () {
     const confirmApproveBtn = confirmModal?.querySelector('[data-confirm-approve]');
     let pendingConfirmForm = null;
 
-    const showLoadingOverlay = () => {
-        document.documentElement.classList.add('is-loading');
-        const skeleton = document.getElementById('page-skeleton');
-        if (skeleton) {
-            skeleton.removeAttribute('aria-hidden');
-        }
-    };
 
     // Flash messages - utiliser la fonction createToast définie dans base.html
-    function displayFlashMessages() {
-    const flashDataScript = document.getElementById('flash-data');
-        if (!flashDataScript) return;
-
+    const flashDataEl = document.getElementById('flash-data');
+    if (flashDataEl) {
         try {
-            const messages = JSON.parse(flashDataScript.textContent);
+            const messages = JSON.parse(flashDataEl.textContent);
             messages.forEach(([category, message]) => {
-                // Attendre un peu pour que createToast soit disponible, puis utiliser le fallback si nécessaire
-                const showToast = () => {
-                    if (typeof window.createToast === 'function') {
-                        window.createToast(category, message);
-                    } else {
-                        // Fallback: créer le toast directement
-                        const toastContainer = document.getElementById('toast-container');
-                        if (!toastContainer || !message) return;
-
-                        const toastVariants = {
-                            success: { title: 'Succès', indicator: 'bg-emerald-500', accent: 'text-emerald-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-                            warning: { title: 'Attention', indicator: 'bg-white', accent: 'text-white', bg: 'bg-red-600', text: 'text-white', border: 'border-red-700' },
-                            danger: { title: 'Erreur', indicator: 'bg-rose-500', accent: 'text-rose-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-                            info: { title: 'Information', indicator: 'bg-sky-500', accent: 'text-sky-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-                            default: { title: 'Notification', indicator: 'bg-slate-400', accent: 'text-slate-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-                        };
-
-                        const variant = toastVariants[category] || toastVariants.default;
-                        const isWarning = category === 'warning';
-                        const toast = document.createElement('div');
-                        toast.className = `pointer-events-auto overflow-hidden rounded-2xl border ${variant.border} ${variant.bg} shadow-lg ring-1 ring-black/5 transition duration-200 ease-out`;
-                        toast.style.opacity = '0';
-                        toast.style.transform = 'translateY(-12px)';
-                        
-                        // Pour les warnings, ajouter un style pour les positionner plus bas
-                        if (isWarning) {
-                            toast.style.marginTop = '4rem';
-                        }
-
-                        const inner = document.createElement('div');
-                        inner.className = `flex items-start gap-3 p-4 text-sm ${variant.text}`;
-
-                        const dot = document.createElement('span');
-                        dot.className = `mt-1.5 h-2.5 w-2.5 rounded-full ${variant.indicator}`;
-                        inner.appendChild(dot);
-
-                        const content = document.createElement('div');
-                        content.className = 'flex-1';
-
-                        const titleEl = document.createElement('p');
-                        titleEl.className = `font-semibold text-base ${variant.accent}`;
-                        titleEl.textContent = variant.title;
-                        
-                        content.appendChild(titleEl);
-                        
-                        const messageEl = document.createElement('p');
-                        messageEl.className = `mt-0.5 ${variant.text}`;
-                        messageEl.textContent = message;
-                        content.appendChild(messageEl);
-                        
-                        inner.appendChild(content);
-                        toast.appendChild(inner);
-                        toastContainer.appendChild(toast);
-                        
-                        requestAnimationFrame(() => {
-                            toast.style.opacity = '1';
-                            toast.style.transform = 'translateY(0)';
-                        });
-                        
-                        // Afficher pendant 5 secondes pour tous les messages
-                        const displayTime = 5000;
-                        setTimeout(() => {
-                            toast.style.opacity = '0';
-                            toast.style.transform = 'translateY(-12px)';
-                            setTimeout(() => toast.remove(), 200);
-                        }, displayTime);
-                    }
-                };
-
-                // Essayer immédiatement, sinon attendre un peu
-                if (typeof window.createToast === 'function') {
-                    showToast();
-                } else {
-                    // Attendre que le DOM soit complètement chargé
-                    setTimeout(showToast, 100);
-                }
+                window.dispatchEvent(
+                    new CustomEvent('app:toast', {
+                        detail: { category, message },
+                    })
+                );
             });
         } catch (e) {
-            console.error('Error parsing flash messages', e);
+            console.warn('Erreur parsing flash messages:', e);
         }
     }
 
-    // Attendre que le DOM soit prêt
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', displayFlashMessages);
-    } else {
-        // DOM déjà chargé, exécuter immédiatement ou après un court délai
-        setTimeout(displayFlashMessages, 50);
-    }
+    // Gestion de la sidebar
+    if (sidebarToggle) {
+        const isCollapsed = localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+        if (isCollapsed) {
+            body.classList.add('sidebar-collapsed');
+        }
 
-    function applySidebarState(collapsed) {
-        body.classList.toggle('sidebar-collapsed', collapsed);
-        sidebarToggle?.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
-    }
-
-    function markNotificationsAsRead(ids) {
-        // Use CSRF_TOKEN from global scope (defined in base.html)
-        const payload = ids && ids.length ? { ids } : {};
-        fetch(window.APP_URLS.notifications_mark_read || '/notifications/mark-read', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': window.CSRF_TOKEN,
-            },
-            body: JSON.stringify(payload),
-        }).catch(() => {
-            console.warn('Impossible de mettre à jour les notifications.');
+        sidebarToggle.addEventListener('click', () => {
+            const isCollapsed = body.classList.toggle('sidebar-collapsed');
+            localStorage.setItem(SIDEBAR_STORAGE_KEY, isCollapsed.toString());
         });
     }
 
-    const storedSidebarState = localStorage.getItem(SIDEBAR_STORAGE_KEY);
-    if (storedSidebarState !== null) {
-        applySidebarState(storedSidebarState === 'true');
-    }
-
-    sidebarToggle?.addEventListener('click', () => {
-        const collapsed = !body.classList.contains('sidebar-collapsed');
-        applySidebarState(collapsed);
-        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
-    });
-
-    const updateNotificationBadge = () => {
-        if (!notificationToggle) return;
-        const badge = notificationToggle.querySelector('[data-notification-badge]');
-        const unreadCount = notificationMenu?.querySelectorAll('[data-unread="true"]').length || 0;
-        const totalCount = notificationMenu?.querySelectorAll('[data-notification-id]').length || 0;
-        if (notificationMarkAllBtn) {
-            notificationMarkAllBtn.disabled = totalCount === 0;
-        }
-        if (badge && unreadCount <= 0) {
-            badge.remove();
-        } else if (badge) {
-            badge.textContent = String(unreadCount);
-        } else if (unreadCount > 0) {
-            const newBadge = document.createElement('span');
-            newBadge.dataset.notificationBadge = 'true';
-            newBadge.className = 'absolute -top-1 -right-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white';
-            newBadge.textContent = String(unreadCount);
-            notificationToggle.appendChild(newBadge);
-        }
-    };
-
-    if (notificationToggle && notificationMenu) {
-        const toggleNotifications = () => {
-            const isOpen = notificationMenu.classList.contains('opacity-100');
-            notificationMenu.classList.toggle('opacity-100', !isOpen);
-            notificationMenu.classList.toggle('opacity-0', isOpen);
-            notificationMenu.classList.toggle('invisible', isOpen);
-            notificationMenu.classList.toggle('scale-100', !isOpen);
-            notificationMenu.classList.toggle('scale-95', isOpen);
-            if (!isOpen) {
-                const unreadItems = notificationMenu.querySelectorAll('[data-unread="true"]');
-                if (unreadItems.length) {
-                    const ids = Array.from(unreadItems).map((el) => {
-                        el.setAttribute('data-unread', 'false');
-                        el.classList.remove('bg-teal-50/40');
-                        return Number(el.getAttribute('data-notification-id'));
-                    });
-                    markNotificationsAsRead(ids);
-                    updateNotificationBadge();
-                }
-            }
-        };
-
-        notificationToggle.addEventListener('click', (event) => {
-            event.stopPropagation();
-            toggleNotifications();
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!notificationMenu.contains(event.target) && !notificationToggle.contains(event.target)) {
-                notificationMenu.classList.add('invisible', 'scale-95', 'opacity-0');
-                notificationMenu.classList.remove('opacity-100', 'scale-100');
-            }
-        });
-    }
-
-    notificationList?.addEventListener('click', (event) => {
-        const deleteBtn = event.target.closest('[data-notification-delete]');
-        if (!deleteBtn) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const notificationId = Number(deleteBtn.getAttribute('data-notification-delete'));
-        const wrapper = deleteBtn.closest('[data-notification-id]');
-        if (!wrapper || Number.isNaN(notificationId)) return;
-
-        wrapper.remove();
-        updateNotificationBadge();
-
-        fetch(window.APP_URLS.notifications_clear || '/notifications/clear', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': window.CSRF_TOKEN,
-            },
-            body: JSON.stringify({ ids: [notificationId] }),
-        }).catch(() => {
-            console.warn('Impossible de supprimer la notification.');
-        });
-
-        if (!notificationList.querySelector('[data-notification-id]') && notificationEmptyTemplate) {
-            const clone = notificationEmptyTemplate.content.cloneNode(true);
-            notificationList.appendChild(clone);
-        }
-    });
-
-    notificationMarkAllBtn?.addEventListener('click', (event) => {
-        event.preventDefault();
-        if (!notificationMenu) return;
-        const items = notificationMenu.querySelectorAll('[data-notification-id]');
-        if (!items.length) return;
-        const ids = [];
-        items.forEach((item) => {
-            const id = Number(item.getAttribute('data-notification-id'));
-            if (!Number.isNaN(id)) {
-                ids.push(id);
-            }
-            if (item.getAttribute('data-unread') === 'true') {
-                item.setAttribute('data-unread', 'false');
-                item.classList.remove('bg-teal-50/40');
-            }
-        });
-        if (ids.length) {
-            markNotificationsAsRead(ids);
-        } else {
-            markNotificationsAsRead();
-        }
-        updateNotificationBadge();
-    });
-
-    updateNotificationBadge();
-
-    function openConfirmModal(form, message) {
-        if (!confirmModal || !confirmMessageEl) {
-            form.submit();
-            return;
-        }
-        pendingConfirmForm = form;
-        const text = (message || 'Confirmer cette action ?').replace(/\\n/g, '\n');
-        confirmMessageEl.innerHTML = '';
-        const lines = String(text).split('\n');
-        lines.forEach((line, index) => {
-            const span = document.createElement('span');
-            span.textContent = line;
-            confirmMessageEl.appendChild(span);
-            if (index < lines.length - 1) {
-                confirmMessageEl.appendChild(document.createElement('br'));
-            }
-        });
-        confirmModal.classList.remove('hidden');
-    }
-
-    function closeConfirmModal() {
-        confirmModal?.classList.add('hidden');
-        pendingConfirmForm = null;
-    }
-
-    confirmApproveBtn?.addEventListener('click', () => {
-        if (pendingConfirmForm) {
-            const form = pendingConfirmForm;
-            closeConfirmModal();
-            // Afficher le spinner maintenant que la confirmation est validée
-            showLoadingOverlay();
-            form.submit();
-        }
-    });
-
-    confirmCancelBtn?.forEach((btn) => {
-        btn.addEventListener('click', () => closeConfirmModal());
-    });
-
-    confirmModal?.addEventListener('click', (event) => {
-        if (event.target instanceof Element && event.target.hasAttribute('data-confirm-cancel')) {
-            closeConfirmModal();
-        }
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !confirmModal?.classList.contains('hidden')) {
-            closeConfirmModal();
-        }
-    });
-
-    document.querySelectorAll('form[data-confirm]').forEach((form) => {
-        form.addEventListener('submit', (event) => {
-            if (confirmModal?.classList.contains('hidden')) {
-                event.preventDefault();
-                openConfirmModal(form, form.getAttribute('data-confirm') || undefined);
-            }
-        });
-    });
-
+    // Gestion du profil
     if (profileToggle && profileMenu) {
-        const toggleMenu = () => {
-            const isOpen = profileMenu.classList.contains('opacity-100');
-            profileMenu.classList.toggle('opacity-100', !isOpen);
-            profileMenu.classList.toggle('opacity-0', isOpen ? true : false);
-            profileMenu.classList.toggle('invisible', isOpen);
-            profileMenu.classList.toggle('scale-100', !isOpen);
-            profileMenu.classList.toggle('scale-95', isOpen);
-        };
-
-        profileToggle.addEventListener('click', (event) => {
-            event.stopPropagation();
-            toggleMenu();
+        profileToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = profileMenu.classList.contains('invisible') || profileMenu.classList.contains('opacity-0');
+            if (isOpen) {
+                profileMenu.classList.remove('invisible', 'opacity-0', 'scale-95');
+                profileMenu.classList.add('visible', 'opacity-100', 'scale-100');
+            } else {
+                profileMenu.classList.add('invisible', 'opacity-0', 'scale-95');
+                profileMenu.classList.remove('visible', 'opacity-100', 'scale-100');
+            }
         });
 
-        document.addEventListener('click', (event) => {
-            if (!profileMenu.contains(event.target) && !profileToggle.contains(event.target)) {
-                profileMenu.classList.add('invisible', 'scale-95', 'opacity-0');
-                profileMenu.classList.remove('opacity-100', 'scale-100');
+        document.addEventListener('click', (e) => {
+            if (!profileMenu.contains(e.target) && !profileToggle.contains(e.target)) {
+                profileMenu.classList.add('invisible', 'opacity-0', 'scale-95');
+                profileMenu.classList.remove('visible', 'opacity-100', 'scale-100');
             }
         });
     }
 
-    function openMobileNav(show) {
-        if (!mobileNav || !mobileBackdrop) return;
-        mobileNav.classList.toggle('-translate-x-full', !show);
-        mobileBackdrop.classList.toggle('hidden', !show);
+    // Gestion du menu mobile
+    function openMobileNav(open) {
+        if (open) {
+            mobileNav?.classList.remove('-translate-x-full');
+            mobileBackdrop?.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        } else {
+            mobileNav?.classList.add('-translate-x-full');
+            mobileBackdrop?.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
     }
 
     mobileToggle && mobileToggle.addEventListener('click', () => {
@@ -476,58 +229,50 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // Gestion du modal d'information sur la page
-    const pageInfoToggle = document.querySelector('[data-page-info-toggle]');
-    const pageInfoModal = document.getElementById('page-info-modal');
-    const pageInfoText = pageInfoModal?.querySelector('[data-page-info-text]');
-    const pageInfoContent = document.getElementById('page-info-content');
-    const pageInfoCloseBtns = pageInfoModal?.querySelectorAll('[data-page-info-close]');
 
-    function openPageInfoModal() {
-        if (!pageInfoModal || !pageInfoText || !pageInfoContent) return;
-        const content = pageInfoContent.textContent.trim();
-        if (!content) return;
-        pageInfoText.textContent = content;
-        pageInfoModal.classList.remove('hidden');
-        // Animation d'ouverture
-        requestAnimationFrame(() => {
-            const modalContent = pageInfoModal.querySelector('[data-page-info-content]');
-            if (modalContent) {
-                modalContent.classList.remove('scale-95', 'opacity-0');
-                modalContent.classList.add('scale-100', 'opacity-100');
-            }
+    // Gestion des modales de confirmation
+    function showConfirmModal(message, form) {
+        if (!confirmModal || !confirmMessageEl) return;
+        confirmMessageEl.textContent = message;
+        pendingConfirmForm = form;
+        confirmModal.classList.remove('hidden');
+    }
+
+    function hideConfirmModal() {
+        if (!confirmModal) return;
+        confirmModal.classList.add('hidden');
+        pendingConfirmForm = null;
+    }
+
+    confirmCancelBtn?.forEach((btn) => {
+        btn.addEventListener('click', hideConfirmModal);
+    });
+
+    confirmApproveBtn?.addEventListener('click', () => {
+        if (pendingConfirmForm) {
+            pendingConfirmForm.submit();
+        }
+        hideConfirmModal();
+    });
+
+    confirmModal?.addEventListener('click', (e) => {
+        if (e.target === confirmModal) {
+            hideConfirmModal();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !confirmModal?.classList.contains('hidden')) {
+            hideConfirmModal();
+        }
+    });
+
+    // Intercepter les formulaires avec data-confirm
+    document.querySelectorAll('form[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = form.getAttribute('data-confirm');
+            showConfirmModal(message, form);
         });
-    }
-
-    function closePageInfoModal() {
-        const modalContent = pageInfoModal?.querySelector('[data-page-info-content]');
-        if (modalContent) {
-            modalContent.classList.remove('scale-100', 'opacity-100');
-            modalContent.classList.add('scale-95', 'opacity-0');
-        }
-        setTimeout(() => {
-            pageInfoModal?.classList.add('hidden');
-        }, 200);
-    }
-
-    pageInfoToggle?.addEventListener('click', (event) => {
-        event.stopPropagation();
-        openPageInfoModal();
-    });
-
-    pageInfoCloseBtns?.forEach((btn) => {
-        btn.addEventListener('click', () => closePageInfoModal());
-    });
-
-    pageInfoModal?.addEventListener('click', (event) => {
-        if (event.target instanceof Element && event.target.hasAttribute('data-page-info-close')) {
-            closePageInfoModal();
-        }
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && pageInfoModal && !pageInfoModal.classList.contains('hidden')) {
-            closePageInfoModal();
-        }
     });
 });

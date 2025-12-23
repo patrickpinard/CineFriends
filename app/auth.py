@@ -1,23 +1,29 @@
 import random
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import (Blueprint, current_app, flash, make_response, redirect,
                    render_template, request, session, url_for)
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db
+from . import db, limiter
 from .forms import LoginForm, RegisterForm, ResetPasswordRequestForm, ResetPasswordForm, TwoFactorForm
 from .mailer import send_email
 from .models import User
 from .services import create_notification
 
 
+def utcnow() -> datetime:
+    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
+    return datetime.now(timezone.utc)
+
+
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
@@ -39,13 +45,14 @@ def login():
                         and trusted_token
                         and user.twofa_trusted_token_hash
                         and user.twofa_trusted_created_at
-                        and datetime.utcnow() - user.twofa_trusted_created_at <= remember_window
+                        and utcnow() - user.twofa_trusted_created_at <= remember_window
                         and check_password_hash(user.twofa_trusted_token_hash, trusted_token)
                     ):
                         login_user(user, remember=False)
-                        user.last_login = datetime.utcnow()
+                        user.last_login = utcnow()
                         db.session.add(user)
                         db.session.commit()
+                        current_app.logger.info(f"Connexion réussie: Utilisateur « {user.username} » (2FA mémorisée) depuis {request.remote_addr}")
                         next_page = request.args.get("next")
                         response = make_response(redirect(next_page or url_for("main.dashboard")))
                         return response
@@ -61,34 +68,42 @@ def login():
                         return redirect(url_for("auth.twofa_verify"))
 
                     login_user(user, remember=False)
-                    user.last_login = datetime.utcnow()
+                    user.last_login = utcnow()
                     db.session.add(user)
                     db.session.commit()
+                    current_app.logger.info(f"Connexion réussie: Utilisateur « {user.username} » depuis {request.remote_addr}")
                     next_page = request.args.get("next")
                     response = make_response(redirect(next_page or url_for("main.dashboard")))
                     response.delete_cookie(remember_cookie_name)
                     return response
                 else:
+                    current_app.logger.warning(f"Tentative de connexion avec compte inactif « {username} » depuis {request.remote_addr}")
                     flash("Votre compte est en attente d'activation par un administrateur.", "warning")
             else:
+                current_app.logger.warning(f"Tentative de connexion avec mot de passe invalide pour « {username} » depuis {request.remote_addr}")
                 flash("Identifiants invalides.", "danger")
         else:
+            current_app.logger.warning(f"Tentative de connexion avec utilisateur inexistant « {username} » depuis {request.remote_addr}")
             flash("Identifiants invalides.", "danger")
-    return render_template("auth/login.html", form=form, current_year=datetime.utcnow().year)
+    return render_template("auth/login.html", form=form, current_year=utcnow().year)
 
 
 @auth_bp.route("/logout")
 @login_required
 def logout():
+    username = current_user.username if current_user.is_authenticated else "Inconnu"
+    user_id = current_user.id if current_user.is_authenticated else None
     session.pop("twofa_user_id", None)
     session.pop("twofa_remember_login", None)
     session.pop("twofa_next", None)
     logout_user()
+    current_app.logger.info(f"Déconnexion: Utilisateur « {username} » depuis {request.remote_addr}")
     response = make_response(redirect(url_for("auth.login")))
     return response
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
+@limiter.limit("3 per hour")
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
@@ -114,7 +129,7 @@ def register():
             # Envoyer un email à l'utilisateur pour confirmer la réception de sa demande
             email_sent = False
             if user.email:
-                html_body = render_template("email/registration_pending.html", user=user, current_year=datetime.utcnow().year)
+                html_body = render_template("email/registration_pending.html", user=user, current_year=utcnow().year)
                 text_body = render_template("email/registration_pending.txt", user=user)
                 email_sent = send_email(
                     subject="TemplateApp — Activation en attente",
@@ -135,7 +150,7 @@ def register():
             
             # Rediriger vers la page d'information
             return redirect(url_for("auth.registration_pending", email_sent=email_sent, user_email=user.email or ""))
-    return render_template("auth/register.html", form=form, current_year=datetime.utcnow().year)
+    return render_template("auth/register.html", form=form, current_year=utcnow().year)
 
 
 @auth_bp.route("/inscription-en-attente")
@@ -148,7 +163,7 @@ def registration_pending():
         "auth/registration_pending.html",
         email_sent=email_sent,
         user_email=user_email,
-        current_year=datetime.utcnow().year
+        current_year=utcnow().year
     )
 
 
@@ -170,7 +185,7 @@ def twofa_verify():
     resend_interval = timedelta(seconds=current_app.config["TWOFA_RESEND_INTERVAL_SECONDS"])
 
     if request.method == "GET" and request.args.get("resend"):
-        if user.twofa_code_sent_at and datetime.utcnow() - user.twofa_code_sent_at < resend_interval:
+        if user.twofa_code_sent_at and utcnow() - user.twofa_code_sent_at < resend_interval:
             flash("Merci de patienter avant de renvoyer un nouveau code.", "warning")
         else:
             _issue_twofa_code(user)
@@ -182,14 +197,14 @@ def twofa_verify():
     if form.validate_on_submit():
         if not user.twofa_code_hash or not user.twofa_code_sent_at:
             flash("Aucun code actif, veuillez renvoyer un code.", "danger")
-        elif datetime.utcnow() - user.twofa_code_sent_at > ttl:
+        elif utcnow() - user.twofa_code_sent_at > ttl:
             flash("Ce code a expiré, veuillez demander un nouveau code.", "warning")
         elif not check_password_hash(user.twofa_code_hash, form.code.data.strip()):
             flash("Code incorrect.", "danger")
         else:
             user.twofa_code_hash = None
             user.twofa_code_sent_at = None
-            user.last_login = datetime.utcnow()
+            user.last_login = utcnow()
 
             response = make_response(redirect(session.pop("twofa_next", None) or url_for("main.dashboard")))
             remember_login = False
@@ -197,7 +212,7 @@ def twofa_verify():
             if form.remember_device.data:
                 token = secrets.token_hex(16)
                 user.twofa_trusted_token_hash = generate_password_hash(token, method='pbkdf2:sha256')
-                user.twofa_trusted_created_at = datetime.utcnow()
+                user.twofa_trusted_created_at = utcnow()
                 response.set_cookie(
                     current_app.config["TWOFA_REMEMBER_COOKIE"],
                     token,
@@ -216,10 +231,11 @@ def twofa_verify():
             db.session.add(user)
             db.session.commit()
             login_user(user, remember=remember_login)
+            current_app.logger.info(f"Connexion réussie avec 2FA: Utilisateur « {user.username} » depuis {request.remote_addr}")
             return response
 
     code_expired = False
-    if user.twofa_code_sent_at and datetime.utcnow() - user.twofa_code_sent_at > ttl:
+    if user.twofa_code_sent_at and utcnow() - user.twofa_code_sent_at > ttl:
         code_expired = True
 
     return render_template(
@@ -236,12 +252,12 @@ def _issue_twofa_code(user: User) -> None:
     upper = 10 ** code_length
     code = f"{random.randint(0, upper - 1):0{code_length}d}"
     user.twofa_code_hash = generate_password_hash(code, method='pbkdf2:sha256')
-    user.twofa_code_sent_at = datetime.utcnow()
+    user.twofa_code_sent_at = utcnow()
     db.session.add(user)
     db.session.commit()
 
     ttl_minutes = max(1, current_app.config["TWOFA_CODE_TTL_SECONDS"] // 60)
-    html_body = render_template("email/twofa_code.html", user=user, code=code, ttl_minutes=ttl_minutes, current_year=datetime.utcnow().year)
+    html_body = render_template("email/twofa_code.html", user=user, code=code, ttl_minutes=ttl_minutes, current_year=utcnow().year)
     text_body = render_template("email/twofa_code.txt", user=user, code=code, ttl_minutes=ttl_minutes)
     send_email(
         subject="TemplateApp — Votre code de connexion",
@@ -252,6 +268,7 @@ def _issue_twofa_code(user: User) -> None:
 
 
 @auth_bp.route("/reset-password", methods=["GET", "POST"])
+@limiter.limit("3 per hour")
 def reset_password_request():
     """Demande de réinitialisation de mot de passe"""
     if current_user.is_authenticated:
@@ -264,8 +281,11 @@ def reset_password_request():
             # Générer un token de réinitialisation
             token = secrets.token_urlsafe(32)
             user.reset_token_hash = generate_password_hash(token, method='pbkdf2:sha256')
-            user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)  # Token valide 1 heure
+            user.reset_token_expires = utcnow() + timedelta(hours=1)  # Token valide 1 heure
             db.session.commit()
+            
+            # Logger la demande de réinitialisation
+            current_app.logger.info(f"Demande de réinitialisation de mot de passe pour l'utilisateur « {user.username} » (email: {form.email.data}) depuis {request.remote_addr}")
             
             # Envoyer l'email de réinitialisation
             reset_url = url_for("auth.reset_password", token=token, _external=True)
@@ -273,21 +293,24 @@ def reset_password_request():
                 "email/reset_password.html",
                 user=user,
                 reset_url=reset_url,
-                current_year=datetime.utcnow().year
+                current_year=utcnow().year
             )
-            text_body = render_template("email/reset_password.txt", user=user, reset_url=reset_url, current_year=datetime.utcnow().year)
+            text_body = render_template("email/reset_password.txt", user=user, reset_url=reset_url, current_year=utcnow().year)
             send_email(
                 subject="TemplateApp — Réinitialisation de votre mot de passe",
                 recipients=user.email,
                 body=text_body,
                 html_body=html_body,
             )
+        else:
+            # Logger les tentatives avec email inexistant (sans révéler si l'email existe)
+            current_app.logger.warning(f"Tentative de réinitialisation de mot de passe avec email inexistant « {form.email.data} » depuis {request.remote_addr}")
         
         # Toujours afficher le même message pour éviter l'énumération d'emails
         flash("Si un compte existe avec cet email, un lien de réinitialisation vous a été envoyé.", "info")
         return redirect(url_for("auth.login"))
     
-    return render_template("auth/reset_password_request.html", form=form, current_year=datetime.utcnow().year)
+    return render_template("auth/reset_password_request.html", form=form, current_year=utcnow().year)
 
 
 @auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
@@ -296,12 +319,14 @@ def reset_password(token: str):
     # Trouver l'utilisateur avec un token valide
     user = None
     for u in User.query.filter(User.reset_token_hash.isnot(None)).all():
-        if u.reset_token_expires and u.reset_token_expires > datetime.utcnow():
+        if u.reset_token_expires and u.reset_token_expires > utcnow():
             if check_password_hash(u.reset_token_hash, token):
                 user = u
                 break
     
     if not user:
+        # Logger les tentatives avec token invalide ou expiré
+        current_app.logger.warning(f"Tentative de réinitialisation de mot de passe avec token invalide ou expiré depuis {request.remote_addr}")
         flash("Le lien de réinitialisation est invalide ou a expiré.", "danger")
         if current_user.is_authenticated:
             return redirect(url_for("main.dashboard"))
@@ -314,6 +339,12 @@ def reset_password(token: str):
         user.reset_token_expires = None
         db.session.commit()
         
+        # Logger la réinitialisation réussie
+        if current_user.is_authenticated and current_user.id != user.id:
+            current_app.logger.info(f"Réinitialisation de mot de passe réussie pour l'utilisateur « {user.username} » par « {current_user.username} » depuis {request.remote_addr}")
+        else:
+            current_app.logger.info(f"Réinitialisation de mot de passe réussie pour l'utilisateur « {user.username} » depuis {request.remote_addr}")
+        
         # Vérifier si l'utilisateur est déjà connecté
         if current_user.is_authenticated:
             if current_user.id == user.id:
@@ -325,4 +356,4 @@ def reset_password(token: str):
             flash("Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.", "success")
             return redirect(url_for("auth.login"))
     
-    return render_template("auth/reset_password.html", form=form, token=token, current_year=datetime.utcnow().year)
+    return render_template("auth/reset_password.html", form=form, token=token, current_year=utcnow().year)

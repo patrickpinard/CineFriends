@@ -7,13 +7,18 @@ incluant les utilisateurs, les paramètres et les notifications.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import db, login_manager
+
+
+def utcnow() -> datetime:
+    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
+    return datetime.now(timezone.utc)
 
 
 class User(UserMixin, db.Model):
@@ -66,7 +71,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default="user")
     password_hash = db.Column(db.String(255), nullable=False)
     active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
     avatar_filename = db.Column(db.String(255), nullable=True)
     address = db.Column(db.String(255), nullable=True)  # Ancien champ, conservé pour compatibilité
@@ -149,7 +154,7 @@ class Setting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(120), unique=True, nullable=False)
     value = db.Column(db.String(255), nullable=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
 
 class Notification(db.Model):
@@ -178,7 +183,7 @@ class Notification(db.Model):
     title = db.Column(db.String(150), nullable=False)
     message = db.Column(db.Text, nullable=False)
     action_url = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     read = db.Column(db.Boolean, default=False)
     persistent = db.Column(db.Boolean, default=False)
 

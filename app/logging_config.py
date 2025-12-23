@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from flask import current_app, has_request_context, request
@@ -24,7 +24,7 @@ class StructuredLogger:
     def _get_context(self, **extra: Any) -> Dict[str, Any]:
         """Construit le contexte structuré pour le log"""
         context: Dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             **extra
         }
         

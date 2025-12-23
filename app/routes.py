@@ -19,7 +19,7 @@ via le décorateur @login_required.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from io import BytesIO
 
@@ -31,6 +31,11 @@ from . import db
 from .forms import ProfileForm
 from .models import Notification, User
 from .utils import build_changes, delete_avatar, save_avatar
+
+
+def utcnow() -> datetime:
+    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
+    return datetime.now(timezone.utc)
 
 main_bp = Blueprint("main", __name__)
 
@@ -70,8 +75,9 @@ def dashboard():
     Authentification: Requise
     
     Description:
-        Affiche la page d'accueil principale de l'application. Cette page
-        est actuellement vide et sert de template de base pour le développement.
+        Affiche la page d'accueil principale de l'application avec une carte
+        OpenStreetMap (Leaflet) centrée sur la position actuelle de l'utilisateur.
+        Aucune clé API n'est nécessaire.
     
     Returns:
         Template HTML: dashboard/index.html
@@ -172,34 +178,346 @@ def journal():
     Authentification: Requise
     
     Description:
-        Affiche la page du journal d'activité. Cette page est actuellement
-        vide et sert de template de base pour l'implémentation de l'historique
-        des événements.
+        Affiche la page du journal d'activité avec uniquement les logs relatifs
+        à l'usage de l'application (création/modification/suppression d'utilisateurs,
+        connexions, déconnexions, etc.). Les logs techniques Flask sont exclus.
+        Permet de filtrer par type d'action et de rechercher dans les logs.
+        Les logs sont paginés pour améliorer les performances.
+    
+    Paramètres de requête:
+        - action (str): Type d'action à filtrer (all, user_created, user_updated, 
+          user_deleted, login, logout, password_reset, account_activated, 
+          account_deactivated, twofa_enabled, twofa_disabled)
+        - search (str): Terme de recherche dans les logs
+        - page (int): Numéro de page pour la pagination (défaut: 1)
+        - per_page (int): Nombre de logs par page (défaut: 50)
     
     Returns:
-        Template HTML: dashboard/journal.html
+        Template HTML: dashboard/journal.html avec les logs filtrés et paginés
     """
-    return render_template("dashboard/journal.html")
+    import re
+    from pathlib import Path
+    from datetime import datetime, timedelta
+    
+    # Chemin du fichier de log
+    log_file = Path(__file__).parent.parent / "logs" / "app.log"
+    
+    # Paramètres de filtrage
+    action_filter = request.args.get("action", "all").lower()
+    search_query = request.args.get("search", "").strip()
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 50))
+    
+    # Patterns pour identifier les actions métier pertinentes
+    action_patterns = {
+        "user_created": [
+            r"Création d'utilisateur réussie",
+            r"Utilisateur créé",
+            r"Commit réussi\. Utilisateur créé",
+            r"a créé le compte",
+            r"Nouvel utilisateur créé",
+        ],
+        "user_updated": [
+            r"Modification d'utilisateur",
+            r"Utilisateur mis à jour",
+            r"Profil utilisateur mis à jour",
+            r"a modifié",
+            r"Utilisateur activé",
+            r"Utilisateur désactivé",
+        ],
+        "user_deleted": [
+            r"Suppression d'utilisateur",
+            r"Utilisateur supprimé",
+            r"a supprimé le compte",
+        ],
+        "login": [
+            r"Connexion réussie",
+            r"s'est connecté",
+            r"last_login",
+            r"Utilisateur ajouté à la session",
+            r"Connexion réussie: Utilisateur",
+        ],
+        "logout": [
+            r"Déconnexion:",
+            r"s'est déconnecté",
+        ],
+        "password_reset": [
+            r"mot de passe.*réinitialisé",
+            r"reset.*password",
+            r"réinitialisation.*mot de passe",
+        ],
+        "account_activated": [
+            r"Compte activé",
+            r"accès.*activé",
+            r"Utilisateur activé",
+        ],
+        "account_deactivated": [
+            r"Compte désactivé",
+            r"accès.*désactivé",
+            r"Utilisateur désactivé",
+        ],
+        "twofa_enabled": [
+            r"Double authentification.*activée",
+            r"2FA.*activée",
+            r"twofa.*enabled",
+        ],
+        "twofa_disabled": [
+            r"Double authentification.*désactivée",
+            r"2FA.*désactivée",
+            r"twofa.*disabled",
+        ],
+    }
+    
+    def is_business_log(line: str) -> bool:
+        """Vérifie si une ligne de log est une action métier pertinente"""
+        line_lower = line.lower()
+        # Exclure les logs techniques Flask
+        if any(exclude in line_lower for exclude in [
+            "serving flask app",
+            "debug mode",
+            "running on",
+            "restarting with stat",
+            "debugger is active",
+            "code 400",
+            "code 500",
+            "bad request",
+            "get /static",
+            "get /manifest.json",
+            "get /api/server-time",
+            "304 -",
+            "200 -",
+            "http/1.1",
+        ]):
+            return False
+        
+        # Vérifier si la ligne correspond à une action métier
+        for action_type, patterns in action_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    return True
+        
+        return False
+    
+    def get_action_type(line: str) -> str:
+        """Détermine le type d'action d'une ligne de log"""
+        for action_type, patterns in action_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    return action_type
+        return "other"
+    
+    logs = []
+    total_lines = 0
+    
+    if log_file.exists():
+        try:
+            # Lire le fichier de log ligne par ligne
+            with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+                total_lines = len(lines)
+                
+                # Parser les lignes de log et filtrer uniquement les actions métier
+                for line_num, line in enumerate(lines, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # Filtrer uniquement les logs métier pertinents
+                    if not is_business_log(line):
+                        continue
+                    
+                    # Déterminer le type d'action
+                    action_type = get_action_type(line)
+                    
+                    # Filtrer par type d'action
+                    if action_filter != "all" and action_type != action_filter:
+                        continue
+                    
+                    # Filtrer par recherche
+                    if search_query and search_query.lower() not in line.lower():
+                        continue
+                    
+                    # Détecter le niveau de log
+                    log_level = "info"
+                    if "ERROR" in line.upper() or "Exception" in line or "ERREUR" in line.upper():
+                        log_level = "error"
+                    elif "WARNING" in line.upper() or "WARN" in line.upper():
+                        log_level = "warning"
+                    elif "DEBUG" in line.upper():
+                        log_level = "debug"
+                    
+                    # Parser la date et l'heure si présente
+                    timestamp = None
+                    # Format actuel: YYYY-MM-DD HH:MM:SS,mmm LEVEL:
+                    date_match = re.search(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
+                    if date_match:
+                        try:
+                            timestamp = datetime.strptime(date_match.group(1), "%Y-%m-%d %H:%M:%S")
+                        except ValueError:
+                            pass
+                    # Format alternatif Flask: [DD/MMM/YYYY HH:MM:SS]
+                    if not timestamp:
+                        date_match = re.search(r'\[(\d{2}/\w{3}/\d{4} \d{2}:\d{2}:\d{2})\]', line)
+                        if date_match:
+                            try:
+                                timestamp = datetime.strptime(date_match.group(1), "%d/%b/%Y %H:%M:%S")
+                            except ValueError:
+                                pass
+                    
+                    # Extraire l'adresse IP si présente
+                    ip_address = None
+                    ip_match = re.search(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', line)
+                    if ip_match:
+                        ip_address = ip_match.group(1)
+                    
+                    # Extraire le nom d'utilisateur si présent
+                    username = None
+                    # Pattern amélioré pour capturer les noms d'utilisateur dans différents contextes
+                    username_patterns = [
+                        r'(?:username|utilisateur|compte)[\s:]+«\s*([a-zA-Z0-9_]+)\s*»',  # Format « username »
+                        r'(?:username|utilisateur|compte)[\s:]+([a-zA-Z0-9_]+)',  # Format username: value
+                        r'Utilisateur\s+«\s*([a-zA-Z0-9_]+)\s*»',  # Format Utilisateur « username »
+                        r'pour l\'utilisateur\s+«\s*([a-zA-Z0-9_]+)\s*»',  # Format pour l'utilisateur « username »
+                    ]
+                    for pattern in username_patterns:
+                        username_match = re.search(pattern, line, re.IGNORECASE)
+                        if username_match:
+                            username = username_match.group(1)
+                            break
+                    
+                    logs.append({
+                        "line_number": line_num,
+                        "level": log_level,
+                        "action_type": action_type,
+                        "message": line,
+                        "timestamp": timestamp,
+                        "ip_address": ip_address,
+                        "username": username,
+                    })
+                
+                # Inverser pour avoir les plus récents en premier
+                logs.reverse()
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de la lecture du fichier de log: {e}")
+            flash("Erreur lors de la lecture des logs.", "error")
+    else:
+        flash("Le fichier de log n'existe pas encore.", "info")
+    
+    # Grouper les logs par jour, puis par mois/année
+    from collections import defaultdict
+    logs_by_day = defaultdict(list)
+    
+    for log in logs:
+        # Utiliser la date du timestamp si disponible, sinon utiliser une date par défaut
+        if log["timestamp"]:
+            day_key = log["timestamp"].date()
+        else:
+            # Si pas de timestamp, essayer d'extraire la date du message
+            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', log["message"])
+            if date_match:
+                try:
+                    day_key = datetime.strptime(date_match.group(1), "%Y-%m-%d").date()
+                except ValueError:
+                    day_key = datetime.now().date()
+            else:
+                day_key = datetime.now().date()
+        
+        logs_by_day[day_key].append(log)
+    
+    # Trier les jours par ordre décroissant (plus récent en premier)
+    sorted_days = sorted(logs_by_day.keys(), reverse=True)
+    
+    # Grouper les jours par mois/année
+    logs_by_month = defaultdict(lambda: defaultdict(list))
+    for day in sorted_days:
+        month_key = (day.year, day.month)
+        logs_by_month[month_key][day] = logs_by_day[day]
+    
+    # Trier les mois par ordre décroissant
+    sorted_months = sorted(logs_by_month.keys(), reverse=True)
+    
+    # Pagination par jour
+    total_logs = len(logs)
+    total_days = len(sorted_days)
+    start_day_idx = (page - 1) * per_page
+    end_day_idx = start_day_idx + per_page
+    paginated_days = sorted_days[start_day_idx:end_day_idx]
+    
+    # Construire la structure de données hiérarchique pour le template
+    # Structure: mois/année -> jours -> logs
+    logs_by_month_paginated = []
+    current_month = None
+    current_month_data = None
+    
+    # Noms des mois en français
+    month_names = {
+        1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
+        5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août",
+        9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"
+    }
+    
+    for day in paginated_days:
+        month_key = (day.year, day.month)
+        
+        # Si on change de mois, créer une nouvelle entrée mois
+        if current_month != month_key:
+            if current_month_data:
+                # Calculer le nombre total de logs pour le mois précédent
+                current_month_data["total_logs"] = sum(len(day_data["logs"]) for day_data in current_month_data["days"])
+                logs_by_month_paginated.append(current_month_data)
+            
+            current_month = month_key
+            current_month_data = {
+                "year": day.year,
+                "month": day.month,
+                "month_name": month_names[day.month],
+                "days": [],
+                "total_logs": 0  # Sera calculé à la fin
+            }
+        
+        # Ajouter le jour au mois actuel
+        current_month_data["days"].append({
+            "date": day,
+            "logs": logs_by_day[day]
+        })
+    
+    # Ajouter le dernier mois et calculer son total
+    if current_month_data:
+        current_month_data["total_logs"] = sum(len(day_data["logs"]) for day_data in current_month_data["days"])
+        logs_by_month_paginated.append(current_month_data)
+    
+    # Créer logs_by_day_paginated pour compatibilité avec l'ancien template
+    logs_by_day_paginated = []
+    for day in paginated_days:
+        logs_by_day_paginated.append({
+            "date": day,
+            "logs": logs_by_day[day]
+        })
+    
+    # Calculer le nombre total de pages (basé sur le nombre de jours)
+    total_pages = (total_days + per_page - 1) // per_page if total_days > 0 else 1
+
+    # Date du jour pour le template
+    today = datetime.now().date()
+    yesterday = (datetime.now() - timedelta(days=1)).date()
+    
+    return render_template(
+        "dashboard/journal.html",
+        logs_by_month=logs_by_month_paginated,
+        logs_by_day=logs_by_day_paginated,  # Garder pour compatibilité
+        total_logs=total_logs,
+        total_lines=total_lines,
+        total_days=total_days,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        action_filter=action_filter,
+        search_query=search_query,
+        today=today,
+        yesterday=yesterday
+    )
 
 
-@main_bp.route("/affichage-lcd")
-@login_required
-def lcd_preview():
-    """
-    Page de prévisualisation de l'affichage LCD.
-    
-    Route: GET /affichage-lcd
-    Authentification: Requise
-    
-    Description:
-        Affiche la page de prévisualisation de l'affichage LCD. Cette page
-        est actuellement vide et sert de template de base pour l'implémentation
-        de la visualisation LCD.
-    
-    Returns:
-        Template HTML: dashboard/lcd_preview.html
-    """
-    return render_template("dashboard/lcd_preview.html")
 
 
 @main_bp.route("/profil", methods=["GET", "POST"])
@@ -603,6 +921,8 @@ def manifest():
         "background_color": "#ffffff",
         "theme_color": "#0f172a",
         "lang": "fr",
+        "scope": "/",
+        "orientation": "any",
         "icons": [
             {
                 "src": url_for("main.generate_icon", size=180, _external=True),
@@ -631,6 +951,65 @@ def manifest():
         ]
     }
     return jsonify(manifest_data)
+
+
+@main_bp.route("/offline.html")
+def offline():
+    """
+    Page affichée en mode hors ligne.
+    
+    Route: GET /offline.html
+    Authentification: Non requise (publique)
+    
+    Description:
+        Page HTML simple affichée lorsque l'application est en mode hors ligne
+        et qu'aucune ressource en cache n'est disponible.
+    
+    Returns:
+        Template HTML: offline.html
+    """
+    return render_template("offline.html")
+
+
+@main_bp.route("/health")
+def health():
+    """
+    Health check endpoint pour le monitoring.
+    
+    Route: GET /health
+    Authentification: Non requise (publique)
+    
+    Description:
+        Endpoint de santé pour vérifier que l'application et la base de données
+        fonctionnent correctement. Utilisé par les systèmes de monitoring et
+        les load balancers.
+    
+    Returns:
+        JSON: {
+            "status": "ok" | "degraded",
+            "database": "ok" | "error",
+            "timestamp": "2025-12-03T15:30:45.123456"
+        }
+        Status Code: 200 si ok, 503 si dégradé
+    """
+    from sqlalchemy import text
+    
+    db_status = "error"
+    try:
+        db.session.execute(text("SELECT 1"))
+        db.session.commit()
+        db_status = "ok"
+    except Exception:
+        db.session.rollback()
+    
+    status = "ok" if db_status == "ok" else "degraded"
+    status_code = 200 if db_status == "ok" else 503
+    
+    return jsonify({
+        "status": status,
+        "database": db_status,
+        "timestamp": utcnow().isoformat()
+    }), status_code
 
 
 @main_bp.route("/api/server-time")
@@ -683,14 +1062,14 @@ def server_time():
         - Valider les timestamps côté client
     """
     server_now_local = datetime.now()
-    server_now_utc = datetime.utcnow()
+    server_now_utc = utcnow()
     
     return jsonify({
         "timestamp": server_now_local.isoformat(),
         "utc": server_now_utc.isoformat(),
         "local": server_now_local.strftime("%H:%M:%S"),
         "date": server_now_local.strftime("%d/%m/%Y"),
-        "timezone_offset": (server_now_local - server_now_utc).total_seconds() / 3600,  # Offset en heures
+        "timezone_offset": (server_now_local - server_now_utc.replace(tzinfo=None)).total_seconds() / 3600,  # Offset en heures
     })
 
 
@@ -713,6 +1092,7 @@ def service_worker():
     Headers:
         Content-Type: application/javascript
         Cache-Control: max-age=0 (pas de cache pour toujours servir la dernière version)
+        Service-Worker-Allowed: / (pour iOS)
     
     Fonctionnalités du service worker:
         - Mise en cache des ressources statiques
@@ -728,12 +1108,16 @@ def service_worker():
         - Le cache est désactivé pour garantir que les mises à jour du service
           worker sont immédiatement prises en compte
         - Le service worker doit être enregistré côté client dans le JavaScript
+        - Headers spécifiques pour iOS Safari
     """
     response = current_app.response_class(
         current_app.open_resource("static/js/service-worker.js").read(),
         mimetype="application/javascript",
     )
     response.cache_control.max_age = 0
+    # Headers spécifiques pour iOS Safari
+    response.headers['Service-Worker-Allowed'] = '/'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
 
 

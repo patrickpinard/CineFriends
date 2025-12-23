@@ -1,30 +1,23 @@
 """
-Configuration de l'application TemplateApp avec support multi-environnements.
+Configuration améliorée avec support multi-environnements.
 
-Ce module définit les classes de configuration pour différents environnements
-(development, testing, production) et fournit une fonction pour obtenir
-la configuration appropriée selon la variable d'environnement FLASK_ENV.
+Ce fichier est un exemple d'amélioration de config.py.
+Pour l'utiliser, renommez-le en config.py et adaptez selon vos besoins.
 """
 
 import os
-from datetime import timedelta
 from pathlib import Path
+from datetime import timedelta
 
 from dotenv import load_dotenv
 
 
 class Config:
-    """
-    Configuration de base partagée par tous les environnements.
-    
-    Cette classe contient les paramètres communs à tous les environnements.
-    Les classes spécifiques (DevelopmentConfig, ProductionConfig, etc.)
-    héritent de cette classe et peuvent surcharger ou ajouter des paramètres.
-    """
+    """Configuration de base partagée par tous les environnements."""
     
     BASE_DIR = Path(__file__).resolve().parent
     load_dotenv(BASE_DIR / ".env")
-
+    
     # Application
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-this-secret-key")
     FLASK_ENV = os.getenv("FLASK_ENV", "development")
@@ -65,7 +58,7 @@ class Config:
     MAIL_MONITOR_ADDRESS = os.getenv("MAIL_MONITOR_ADDRESS", "")
     
     # CORS
-    CORS_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
     
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -75,14 +68,13 @@ class Config:
     CACHE_TYPE = os.getenv("CACHE_TYPE", "simple")
     CACHE_REDIS_URL = os.getenv("CACHE_REDIS_URL", None)
     
-    @property
-    def SQLALCHEMY_DATABASE_URI(self):
-        """
-        Construit l'URI de la base de données.
-        
-        Si DATABASE_URL est défini dans .env, l'utilise.
-        Sinon, utilise SQLite dans le dossier instance.
-        """
+    @staticmethod
+    def init_app(app):
+        """Initialisation spécifique à l'application."""
+        pass
+    
+    def _get_database_uri(self):
+        """Construit l'URI de la base de données."""
         db_uri = os.getenv("DATABASE_URL")
         if db_uri:
             return db_uri
@@ -101,11 +93,6 @@ class Config:
         db_path_absolute = db_path.resolve()
         db_path_str = str(db_path_absolute).replace("\\", "/")
         return f"sqlite:////{db_path_str}"
-    
-    @staticmethod
-    def init_app(app):
-        """Initialisation spécifique à l'application."""
-        pass
 
 
 class DevelopmentConfig(Config):
@@ -113,12 +100,16 @@ class DevelopmentConfig(Config):
     DEBUG = True
     TESTING = False
     
-    # Logs SQL en développement (désactivé pour réduire le bruit dans les logs)
-    SQLALCHEMY_ECHO = False
+    # Logs SQL en développement
+    SQLALCHEMY_ECHO = True
     
     # Cookies non sécurisés en dev
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
+    
+    @property
+    def SQLALCHEMY_DATABASE_URI(self):
+        return self._get_database_uri()
 
 
 class TestingConfig(Config):
@@ -153,7 +144,6 @@ class ProductionConfig(Config):
     
     @property
     def SQLALCHEMY_DATABASE_URI(self):
-        """En production, DATABASE_URL doit être défini."""
         db_uri = os.getenv("DATABASE_URL")
         if not db_uri:
             raise ValueError("DATABASE_URL doit être défini en production")
@@ -164,7 +154,7 @@ class ProductionConfig(Config):
         """Initialisation spécifique à la production."""
         Config.init_app(app)
         
-        # Logging vers syslog en production (optionnel)
+        # Logging vers syslog en production
         import logging
         from logging.handlers import SysLogHandler
         
@@ -184,12 +174,7 @@ config = {
 
 
 def get_config():
-    """
-    Retourne la classe de configuration selon l'environnement.
-    
-    Returns:
-        Classe de configuration (DevelopmentConfig, TestingConfig, ou ProductionConfig)
-    """
+    """Retourne la classe de configuration selon l'environnement."""
     env = os.getenv("FLASK_ENV", "development")
     return config.get(env, config['default'])
 

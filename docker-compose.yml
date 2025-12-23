@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # Application web
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: templateapp_web
+    ports:
+      - "8080:8080"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-change-this-secret-key}
+      - DATABASE_URL=postgresql://templateapp:templateapp@db:5432/templateapp
+      - MAIL_SERVER=${MAIL_SERVER:-}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_USE_TLS=${MAIL_USE_TLS:-true}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_DEFAULT_SENDER=${MAIL_DEFAULT_SENDER:-}
+    volumes:
+      - ./instance:/app/instance
+      - ./logs:/app/logs
+      - ./app/static/uploads:/app/app/static/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - templateapp_network
+
+  # Base de données PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: templateapp_db
+    environment:
+      POSTGRES_DB: templateapp
+      POSTGRES_USER: templateapp
+      POSTGRES_PASSWORD: templateapp
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U templateapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - templateapp_network
+
+  # Redis (optionnel, pour cache et rate limiting)
+  redis:
+    image: redis:7-alpine
+    container_name: templateapp_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - templateapp_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  templateapp_network:
+    driver: bridge
+

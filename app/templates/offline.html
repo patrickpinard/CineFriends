@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-slate-100">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mode hors ligne - TemplateApp</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="h-full flex items-center justify-center">
+    <div class="text-center p-8">
+        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-24 w-24 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m1.414 5.658a4.978 4.978 0 005.656 0m2.829-2.828l-2.829 2.829" />
+        </svg>
+        <h1 class="mt-6 text-2xl font-semibold text-slate-900">Mode hors ligne</h1>
+        <p class="mt-2 text-slate-600">Vous n'êtes pas connecté à Internet.</p>
+        <p class="mt-1 text-sm text-slate-500">Certaines fonctionnalités peuvent être limitées.</p>
+        <button onclick="window.location.reload()" class="mt-6 rounded-full bg-teal-500 px-6 py-2 text-sm font-semibold text-white hover:bg-teal-400 transition">
+            Réessayer
+        </button>
+    </div>
+</body>
+</html>
+

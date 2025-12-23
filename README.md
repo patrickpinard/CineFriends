@@ -1,374 +1,388 @@
-# 🏠 Dashboard - Système d'automatisation domotique
+# TemplateApp
 
-Application web complète construite avec Flask pour piloter un tableau de bord d'automatisation domotique. Intègre une Progressive Web App optimisée pour iPhone, une gestion avancée des utilisateurs avec authentification à deux facteurs, un module d'automatisation intelligent, le streaming vidéo caméra, des paramètres centralisés et un journal d'audit détaillé.
+Application Flask complète conçue comme template de base pour le développement d'applications web avec authentification utilisateur, gestion des profils, notifications et administration.
 
-![Version](https://img.shields.io/badge/version-V9--Final-blue)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-![Flask](https://img.shields.io/badge/flask-3.0.3-green)
-![License](https://img.shields.io/badge/license-Private-red)
+## 🚀 Fonctionnalités
 
-## 📋 Table des matières
+- ✅ **Authentification complète** : Login, Register, 2FA, Reset Password
+- ✅ **Gestion des utilisateurs** : CRUD complet avec rôles (admin/user)
+- ✅ **Système de notifications** : Notifications personnelles, admin et globales
+- ✅ **Progressive Web App (PWA)** : Installation sur mobile/desktop
+- ✅ **Sécurité renforcée** : Rate limiting, headers de sécurité, CSRF protection
+- ✅ **Logging structuré** : Logs avec contexte utilisateur et requête
+- ✅ **Configuration multi-environnements** : Dev, Test, Production
+- ✅ **Docker ready** : Dockerfile et docker-compose inclus
 
-- [Fonctionnalités](#-fonctionnalités)
-- [Technologies](#-technologies)
-- [Prérequis](#-prérequis)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [Utilisation](#-utilisation)
-- [Structure du projet](#-structure-du-projet)
-- [Sécurité](#-sécurité)
-- [Dépannage](#-dépannage)
-- [Contribution](#-contribution)
+## 📋 Prérequis
 
-## ✨ Fonctionnalités
+- Python 3.9 ou supérieur
+- pip (gestionnaire de paquets Python)
+- (Optionnel) Docker et Docker Compose pour le déploiement
 
-### 🎛️ Dashboard principal
-- Vue synthétique des activités récentes avec graphiques interactifs (ApexCharts)
-- Statut des capteurs en temps réel (température, humidité)
-- Gestion des relais avec visualisation de l'état
-- Bouton administrateur pour déclencher la collecte manuelle des capteurs
-- Alertes de sécurité et notifications en temps réel
+## 🔧 Installation
 
-### 🔐 Gestion des utilisateurs
-- Système d'inscription avec validation par administrateur
-- Gestion des rôles (admin, utilisateur)
-- Authentification à deux facteurs (2FA) par email
-- Gestion des avatars personnalisés
-- Profils utilisateurs avec modification sécurisée
-- Validation d'unicité des emails et noms d'utilisateur
-- Messages d'alerte visuels pour les erreurs de saisie
-
-### 🤖 Automatisation
-- Création de règles d'automatisation basées sur les capteurs
-- Déclencheurs configurables (température, humidité, etc.)
-- Actions sur relais (allumer, éteindre, basculer)
-- Collecte planifiée des données de capteurs (configurable)
-- Journalisation détaillée des actions
-- Interface de gestion intuitive avec filtres et recherche
-
-### 📊 Visualisation des données
-- Graphiques interactifs avec ApexCharts
-- Filtres de période (jour, semaine, mois)
-- Visualisation des données de capteurs DS18B20 et AM2315
-- Historique des états des relais
-- Export et analyse des données
-
-### 📹 Caméra
-- Streaming vidéo USB intégré
-- Interface responsive adaptée aux appareils mobiles
-- Contrôles de caméra intégrés
-
-### 📱 Progressive Web App (PWA)
-- Installation sur iPhone et appareils mobiles
-- Service Worker pour fonctionnement hors ligne
-- Manifest optimisé pour iOS
-- Interface mobile native avec barre de navigation inférieure
-- Détection automatique des mises à jour
-
-### 📧 Notifications
-- Système de notifications en temps réel
-- Toasts visuels avec différents niveaux (succès, avertissement, erreur)
-- Centre de notifications persistant
-- Alertes administrateur pour événements critiques
-- Envoi d'emails pour les événements importants
-
-### 📝 Journal d'audit
-- Traçabilité complète des actions utilisateurs
-- Historique des modifications (avant/après)
-- Filtres par date et type d'événement
-- Purge sélective des données anciennes
-- Accès restreint aux administrateurs
-
-## 🛠️ Technologies
-
-### Backend
-- **Flask** 3.0.3 - Framework web Python
-- **Flask-Login** 0.6.3 - Gestion des sessions utilisateurs
-- **Flask-WTF** 1.2.1 - Protection CSRF et formulaires
-- **SQLAlchemy** 3.1.1 - ORM pour la base de données
-- **APScheduler** 3.10.4 - Planification des tâches
-- **python-dotenv** 1.0.1 - Gestion des variables d'environnement
-
-### Frontend
-- **Tailwind CSS** 3.4.17 - Framework CSS utility-first
-- **ApexCharts** - Bibliothèque de graphiques interactifs
-- **JavaScript vanilla** - Interactivité et PWA
-
-### Hardware
-- **w1thermsensor** 2.0.0 - Support capteurs DS18B20 (1-Wire)
-- **smbus2** 0.4.3 - Communication I2C pour AM2315
-- **RPi.GPIO** (optionnel) - Contrôle GPIO Raspberry Pi
-
-### Base de données
-- **SQLite** - Base de données par défaut (fichier local)
-- Support pour autres bases de données via SQLAlchemy
-
-## 📦 Prérequis
-
-- **Python** 3.11 ou supérieur (testé sur Python 3.13)
-- **pip** - Gestionnaire de paquets Python
-- **Accès SMTP** - Pour l'envoi d'emails (TLS requis)
-- **Outils de compilation** - Pour certaines dépendances natives
-  - Linux : `build-essential`
-  - macOS : Xcode Command Line Tools
-  - Windows : Visual Studio Build Tools
-
-### Optionnel (pour le matériel)
-- Raspberry Pi avec GPIO
-- Capteurs DS18B20 (1-Wire)
-- Capteur AM2315 (I2C)
-- Relais contrôlables
-- Caméra USB
-
-## 🚀 Installation
-
-### 1. Cloner le dépôt
+### 1. Cloner le repository
 
 ```bash
-git clone git@github.com:patrickpinard/Dashboard.git
-cd Dashboard
+git clone <url-du-repo>
+cd TemplateApp
 ```
 
 ### 2. Créer un environnement virtuel
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate  # Sur Windows : .venv\Scripts\activate
+python -m venv venv
+source venv/bin/activate  # Sur Windows: venv\Scripts\activate
 ```
 
 ### 3. Installer les dépendances
 
 ```bash
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 4. Installer les dépendances frontend (optionnel)
+### 4. Configuration
+
+Créer un fichier `.env` à la racine du projet :
 
 ```bash
-npm install
+cp .env.example .env
 ```
 
-## ⚙️ Configuration
-
-### Fichier `.env`
-
-Créez un fichier `.env` à la racine du projet avec les variables suivantes :
+Puis modifier les valeurs dans `.env` selon vos besoins :
 
 ```env
-# Application Flask
-FLASK_ENV=development
+# Application
 FLASK_SECRET_KEY=votre-clé-secrète-très-longue-et-aléatoire
+FLASK_ENV=development
 
-# Base de données
-DATABASE_URL=sqlite:///instance/dashboard.db
+# Base de données (optionnel, SQLite par défaut)
+DATABASE_URL=
 
-# Collecte des capteurs
-SENSOR_POLL_INTERVAL_MINUTES=30
-SENSOR_POLL_ENABLED=true
-
-# Configuration email (SMTP)
+# Email (requis pour certaines fonctionnalités)
 MAIL_SERVER=smtp.example.com
 MAIL_PORT=587
 MAIL_USE_TLS=true
 MAIL_USERNAME=votre-email@example.com
 MAIL_PASSWORD=votre-mot-de-passe
-MAIL_DEFAULT_SENDER="Dashboard" <votre-email@example.com>
-MAIL_MONITOR_ADDRESS=monitoring@example.com
-ADMIN_NOTIFICATION_EMAIL=admin@example.com
-
-# Authentification à deux facteurs
-TWOFA_CODE_LENGTH=6
-TWOFA_CODE_TTL_SECONDS=300
-TWOFA_RESEND_INTERVAL_SECONDS=60
-TWOFA_REMEMBER_DAYS=30
-
-# Uploads
-MAX_CONTENT_LENGTH=5242880
-
-# Matériel (optionnel)
-LCD_ENABLED=true
-CAMERA_DEVICE_INDEX=0
+MAIL_DEFAULT_SENDER="TemplateApp" <votre-email@example.com>
 ```
 
-> **Note** : Le fichier `.env` est ignoré par Git pour des raisons de sécurité. Ne commitez jamais vos identifiants !
-
-### Initialisation de la base de données
-
-Créez la base de données et un compte administrateur par défaut :
+### 5. Initialiser la base de données
 
 ```bash
-flask --app run.py shell <<'PY'
-from app import db
-from app.models import User
+# Créer les migrations
+flask db init
 
-db.create_all()
+# Créer la première migration
+flask db migrate -m "Initial migration"
 
-admin = User(username="admin", email="admin@example.com")
-admin.set_password("admin")
-admin.role = "admin"
-admin.active = True
-db.session.add(admin)
-db.session.commit()
-print("✅ Base de données créée et compte admin initialisé")
-PY
+# Appliquer les migrations
+flask db upgrade
 ```
 
-> **⚠️ Important** : Changez immédiatement le mot de passe de l'administrateur après la première connexion !
-
-## 🎮 Utilisation
-
-### Démarrer l'application
+### 6. Lancer l'application
 
 ```bash
 python run.py
 ```
 
-Ou avec Flask directement :
+L'application sera accessible sur `http://localhost:8080`
+
+## 🔐 Compte par défaut
+
+Après le premier démarrage, un compte administrateur est créé automatiquement :
+
+- **Username** : `admin`
+- **Password** : `admin`
+
+⚠️ **Important** : Changez immédiatement le mot de passe après la première connexion !
+
+## 🐳 Déploiement avec Docker
+
+### Démarrage rapide
 
 ```bash
-flask --app run.py run --debug --port 8080
+# Construire et démarrer les services
+docker-compose up -d
+
+# Voir les logs
+docker-compose logs -f web
+
+# Arrêter les services
+docker-compose down
 ```
 
-L'application sera accessible sur `http://127.0.0.1:8080`
+### Configuration Docker
 
-### Accès par défaut
+Le fichier `docker-compose.yml` inclut :
+- **web** : Application Flask (port 8080)
+- **db** : PostgreSQL (port 5432)
+- **redis** : Cache et rate limiting (port 6379)
 
-- **URL** : http://127.0.0.1:8080
-- **Identifiant** : `admin`
-- **Mot de passe** : `admin` (à changer immédiatement)
+Les variables d'environnement peuvent être définies dans `.env` ou directement dans `docker-compose.yml`.
 
-### Fonctionnalités principales
+## 🧪 Tests
 
-1. **Connexion** : Utilisez vos identifiants pour vous connecter
-2. **2FA** : Activez l'authentification à deux facteurs dans votre profil
-3. **Dashboard** : Visualisez l'état de vos capteurs et relais
-4. **Automatisation** : Créez des règles pour automatiser vos équipements
-5. **Capteurs** : Consultez les graphiques et historiques de vos capteurs
-6. **Caméra** : Accédez au flux vidéo si une caméra est connectée
+### Installation des dépendances de test
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### Lancer les tests
+
+```bash
+# Tous les tests
+pytest
+
+# Avec couverture
+pytest --cov=app --cov-report=html
+
+# Tests spécifiques
+pytest tests/test_auth.py -v
+```
 
 ## 📁 Structure du projet
 
 ```
-Dashboard/
-├── app/
-│   ├── __init__.py              # Initialisation Flask, blueprints, extensions
-│   ├── admin.py                 # Routes administration (CRUD utilisateurs)
-│   ├── auth.py                  # Authentification, 2FA, inscription
-│   ├── automation_engine.py     # Moteur d'automatisation
-│   ├── blueprints/
-│   │   └── api.py               # API REST pour données temps réel
-│   ├── constants.py              # Constantes de l'application
-│   ├── forms.py                 # Formulaires WTForms
-│   ├── helpers.py               # Fonctions utilitaires
-│   ├── hardware/                # Pilotes matériel
-│   │   ├── adasmbus.py
-│   │   ├── AM2315.py
-│   │   ├── gpio_controller.py
-│   │   └── LCD.py
-│   ├── lcd_display.py           # Gestion affichage LCD
-│   ├── logging_config.py        # Configuration logging
-│   ├── mailer.py                # Envoi d'emails
-│   ├── models.py                # Modèles SQLAlchemy
-│   ├── routes.py                # Routes principales
-│   ├── seed.py                  # Initialisation données
-│   ├── services.py              # Services métier
-│   ├── tasks.py                 # Tâches planifiées
-│   ├── utils.py                 # Utilitaires généraux
-│   ├── static/                  # Assets statiques
-│   │   ├── css/                 # Feuilles de style
-│   │   ├── img/                 # Images et icônes
-│   │   ├── js/                  # JavaScript
-│   │   └── uploads/             # Uploads utilisateurs
-│   └── templates/               # Templates Jinja2
-│       ├── auth/                # Templates authentification
-│       ├── dashboard/           # Templates dashboard
-│       ├── email/               # Templates emails
-│       └── errors/              # Pages d'erreur
-├── instance/                    # Données instance (DB, logs)
-├── logs/                        # Fichiers de logs
-├── scripts/                     # Scripts utilitaires
-│   ├── purge_sensor_readings.py
-│   ├── restart_dashboard.sh
-│   └── test_*.py               # Scripts de test matériel
-├── config.py                    # Configuration Flask
-├── requirements.txt             # Dépendances Python
-├── package.json                 # Dépendances Node.js
-├── tailwind.config.js           # Configuration Tailwind
-├── run.py                       # Point d'entrée WSGI
-└── README.md                    # Ce fichier
+TemplateApp/
+├── app/                    # Module principal de l'application
+│   ├── __init__.py        # Initialisation Flask et configuration
+│   ├── models.py          # Modèles SQLAlchemy
+│   ├── auth.py            # Routes d'authentification
+│   ├── admin.py           # Routes d'administration
+│   ├── routes.py          # Routes principales
+│   ├── forms.py           # Formulaires WTForms
+│   ├── services.py        # Services (notifications)
+│   ├── utils.py           # Fonctions utilitaires
+│   ├── mailer.py          # Service d'envoi d'emails
+│   ├── logging_config.py  # Configuration du logging
+│   ├── seed.py            # Initialisation données par défaut
+│   ├── templates/         # Templates Jinja2
+│   └── static/            # Fichiers statiques (CSS, JS, images)
+├── instance/              # Base de données SQLite (si utilisée)
+├── logs/                  # Fichiers de log
+├── migrations/            # Migrations Flask-Migrate
+├── tests/                 # Tests unitaires
+├── config.py              # Configuration de l'application
+├── run.py                 # Point d'entrée
+├── requirements.txt       # Dépendances Python
+├── requirements-dev.txt  # Dépendances de développement
+├── Dockerfile             # Image Docker
+└── docker-compose.yml     # Orchestration Docker
 ```
 
 ## 🔒 Sécurité
 
+### Headers de sécurité
+
+L'application utilise Flask-Talisman pour ajouter automatiquement :
+- Strict-Transport-Security (HSTS)
+- Content-Security-Policy (CSP)
+- X-Content-Type-Options
+- X-Frame-Options
+- Et autres headers de sécurité
+
+### Rate Limiting
+
+Protection contre les attaques par force brute :
+- Login : 5 tentatives par minute
+- Register : 3 tentatives par heure
+- Reset Password : 3 tentatives par heure
+
 ### Authentification
-- Sessions sécurisées avec Flask-Login
-- Protection CSRF sur tous les formulaires
-- Authentification à deux facteurs (2FA) par email
-- Gestion des appareils de confiance (30 jours)
-- Validation stricte des emails et noms d'utilisateur
 
-### Données
 - Mots de passe hashés avec PBKDF2-SHA256
-- Validation d'unicité des emails avant sauvegarde
-- Protection contre les injections SQL (SQLAlchemy ORM)
-- Limitation de taille des uploads
-- Validation des types de fichiers
+- Authentification à deux facteurs (2FA) optionnelle
+- Tokens sécurisés pour reset password
+- Protection CSRF sur tous les formulaires
 
-### Bonnes pratiques
-- Variables sensibles dans `.env` (non versionnées)
-- Clé secrète Flask générée aléatoirement
-- Logs d'audit pour toutes les actions sensibles
-- Notifications administrateur pour événements critiques
+## 🛠️ Commandes utiles
+
+### Migrations
+
+```bash
+# Créer une nouvelle migration
+flask db migrate -m "Description des changements"
+
+# Appliquer les migrations
+flask db upgrade
+
+# Revenir en arrière
+flask db downgrade
+
+# Voir l'historique
+flask db history
+```
+
+### Développement
+
+```bash
+# Lancer en mode debug
+FLASK_ENV=development python run.py
+
+# Lancer avec auto-reload
+flask run --reload --port 8080
+```
+
+### Commandes CLI
+
+```bash
+# Créer 10 utilisateurs de test (user1 à user10)
+python3 -m flask create-test-users
+
+# Lister tous les utilisateurs
+python3 -m flask list-users
+
+# Réinitialiser le mot de passe d'un utilisateur
+python3 -m flask reset-password <username>
+```
+
+### Code Quality
+
+```bash
+# Formater le code
+black app/
+
+# Vérifier le style
+flake8 app/
+
+# Trier les imports
+isort app/
+```
+
+## 📚 Documentation
+
+- **Documentation complète** : Voir `DOCUMENTATION.md`
+- **Analyse et améliorations** : Voir `ANALYSE_ET_AMELIORATIONS.md`
+- **Guide d'implémentation** : Voir `README_AMELIORATIONS.md`
+
+## 🔄 Migrations depuis une version précédente
+
+Si vous migrez depuis une version sans Flask-Migrate :
+
+1. Sauvegarder votre base de données existante
+2. Initialiser Flask-Migrate : `flask db init`
+3. Créer une migration initiale : `flask db migrate -m "Initial migration from legacy"`
+4. Vérifier la migration générée
+5. Appliquer : `flask db upgrade`
+
+## 🌍 Variables d'environnement
+
+### Application
+
+| Variable | Description | Défaut |
+|----------|-------------|--------|
+| `FLASK_SECRET_KEY` | Clé secrète Flask | `change-this-secret-key` |
+| `FLASK_ENV` | Environnement (development/testing/production) | `development` |
+| `DEBUG` | Mode debug | `True` (dev) |
+
+### Base de données
+
+| Variable | Description | Défaut |
+|----------|-------------|--------|
+| `DATABASE_URL` | URI de la base de données | SQLite dans `instance/` |
+
+### Email
+
+| Variable | Description | Défaut |
+|----------|-------------|--------|
+| `MAIL_SERVER` | Serveur SMTP | - |
+| `MAIL_PORT` | Port SMTP | `587` |
+| `MAIL_USE_TLS` | Utiliser TLS | `true` |
+| `MAIL_USERNAME` | Nom d'utilisateur SMTP | - |
+| `MAIL_PASSWORD` | Mot de passe SMTP | - |
+
+### Sécurité
+
+| Variable | Description | Défaut |
+|----------|-------------|--------|
+| `SESSION_COOKIE_SECURE` | Cookies sécurisés (HTTPS) | `false` (dev) |
+| `CORS_ORIGINS` | Origines CORS autorisées | `*` |
+
+Voir `.env.example` pour la liste complète.
 
 ## 🐛 Dépannage
 
-### Problèmes courants
+### Warning Flask-Limiter (stockage en mémoire)
 
-| Problème | Solution |
-|----------|----------|
-| `externally-managed-environment` (macOS) | Utilisez toujours un environnement virtuel : `python3 -m venv .venv` |
-| `TemplateNotFound` | Vérifiez que les templates sont dans `app/templates/` et que les blueprints sont enregistrés |
-| `IntegrityError: UNIQUE constraint failed` | Vérifiez que l'email ou le nom d'utilisateur n'existe pas déjà |
-| Emails non envoyés | Vérifiez les paramètres SMTP dans `.env`, le port TLS et les identifiants |
-| Capteurs non détectés | Vérifiez les permissions GPIO/I2C et les connexions matérielles |
-| Base de données verrouillée | Arrêtez l'application et relancez-la |
+**Message** : `Using the in-memory storage for tracking rate limits...`
 
-### Logs
+**Explication** : En développement, Flask-Limiter utilise le stockage en mémoire par défaut. C'est normal et n'affecte pas le fonctionnement.
 
-Les logs sont disponibles dans le dossier `logs/` :
-- `app.log` - Logs principaux de l'application
-
-### Mode debug
-
-Activez le mode debug pour plus d'informations :
-
-```bash
-export FLASK_ENV=development
-python run.py
+**En production** : Pour un stockage persistant, configurer Redis dans `.env` :
+```env
+RATELIMIT_STORAGE_URL=redis://localhost:6379/1
 ```
 
-## 📝 Notes de version
+Puis modifier `app/__init__.py` :
+```python
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URL", "memory://")
+)
+```
 
-### V9-Final
-- ✅ Validation d'unicité des emails avec messages d'erreur clairs
-- ✅ Messages d'alerte visuels (rouge, texte blanc) pour les erreurs
-- ✅ Durée d'affichage des alertes configurée à 5 secondes
-- ✅ Normalisation des emails (suppression espaces, gestion valeurs vides)
-- ✅ Protection contre les erreurs d'intégrité SQLite
+### Erreur de connexion à la base de données
 
-### Versions précédentes
-- V3.0-MVP : Collecte manuelle et planifiée, automatisation renforcée
-- Améliorations UX mobile/desktop, palette de couleurs harmonisée
+- Vérifier que `DATABASE_URL` est correctement défini
+- Vérifier les permissions du dossier `instance/`
+- Pour PostgreSQL/MySQL, vérifier que le serveur est démarré
+
+### Rate limiting trop restrictif
+
+Modifier les limites dans `app/__init__.py` :
+
+```python
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+```
+
+### Erreurs de migration
+
+```bash
+# Voir l'état actuel
+flask db current
+
+# Revenir à une version précédente
+flask db downgrade -1
+
+# Forcer une nouvelle migration
+flask db stamp head
+flask db migrate -m "New migration"
+```
 
 ## 🤝 Contribution
 
-Ce projet est privé. Pour toute question ou suggestion, contactez le mainteneur.
+Ce projet est un template de base. Vous pouvez :
 
-## 📄 Licence
+1. Fork le projet
+2. Créer une branche pour votre fonctionnalité
+3. Commiter vos changements
+4. Pousser vers la branche
+5. Ouvrir une Pull Request
 
-Projet privé - Tous droits réservés
+## 📝 Licence
+
+Ce projet est fourni comme template de base. Libre d'utilisation et de modification.
+
+## 🙏 Remerciements
+
+- Flask et sa communauté
+- Tous les contributeurs des packages utilisés
+
+## 📞 Support
+
+Pour toute question ou problème :
+1. Consulter la documentation (`DOCUMENTATION.md`)
+2. Vérifier les issues existantes
+3. Créer une nouvelle issue si nécessaire
 
 ---
 
-**Développé avec ❤️ pour l'automatisation domotique**
+**TemplateApp** - Template de base Flask pour applications web modernes
+

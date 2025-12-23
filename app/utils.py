@@ -10,11 +10,16 @@ Ce module fournit des fonctions utilitaires pour :
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import current_app
 from werkzeug.datastructures import FileStorage
+
+
+def utcnow() -> datetime:
+    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
+    return datetime.now(timezone.utc)
 
 
 def utc_to_local(utc_dt: datetime) -> datetime:
@@ -33,17 +38,16 @@ def utc_to_local(utc_dt: datetime) -> datetime:
     if utc_dt is None:
         return utc_dt
     
-    # Utiliser la méthode la plus fiable : comparer datetime.utcnow() et datetime.now()
-    # pour obtenir l'offset réel du système à ce moment précis
+    # Si le datetime est naive, on l'assume comme UTC
+    if utc_dt.tzinfo is None:
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+    # Si le datetime a déjà un timezone, on le convertit en UTC d'abord
+    elif utc_dt.tzinfo != timezone.utc:
+        utc_dt = utc_dt.astimezone(timezone.utc)
+    
+    # Utiliser astimezone() sans argument pour convertir en heure locale du système
     # Cette méthode prend automatiquement en compte l'heure d'été/hiver
-    now_utc = datetime.utcnow()
-    now_local = datetime.now()
-    
-    # Calculer l'offset en secondes (positif si local est à l'est de UTC)
-    offset_seconds = (now_local - now_utc).total_seconds()
-    
-    # Appliquer l'offset : ajouter les secondes pour convertir UTC vers local
-    local_dt = utc_dt + timedelta(seconds=offset_seconds)
+    local_dt = utc_dt.astimezone()
     return local_dt
 
 

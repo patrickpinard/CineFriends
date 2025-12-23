@@ -313,9 +313,6 @@ TemplateApp/
    - **Fonction** : `journal()`
    - **Description** : Page journal vide
 
-7. **`/affichage-lcd` (GET)**
-   - **Fonction** : `lcd_preview()`
-   - **Description** : Page affichage LCD vide
 
 8. **`/profil` (GET, POST)**
    - **Fonction** : `profile()`
@@ -769,7 +766,7 @@ Les templates sont organisés en plusieurs dossiers :
   - `profile.html` : Page de profil utilisateur
   - `users.html` : Liste des utilisateurs (admin)
   - `user_form.html` : Formulaire création/modification utilisateur (admin)
-  - Pages vides : `charts.html`, `automation.html`, `camera.html`, `settings.html`, `journal.html`, `lcd_preview.html`
+  - Pages vides : `charts.html`, `automation.html`, `camera.html`, `settings.html`, `journal.html`
 
 - **`app/templates/email/`** : Templates d'emails
   - Templates HTML et texte pour chaque type d'email

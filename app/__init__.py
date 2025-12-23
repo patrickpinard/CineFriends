@@ -1,35 +1,72 @@
 import hashlib
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect, generate_csrf
+from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
+from flask_caching import Cache
 from sqlalchemy import text
 from flask_cors import CORS
 
-from config import Config
+from config import get_config
+
+
+def utcnow() -> datetime:
+    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
+    return datetime.now(timezone.utc)
 
 
 db = SQLAlchemy()
 login_manager = LoginManager()
 csrf = CSRFProtect()
+migrate = Migrate()
+# Limiter : utilise le stockage en mémoire par défaut (dev)
+# En production, configurer avec Redis pour un stockage persistant :
+# limiter = Limiter(
+#     key_func=get_remote_address,
+#     default_limits=["200 per day", "50 per hour"],
+#     storage_uri=os.getenv("RATELIMIT_STORAGE_URL", "memory://")
+# )
+limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+cache = Cache()
 
 
-def create_app():
+def create_app(config_name=None):
+    """
+    Factory function pour créer l'application Flask.
+    
+    Args:
+        config_name: Nom de la configuration à utiliser ('development', 'testing', 'production').
+                    Si None, utilise FLASK_ENV ou 'development' par défaut.
+    
+    Returns:
+        Instance de l'application Flask configurée.
+    """
     import logging
     logger = logging.getLogger(__name__)
     
     app = Flask(__name__, static_folder="static", template_folder="templates")
     
-    app.config.from_object(Config)
+    # Charger la configuration appropriée
+    config_class = get_config() if config_name is None else config.get(config_name, get_config())
+    app.config.from_object(config_class)
+    
+    # Évaluer la propriété SQLALCHEMY_DATABASE_URI (car c'est une @property)
+    # Flask ne peut pas évaluer automatiquement les propriétés avec from_object()
+    instance = config_class()
+    app.config['SQLALCHEMY_DATABASE_URI'] = instance.SQLALCHEMY_DATABASE_URI
+    
+    config_class.init_app(app)
     
     # Vérifier et préparer la base de données AVANT d'initialiser SQLAlchemy
     db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if app.debug:
-        logger.debug(f"URI de la base de données: {db_uri}")
     
     if db_uri.startswith("sqlite:///"):
         db_file_path = db_uri.replace("sqlite:///", "")
@@ -37,16 +74,9 @@ def create_app():
         db_file_abs = db_file.resolve()  # Chemin absolu du fichier
         db_file_parent_abs = db_file_abs.parent  # Parent du chemin absolu
         
-        if app.debug:
-            logger.debug(f"Chemin du fichier DB extrait: {db_file_path}")
-            logger.debug(f"Chemin résolu (absolu): {db_file_abs}")
-            logger.debug(f"Répertoire parent existe: {db_file_parent_abs.exists()}")
-        
         # S'assurer que le répertoire parent existe (utiliser le chemin absolu)
         try:
             db_file_parent_abs.mkdir(parents=True, exist_ok=True)
-            if app.debug:
-                logger.debug(f"Répertoire parent créé/vérifié: {db_file_parent_abs}")
         except Exception as e:
             logger.error(f"ERREUR création répertoire: {e}", exc_info=True)
             raise
@@ -63,17 +93,15 @@ def create_app():
             test_conn = sqlite3.connect(str(db_file_abs), timeout=10.0)
             test_conn.execute("SELECT 1")
             test_conn.close()
-            if app.debug:
-                logger.debug("Connexion SQLite directe réussie")
         except Exception as e:
             logger.error(f"ERREUR connexion SQLite directe: {e}", exc_info=True)
             raise
 
-    cors_origins = os.getenv("CORS_ORIGINS")
+    # Configuration CORS
+    cors_origins = app.config.get("CORS_ORIGINS", [])
     if cors_origins:
-        origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
         CORS(app, resources={r"/*": {
-            "origins": origins,
+            "origins": cors_origins,
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "X-CSRFToken", "X-Requested-With"],
             "supports_credentials": True
@@ -85,6 +113,22 @@ def create_app():
             "allow_headers": ["Content-Type", "Authorization", "X-CSRFToken", "X-Requested-With"],
             "supports_credentials": True
         }})
+    
+    # Configuration Talisman pour les headers de sécurité
+    Talisman(
+        app,
+        force_https=app.config.get("SESSION_COOKIE_SECURE", False),
+        strict_transport_security=True,
+        strict_transport_security_max_age=31536000,
+        content_security_policy={
+            'default-src': "'self'",
+            'script-src': "'self' 'unsafe-inline'",
+            'style-src': "'self' 'unsafe-inline'",
+            'img-src': "'self' data: https:",
+            'font-src': "'self' data:",
+        },
+        content_security_policy_nonce_in=['script-src', 'style-src']
+    )
 
     # Vérifier et corriger l'URI de la base de données avant d'initialiser SQLAlchemy
     final_db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
@@ -92,15 +136,67 @@ def create_app():
     # Si l'URI utilise un chemin relatif (3 slashes), le convertir en absolu avec 4 slashes
     if final_db_uri.startswith("sqlite:///") and not final_db_uri.startswith("sqlite:////"):
         db_file_path = final_db_uri.replace("sqlite:///", "")
-        db_file_abs = Path(db_file_path).resolve()
+        # Résoudre le chemin relatif depuis le répertoire de base de l'application
+        BASE_DIR = Path(__file__).parent.parent
+        if not Path(db_file_path).is_absolute():
+            db_file_abs = (BASE_DIR / db_file_path).resolve()
+        else:
+            db_file_abs = Path(db_file_path).resolve()
+        
+        # S'assurer que le répertoire parent existe et est accessible en écriture
+        db_file_abs.parent.mkdir(parents=True, exist_ok=True)
+        if not os.access(db_file_abs.parent, os.W_OK):
+            logger.error(f"Pas de permission d'écriture sur {db_file_abs.parent}")
+            raise PermissionError(f"Pas de permission d'écriture sur {db_file_abs.parent}")
+        
+        # Convertir en URI absolue avec 4 slashes
         final_db_uri = f"sqlite:////{str(db_file_abs).replace(chr(92), '/')}"
         app.config["SQLALCHEMY_DATABASE_URI"] = final_db_uri
         if app.debug:
             logger.debug(f"URI corrigée en absolu avec 4 slashes: {final_db_uri}")
     
+    # Initialiser les extensions
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)
+    migrate.init_app(app, db)
+    limiter.init_app(app)
+    
+    # Configuration du cache
+    cache_config = {'CACHE_TYPE': app.config.get('CACHE_TYPE', 'simple')}
+    if app.config.get('CACHE_REDIS_URL'):
+        cache_config['CACHE_REDIS_URL'] = app.config['CACHE_REDIS_URL']
+    cache.init_app(app, config=cache_config)
+
+    # Configuration du logging vers fichier
+    # Supprimer tous les handlers existants pour éviter les formats par défaut de Flask
+    app.logger.handlers.clear()
+    
+    # Créer le répertoire logs s'il n'existe pas
+    logs_dir = Path(__file__).parent.parent / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    
+    # Configurer le handler de fichier
+    from logging.handlers import RotatingFileHandler
+    log_file = logs_dir / "app.log"
+    file_handler = RotatingFileHandler(
+        str(log_file),
+        maxBytes=10240000,  # 10 MB
+        backupCount=10
+    )
+    
+    if not app.debug or os.getenv("FLASK_ENV") == "production":
+        file_handler.setLevel(logging.INFO)
+        app.logger.setLevel(logging.INFO)
+    else:
+        file_handler.setLevel(logging.DEBUG)
+        app.logger.setLevel(logging.DEBUG)
+    
+    # Format simplifié sans détails techniques
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s'
+    ))
+    app.logger.addHandler(file_handler)
 
     login_manager.login_view = "auth.login"
     login_manager.login_message_category = "info"
@@ -142,7 +238,7 @@ def create_app():
         return {
             "header_notifications": notifications,
             "header_unread_notifications": unread_count,
-            "current_year": datetime.utcnow().year,
+            "current_year": utcnow().year,
             "is_admin": current_user.is_authenticated and getattr(current_user, "role", None) == "admin",
         }
 
@@ -169,21 +265,14 @@ def create_app():
         
         # Vérifier que la base de données peut être créée/ouverte avant de continuer
         db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-        app.logger.info(f"Tentative de connexion à la base de données avec URI: {db_uri}")
         
         if db_uri.startswith("sqlite:///"):
             db_file_path = db_uri.replace("sqlite:///", "")
             db_file = Path(db_file_path)
             
-            app.logger.info(f"Chemin du fichier DB extrait: {db_file_path}")
-            app.logger.info(f"Chemin Path object: {db_file}")
-            app.logger.info(f"Répertoire parent: {db_file.parent}")
-            app.logger.info(f"Répertoire parent existe: {db_file.parent.exists()}")
-            
             # S'assurer que le répertoire parent existe
             try:
                 db_file.parent.mkdir(parents=True, exist_ok=True)
-                app.logger.info(f"Répertoire parent créé/vérifié: {db_file.parent}")
             except Exception as e:
                 app.logger.error(f"ERREUR lors de la création du répertoire parent: {e}")
                 raise
@@ -198,11 +287,14 @@ def create_app():
             # Tester la création/ouverture du fichier directement avec sqlite3
             try:
                 import sqlite3
-                app.logger.info(f"Test de connexion SQLite directe à: {db_file}")
-                test_conn = sqlite3.connect(str(db_file), timeout=10.0)
-                test_conn.execute("SELECT 1")
+                # Utiliser le chemin absolu résolu pour le test
+                db_file_abs = db_file.resolve()
+                test_conn = sqlite3.connect(str(db_file_abs), timeout=10.0)
+                # Tester une écriture pour vérifier les permissions
+                test_conn.execute("CREATE TABLE IF NOT EXISTS _test_write (id INTEGER PRIMARY KEY)")
+                test_conn.execute("DROP TABLE IF EXISTS _test_write")
+                test_conn.commit()
                 test_conn.close()
-                app.logger.info(f"✓ Test de connexion SQLite réussi pour: {db_file}")
             except Exception as e:
                 app.logger.error(f"ERREUR lors du test de connexion SQLite: {e}")
                 app.logger.error(f"Type d'erreur: {type(e).__name__}")
@@ -368,5 +460,9 @@ def create_app():
         except Exception as exc:  # pragma: no cover - dépend de l'état SQLite
             app.logger.warning("Impossible de vérifier les schémas SQLite: %s", exc)
         seed.ensure_default_admin()
+        
+        # Enregistrer les commandes CLI
+        from . import commands
+        commands.register_commands(app)
 
     return app
