@@ -1,7 +1,28 @@
 document.addEventListener('DOMContentLoaded', function () {
     'use strict';
-    
-    
+
+    // --- Toasts tâches admin en attente ---
+    (function showAdminPendingToasts() {
+        const tasks = window.ADMIN_PENDING_TASKS;
+        if (!tasks || !tasks.length || typeof window.createToast !== 'function') return;
+
+        // Clé de déduplication : JSON des tâches (type + count)
+        const key = JSON.stringify(tasks.map(t => ({ type: t.type, count: t.count })));
+        const storageKey = 'admin_pending_tasks_shown';
+        const lastShown = sessionStorage.getItem(storageKey);
+
+        // Ne ré-afficher que si les tâches ont changé depuis la dernière fois
+        if (lastShown === key) return;
+        sessionStorage.setItem(storageKey, key);
+
+        // Décaler légèrement pour laisser le temps à la page de s'afficher
+        setTimeout(function () {
+            tasks.forEach(function (task) {
+                window.createToast(task.level || 'warning', task.label, task.url || null);
+            });
+        }, 800);
+    })();
+
     // Mettre en cache la page actuelle pour le mode offline
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         const currentUrl = window.location.href;
@@ -14,11 +35,11 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Journal Accordéon (Ouvrir/Fermer par jour) ---
     const dayToggles = document.querySelectorAll('[data-day-toggle]');
     dayToggles.forEach(toggle => {
-        // Initialiser l'état : tous les jours sont fermés par défaut
+        // Initialiser l'état : tous les jours sont fermés par défaut (la classe CSS journal-accordion-closed gère max-height: 0)
         const contentId = toggle.getAttribute('aria-controls');
         const content = document.getElementById(contentId);
         if (content && toggle.getAttribute('aria-expanded') === 'false') {
-            content.style.maxHeight = '0';
+            // La classe journal-accordion-closed est déjà appliquée dans le template
             toggle.classList.add('rounded-xl');
         }
         
@@ -73,12 +94,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Journal Accordéon (Ouvrir/Fermer par mois) ---
     const monthToggles = document.querySelectorAll('[data-month-toggle]');
     monthToggles.forEach(toggle => {
-        // Initialiser l'état : tous les mois sont fermés par défaut
+        // Initialiser l'état : tous les mois sont fermés par défaut (la classe CSS journal-accordion-closed gère max-height: 0)
         const contentId = toggle.getAttribute('aria-controls');
         const content = document.getElementById(contentId);
-        if (content && toggle.getAttribute('aria-expanded') === 'false') {
-            content.style.maxHeight = '0';
-        }
+        // La classe journal-accordion-closed est déjà appliquée dans le template
         
         toggle.addEventListener('click', function() {
             const isExpanded = this.getAttribute('aria-expanded') === 'true';
@@ -147,23 +166,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const confirmApproveBtn = confirmModal?.querySelector('[data-confirm-approve]');
     let pendingConfirmForm = null;
 
-
-    // Flash messages - utiliser la fonction createToast définie dans base.html
-    const flashDataEl = document.getElementById('flash-data');
-    if (flashDataEl) {
-        try {
-            const messages = JSON.parse(flashDataEl.textContent);
-            messages.forEach(([category, message]) => {
-                window.dispatchEvent(
-                    new CustomEvent('app:toast', {
-                        detail: { category, message },
-                    })
-                );
-            });
-        } catch (e) {
-            console.warn('Erreur parsing flash messages:', e);
-        }
-    }
 
     // Gestion de la sidebar
     if (sidebarToggle) {
@@ -235,6 +237,19 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!confirmModal || !confirmMessageEl) return;
         confirmMessageEl.textContent = message;
         pendingConfirmForm = form;
+
+        // Adapter le bouton selon la variante (confirm = vert, sinon rouge par défaut)
+        const variant = form?.getAttribute('data-confirm-variant') || 'delete';
+        if (confirmApproveBtn) {
+            if (variant === 'confirm') {
+                confirmApproveBtn.textContent = 'Confirmer';
+                confirmApproveBtn.className = 'inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-emerald-400';
+            } else {
+                confirmApproveBtn.textContent = 'Supprimer';
+                confirmApproveBtn.className = 'inline-flex items-center justify-center gap-2 rounded-full bg-rose-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-rose-400';
+            }
+        }
+
         confirmModal.classList.remove('hidden');
     }
 

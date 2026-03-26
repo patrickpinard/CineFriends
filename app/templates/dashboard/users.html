@@ -1,8 +1,47 @@
 {% extends 'base.html' %}
-{% block title %}Utilisateurs{% endblock %}
-{% block header_title %}Utilisateurs{% endblock %}
+{% block title %}Administration{% endblock %}
+{% block header_title %}Administration{% endblock %}
 {% block content %}
-<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+{# ── Tabs ────────────────────────────────────────────────────────────────── #}
+<div class="flex items-center justify-between gap-4">
+    <nav class="flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+        <a href="{{ url_for('admin.users', tab='all') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition
+               {{ 'bg-white text-slate-900 shadow-sm' if tab != 'pending' else 'text-slate-500 hover:text-slate-700' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+            </svg>
+            Utilisateurs
+        </a>
+        <a href="{{ url_for('admin.users', tab='pending') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition
+               {{ 'bg-white text-slate-900 shadow-sm' if tab == 'pending' else 'text-slate-500 hover:text-slate-700' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            Tâches
+            {% if pending_count > 0 %}
+            <span class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[0.65rem] font-bold text-white">{{ pending_count }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('main.journal') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5H12m-8.25 4.5H12" />
+            </svg>
+            Journal
+        </a>
+        <a href="{{ url_for('admin.broadcast_notification') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 0 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
+            </svg>
+            Broadcast
+        </a>
+    </nav>
+
+    {% if tab != 'pending' %}
     <a href="{{ url_for('admin.create_user') }}"
        class="hidden sm:inline-flex sm:items-center sm:gap-2 sm:rounded-full sm:bg-teal-500 sm:px-4 sm:py-2 sm:text-xs sm:font-semibold sm:uppercase sm:tracking-wide sm:text-white sm:shadow-soft sm:transition sm:hover:bg-teal-400">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -10,7 +49,173 @@
         </svg>
         Nouvel utilisateur
     </a>
+    {% endif %}
 </div>
+
+{# ════════════════════════════════════════════════════════════════════════════
+   TAB : EN ATTENTE
+   ════════════════════════════════════════════════════════════════════════════ #}
+{% if tab == 'pending' %}
+
+{# Barre de recherche #}
+<form method="get" class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+    <input type="hidden" name="tab" value="pending" />
+    <div class="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.2-5.2M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z" />
+        </svg>
+        <input type="search" name="q" value="{{ search }}" placeholder="Rechercher un utilisateur…"
+               class="h-8 flex-1 border-none bg-transparent focus:ring-0" />
+    </div>
+    {% if search %}
+    <a href="{{ url_for('admin.users', tab='pending') }}"
+       class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
+        Réinitialiser
+    </a>
+    {% endif %}
+</form>
+
+<div class="my-6 border-t-2 border-slate-200"></div>
+
+{# Liste vide #}
+{% if pending_total == 0 %}
+<div class="mt-8 flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-slate-200 bg-white px-8 py-16 text-center shadow-sm">
+    <span class="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-500">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+    </span>
+    <div>
+        <p class="text-base font-semibold text-slate-800">Tout est à jour !</p>
+        <p class="mt-1 text-sm text-slate-500">Aucun utilisateur en attente de validation.</p>
+    </div>
+</div>
+
+{% else %}
+{# Accordéon par date #}
+<div class="mt-6 space-y-6">
+    {% for group in groups %}
+    <div class="w-full space-y-4" data-month-accordion>
+        <button type="button"
+                class="w-full flex items-center justify-between gap-3 rounded-xl border-2 border-slate-300 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-4 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-inset"
+                data-month-toggle aria-expanded="true"
+                aria-controls="pending-group-{{ loop.index }}">
+            <div class="flex items-center gap-3 flex-1 min-w-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.118a7.5 7.5 0 0 1 15 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.5-1.632Z" />
+                </svg>
+                <h2 class="text-lg font-bold text-slate-800 truncate">
+                    {% if group.date == today %}Aujourd'hui
+                    {% elif group.date == yesterday %}Hier
+                    {% else %}{{ group.date.strftime('%d/%m/%Y') }}{% endif %}
+                </h2>
+                <span class="ml-auto text-sm text-slate-500 whitespace-nowrap">
+                    {{ group.users|length }} utilisateur{{ 's' if group.users|length != 1 else '' }}
+                </span>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-400 transition-transform duration-200 flex-shrink-0 rotate-180"
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" data-month-chevron>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+        </button>
+
+        <div id="pending-group-{{ loop.index }}"
+             class="w-full overflow-hidden transition-all duration-300 ease-in-out"
+             style="max-height: 9999px;" data-month-content>
+            <div class="w-full space-y-3 pt-2 pb-2">
+                {% for user in group.users %}
+                <div class="w-full rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                    <div class="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:gap-6">
+                        {# Avatar #}
+                        <div class="flex-shrink-0">
+                            {% if user.avatar_filename %}
+                            <img src="{{ url_for('static', filename='uploads/' ~ user.avatar_filename) }}"
+                                 alt="{{ user.username }}"
+                                 class="h-12 w-12 rounded-full object-cover ring-2 ring-amber-200" />
+                            {% else %}
+                            {% set palette = avatar_palette(user.username) %}
+                            <div class="h-12 w-12 rounded-full flex items-center justify-center text-white font-bold text-lg ring-2 ring-amber-200"
+                                 style="background: {{ palette.gradient }};">
+                                {{ (user.first_name[0] if user.first_name else user.username[0]) | upper }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {# Infos #}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-semibold text-slate-900">{{ user.username }}</span>
+                                {% if user.first_name or user.last_name %}
+                                <span class="text-sm text-slate-500">— {{ user.first_name or '' }} {{ user.last_name or '' }}</span>
+                                {% endif %}
+                                <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">En attente</span>
+                            </div>
+                            <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                                {% if user.email %}
+                                <span class="flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                                    </svg>
+                                    {{ user.email }}
+                                </span>
+                                {% endif %}
+                                {% if user.created_at %}
+                                <span class="flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                    </svg>
+                                    Inscrit le {{ user.created_at | local_datetime }}
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {# Actions #}
+                        <div class="flex flex-shrink-0 items-center gap-2">
+                            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}"
+                               class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z" />
+                                </svg>
+                                Modifier
+                            </a>
+                            <form method="post" action="{{ url_for('admin.approve_user', user_id=user.id) }}" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                <button type="submit"
+                                        class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                    </svg>
+                                    Approuver
+                                </button>
+                            </form>
+                            <form method="post" action="{{ url_for('admin.reject_user', user_id=user.id) }}" class="inline"
+                                  data-confirm="Rejeter et supprimer l'inscription de {{ user.username }} ?">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                <button type="submit"
+                                        class="inline-flex items-center gap-1.5 rounded-full bg-rose-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                    </svg>
+                                    Rejeter
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}{# end pending_total #}
+
+{# ════════════════════════════════════════════════════════════════════════════
+   TAB : TOUS LES UTILISATEURS (fin du if tab == 'pending')
+   ════════════════════════════════════════════════════════════════════════════ #}
+{% else %}
+
 <form method="get" class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm" data-filter-form>
     <div class="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -149,12 +354,12 @@
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-3">
                         {% if user.avatar_filename %}
-                        <span class="inline-flex h-9 w-9 overflow-hidden rounded-full shadow-soft" style="box-shadow: {{ palette.shadow }};">
+                        <span class="inline-flex h-9 w-9 overflow-hidden rounded-full shadow-soft" data-avatar-shadow-only="{{ palette.shadow }}">
                             <img src="{{ url_for('static', filename='uploads/' ~ user.avatar_filename) }}" alt="Avatar de {{ user.username }}" class="h-9 w-9 object-cover" />
                         </span>
                         {% else %}
                         <span class="inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold uppercase tracking-wide text-white shadow-soft"
-                              style="background: {{ palette.gradient }}; box-shadow: {{ palette.shadow }};">
+                              data-avatar-gradient="{{ palette.gradient }}" data-avatar-shadow="{{ palette.shadow }}">
                             {{ user.username[:2].upper() }}
                         </span>
                         {% endif %}
@@ -189,17 +394,33 @@
                     {% endif %}
                 </td>
                 <td class="px-6 py-4 text-right">
-                    <div class="flex flex-col items-end gap-2 sm:flex-row sm:justify-end sm:gap-3">
-                        <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-teal-200 hover:text-teal-600">
+                    <div class="flex flex-wrap items-center justify-end gap-2">
+                        <a href="{{ url_for('admin.edit_user', user_id=user.id) }}"
+                           class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-teal-200 hover:text-teal-600">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 3.487a2.25 2.25 0 0 1 3.182 3.182L8.998 17.715l-3.873.43a.563.563 0 0 1-.622-.622l.43-3.873L16.862 3.487z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 7.125 16.875 4.5" />
                             </svg>
                             Modifier
                         </a>
+                        {% if user.email %}
+                        <form method="post" action="{{ url_for('admin.reset_user_password', user_id=user.id) }}"
+                              data-confirm="Envoyer un lien de réinitialisation de mot de passe à {{ user.email }} ?"
+                              data-confirm-variant="confirm">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit"
+                                    class="inline-flex items-center gap-1.5 rounded-full border border-sky-100 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-600 transition hover:bg-sky-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                </svg>
+                                Mot de passe
+                            </button>
+                        </form>
+                        {% endif %}
                         <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" data-confirm="Confirmer la suppression de {{ user.username }} ?">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-rose-500 transition hover:bg-rose-100 hover:text-rose-600 {% if user.username == 'admin' %}cursor-not-allowed opacity-50 hover:bg-rose-50 hover:text-rose-500{% endif %}" type="submit" {% if user.username == 'admin' %}disabled{% endif %}>
+                            <button class="inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-500 transition hover:bg-rose-100 hover:text-rose-600 {% if user.username == 'admin' %}cursor-not-allowed opacity-50{% endif %}"
+                                    type="submit" {% if user.username == 'admin' %}disabled{% endif %}>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9.017a2.25 2.25 0 0 1-2.244 2.133h-1.3a2.25 2.25 0 0 1-2.244-2.133L8.26 9m9.49-3.75h-3.25l-.568-1.704A1.125 1.125 0 0 0 12.873 3h-1.746a1.125 1.125 0 0 0-1.059.746L9.5 5.25h-3.25M5.25 5.25h13.5" />
                                 </svg>
@@ -247,12 +468,12 @@
     <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div class="flex items-center gap-3">
             {% if user.avatar_filename %}
-            <span class="inline-flex h-12 w-12 flex-shrink-0 overflow-hidden rounded-2xl shadow-soft" style="box-shadow: {{ palette.shadow }};">
+            <span class="inline-flex h-12 w-12 flex-shrink-0 overflow-hidden rounded-2xl shadow-soft" data-avatar-shadow-only="{{ palette.shadow }}">
                 <img src="{{ url_for('static', filename='uploads/' ~ user.avatar_filename) }}" alt="Avatar de {{ user.username }}" class="h-12 w-12 object-cover" />
             </span>
             {% else %}
             <span class="inline-flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl text-sm font-semibold uppercase tracking-wide text-white shadow-soft"
-                  style="background: {{ palette.gradient }}; box-shadow: {{ palette.shadow }};">
+                  data-avatar-gradient="{{ palette.gradient }}" data-avatar-shadow="{{ palette.shadow }}">
                 {{ user.username[:2].upper() }}
             </span>
             {% endif %}
@@ -294,18 +515,34 @@
                 </dd>
             </div>
         </dl>
-        <div class="mt-4 flex items-center gap-2">
-            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-600 transition hover:border-teal-200 hover:text-teal-600">
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}"
+               class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-teal-200 hover:text-teal-600">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 3.487a2.25 2.25 0 0 1 3.182 3.182L8.998 17.715l-3.873.43a.563.563 0 0 1-.622-.622l.43-3.873L16.862 3.487z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 7.125 16.875 4.5" />
                 </svg>
                 Modifier
             </a>
-            {% if user.username != 'admin' %}
-            <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" data-confirm="Confirmer la suppression de {{ user.username }} ?" class="flex-1">
+            {% if user.email %}
+            <form method="post" action="{{ url_for('admin.reset_user_password', user_id=user.id) }}"
+                  data-confirm="Envoyer un lien de réinitialisation de mot de passe à {{ user.email }} ?"
+                  data-confirm-variant="confirm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-rose-500 transition hover:bg-rose-100 hover:text-rose-600">
+                <button type="submit"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-sky-100 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                    Mot de passe
+                </button>
+            </form>
+            {% endif %}
+            {% if user.username != 'admin' %}
+            <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" data-confirm="Confirmer la suppression de {{ user.username }} ?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-500 transition hover:bg-rose-100 hover:text-rose-600">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9.017a2.25 2.25 0 0 1-2.244 2.133h-1.3a2.25 2.25 0 0 1-2.244-2.133L8.26 9m9.49-3.75h-3.25l-.568-1.704A1.125 1.125 0 0 0 12.873 3h-1.746a1.125 1.125 0 0 0-1.059.746L9.5 5.25h-3.25M5.25 5.25h13.5" />
                     </svg>
@@ -359,4 +596,7 @@
     {% endif %}
 </div>
 {% endif %}
+<script src="{{ url_for('static', filename='js/avatar-styles.js') }}" defer></script>
+
+{% endif %}{# end tab != 'pending' #}
 {% endblock %}

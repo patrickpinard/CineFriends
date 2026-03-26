@@ -121,4 +121,9 @@
         -webkit-backface-visibility: hidden;
         padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.125rem);
     }
+
+    /* Classe pour les accordéons fermés (évite les styles inline bloqués par CSP) */
+    .journal-accordion-closed {
+        max-height: 0;
+    }
 }

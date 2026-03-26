@@ -75,12 +75,26 @@ class User(UserMixin, db.Model):
     last_login = db.Column(db.DateTime, nullable=True)
     avatar_filename = db.Column(db.String(255), nullable=True)
     address = db.Column(db.String(255), nullable=True)  # Ancien champ, conservé pour compatibilité
-    street = db.Column(db.String(255), nullable=True)
-    postal_code = db.Column(db.String(20), nullable=True)
+    street = db.Column(db.String(255), nullable=True)  # Adresse privée
+    postal_code = db.Column(db.String(20), nullable=True)  # Adresse privée
     city_country = db.Column(db.String(255), nullable=True)  # Ancien champ, conservé pour compatibilité
-    city = db.Column(db.String(255), nullable=True)
-    country = db.Column(db.String(255), nullable=True)
-    phone = db.Column(db.String(50), nullable=True)
+    city = db.Column(db.String(255), nullable=True)  # Adresse privée
+    country = db.Column(db.String(255), nullable=True)  # Adresse privée
+    phone = db.Column(db.String(50), nullable=True)  # Téléphone fixe privé
+    phone_mobile = db.Column(db.String(50), nullable=True)  # Téléphone mobile privé
+    # Champs professionnels
+    date_of_birth = db.Column(db.Date, nullable=True)
+    bio = db.Column(db.Text, nullable=True)
+    company = db.Column(db.String(255), nullable=True)
+    job_title = db.Column(db.String(255), nullable=True)
+    email_professional = db.Column(db.String(120), nullable=True)  # Email professionnel
+    street_professional = db.Column(db.String(255), nullable=True)  # Adresse professionnelle
+    postal_code_professional = db.Column(db.String(20), nullable=True)  # Code postal professionnel
+    city_professional = db.Column(db.String(255), nullable=True)  # Ville professionnelle
+    country_professional = db.Column(db.String(255), nullable=True)  # Pays professionnel
+    phone_professional = db.Column(db.String(50), nullable=True)  # Téléphone professionnel
+    website = db.Column(db.String(255), nullable=True)
+    linkedin = db.Column(db.String(255), nullable=True)
     twofa_enabled = db.Column(db.Boolean, default=False)
     twofa_code_hash = db.Column(db.String(255), nullable=True)
     twofa_code_sent_at = db.Column(db.DateTime, nullable=True)

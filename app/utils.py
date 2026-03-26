@@ -67,29 +67,43 @@ def format_local_datetime(dt: datetime, format_str: str = "%d/%m/%Y %H:%M") -> s
     return local_dt.strftime(format_str)
 
 
+_ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "GIF", "WEBP"}
+_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
 def save_avatar(file: FileStorage) -> str:
     """
-    Sauvegarde un fichier avatar uploadé par un utilisateur.
-    
-    Génère un nom de fichier unique avec un token aléatoire et conserve
-    l'extension originale du fichier.
-    
-    Args:
-        file: Fichier uploadé via Flask-WTF FileStorage.
-    
-    Returns:
-        Nom du fichier sauvegardé (sans le chemin complet).
-    
+    Valide et sauvegarde un fichier avatar.
+
+    Vérifie l'extension ET le contenu réel (via Pillow) avant de sauvegarder.
+
     Raises:
-        OSError: Si le répertoire d'upload ne peut pas être créé ou
-                 si le fichier ne peut pas être sauvegardé.
+        ValueError: Si le fichier n'est pas une image valide ou a une extension non autorisée.
+        OSError: Si la sauvegarde échoue.
     """
     ext = Path(file.filename or "").suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise ValueError(f"Extension non autorisée : {ext}")
+
+    # Validation du contenu réel avec Pillow
+    try:
+        from PIL import Image
+        file.stream.seek(0)
+        img = Image.open(file.stream)
+        img.verify()  # Lève une exception si le fichier est corrompu ou invalide
+        if img.format not in _ALLOWED_IMAGE_FORMATS:
+            raise ValueError(f"Format d'image non autorisé : {img.format}")
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"Fichier image invalide : {exc}") from exc
+    finally:
+        file.stream.seek(0)
+
     filename = f"avatar_{secrets.token_hex(8)}{ext}"
     upload_folder = Path(current_app.config["UPLOAD_FOLDER"])  # type: ignore[arg-type]
     upload_folder.mkdir(parents=True, exist_ok=True)
-    destination = upload_folder / filename
-    file.save(destination)
+    file.save(upload_folder / filename)
     return filename
 
 
@@ -139,6 +153,25 @@ def serialize_value(value):
     if value is None:
         return None
     return str(value)
+
+
+_USER_FORM_FIELDS = [
+    "title", "first_name", "last_name", "username", "email",
+    "date_of_birth", "bio", "company", "job_title", "website", "linkedin",
+    "street", "postal_code", "city", "country", "phone", "phone_mobile",
+    "email_professional", "street_professional", "postal_code_professional",
+    "city_professional", "country_professional", "phone_professional",
+    "twofa_enabled", "role",
+]
+
+
+def populate_form_from_user(form, user) -> None:
+    """Pré-remplit un formulaire ProfileForm avec les données d'un utilisateur."""
+    for field in _USER_FORM_FIELDS:
+        if hasattr(form, field):
+            getattr(form, field).data = getattr(user, field, None)
+    if hasattr(form, "active"):
+        form.active.data = user.active
 
 
 def build_changes(original: dict, updated: dict, fields: list[str]) -> dict:

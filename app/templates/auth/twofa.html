@@ -17,16 +17,30 @@
         {{ form.hidden_tag() }}
         <div>
             {{ form.code.label(class_='text-sm font-medium text-slate-600') }}
-            {{ form.code(class_='mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-lg tracking-[0.5rem] focus:border-teal-500 focus:ring-teal-500') }}
+            {{ form.code(class_='mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-lg tracking-[0.5rem] focus:border-teal-500 focus:ring-teal-500', inputmode='numeric', autocomplete='one-time-code') }}
             {% for error in form.code.errors %}
             <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
             {% endfor %}
         </div>
         <div class="flex items-center justify-end text-xs text-slate-500">
-            <a href="{{ url_for('auth.twofa_verify', resend=1) }}" class="font-semibold text-teal-600 hover:text-teal-500">Renvoyer le code</a>
+            {% if resend_remaining_seconds and resend_remaining_seconds > 0 %}
+                <span class="font-semibold text-rose-600">{{ resend_remaining_seconds }}s</span>
+            {% else %}
+                <a href="{{ url_for('auth.twofa_verify', resend=1) }}" class="font-semibold text-teal-600 hover:text-teal-500">Renvoyer le code</a>
+            {% endif %}
         </div>
-        {% if code_expired %}
-        <p class="rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500">Code expiré — renvoyez un nouveau code.</p>
+        {% if code_missing %}
+            <p class="rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500">
+                Aucun code actif — renvoyez un nouveau code.
+            </p>
+        {% elif code_expired %}
+            <p class="rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500">
+                Code expiré — renvoyez un nouveau code.
+            </p>
+        {% else %}
+            <p class="rounded-xl bg-sky-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-sky-600">
+                Code valable encore {{ code_remaining_seconds }}s.
+            </p>
         {% endif %}
         <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400">
             Valider

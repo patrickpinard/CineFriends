@@ -13,9 +13,10 @@ from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from flask_caching import Cache
 from sqlalchemy import text
-from flask_cors import CORS
+from flask_cors import CORS  # noqa: F401 — kept for possible direct use
 
 from config import get_config
+from .security import configure_security
 
 
 def utcnow() -> datetime:
@@ -97,38 +98,8 @@ def create_app(config_name=None):
             logger.error(f"ERREUR connexion SQLite directe: {e}", exc_info=True)
             raise
 
-    # Configuration CORS
-    cors_origins = app.config.get("CORS_ORIGINS", [])
-    if cors_origins:
-        CORS(app, resources={r"/*": {
-            "origins": cors_origins,
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "X-CSRFToken", "X-Requested-With"],
-            "supports_credentials": True
-        }})
-    else:
-        CORS(app, resources={r"/*": {
-            "origins": "*",
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "X-CSRFToken", "X-Requested-With"],
-            "supports_credentials": True
-        }})
-    
-    # Configuration Talisman pour les headers de sécurité
-    Talisman(
-        app,
-        force_https=app.config.get("SESSION_COOKIE_SECURE", False),
-        strict_transport_security=True,
-        strict_transport_security_max_age=31536000,
-        content_security_policy={
-            'default-src': "'self'",
-            'script-src': "'self' 'unsafe-inline'",
-            'style-src': "'self' 'unsafe-inline'",
-            'img-src': "'self' data: https:",
-            'font-src': "'self' data:",
-        },
-        content_security_policy_nonce_in=['script-src', 'style-src']
-    )
+    # Configuration CORS + headers de sécurité (Talisman)
+    configure_security(app)
 
     # Vérifier et corriger l'URI de la base de données avant d'initialiser SQLAlchemy
     final_db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
@@ -211,7 +182,7 @@ def create_app(config_name=None):
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-    from .routes import main_bp
+    from .routes import main_bp  # package app/routes/
     from .auth import auth_bp
     from .admin import admin_bp
     app.register_blueprint(auth_bp)
@@ -222,8 +193,12 @@ def create_app(config_name=None):
 
     @app.context_processor
     def inject_globals():
+        from .models import User as _User
         notifications = []
         unread_count = 0
+        admin_pending_tasks = []
+        broadcast_notifications = []
+
         if current_user.is_authenticated:
             base_query = Notification.query.filter(
                 (Notification.user_id == current_user.id)
@@ -235,11 +210,40 @@ def create_app(config_name=None):
             ).order_by(Notification.created_at.desc())
             notifications = base_query.limit(10).all()
             unread_count = base_query.filter(Notification.read.is_(False)).count()
+
+            if current_user.role == "admin":
+                pending_users = _User.query.filter_by(active=False).count()
+                if pending_users:
+                    admin_pending_tasks.append({
+                        "type": "pending_users",
+                        "count": pending_users,
+                        "label": (
+                            f"{pending_users} utilisateur en attente de validation"
+                            if pending_users == 1
+                            else f"{pending_users} utilisateurs en attente de validation"
+                        ),
+                        "url": "/admin/utilisateurs?tab=pending",
+                        "level": "warning",
+                    })
+
+            # Notifications broadcast globales des 30 derniers jours (localStorage gère le "vu" par utilisateur)
+            from datetime import timedelta
+            _cutoff = utcnow() - timedelta(days=30)
+            broadcast_notifications = [
+                {"id": n.id, "title": n.title, "message": n.message, "level": n.level or "info"}
+                for n in Notification.query.filter(
+                    Notification.audience == "global",
+                    Notification.created_at >= _cutoff,
+                ).order_by(Notification.created_at.asc()).limit(20).all()
+            ]
+
         return {
             "header_notifications": notifications,
             "header_unread_notifications": unread_count,
             "current_year": utcnow().year,
             "is_admin": current_user.is_authenticated and getattr(current_user, "role", None) == "admin",
+            "admin_pending_tasks": admin_pending_tasks,
+            "broadcast_notifications": broadcast_notifications,
         }
 
     def avatar_palette(name: str) -> dict[str, str]:
@@ -455,8 +459,100 @@ def create_app(config_name=None):
                 db.session.commit()
                 migrations_applied.append("reset_token_expires")
             
-            if migrations_applied:
-                app.logger.info(f"Migrations appliquées sur la table 'user': {', '.join(migrations_applied)}")
+            # Champs professionnels
+            if "date_of_birth" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN date_of_birth DATE")
+                )
+                db.session.commit()
+                migrations_applied.append("date_of_birth")
+            
+            if "bio" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN bio TEXT")
+                )
+                db.session.commit()
+                migrations_applied.append("bio")
+            
+            if "company" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN company VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("company")
+            
+            if "job_title" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN job_title VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("job_title")
+            
+            if "website" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN website VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("website")
+            
+            if "linkedin" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN linkedin VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("linkedin")
+            
+            # Nouveaux champs pour séparation personnel/professionnel
+            if "phone_mobile" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN phone_mobile VARCHAR(50)")
+                )
+                db.session.commit()
+                migrations_applied.append("phone_mobile")
+            
+            if "email_professional" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN email_professional VARCHAR(120)")
+                )
+                db.session.commit()
+                migrations_applied.append("email_professional")
+            
+            if "street_professional" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN street_professional VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("street_professional")
+            
+            if "postal_code_professional" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN postal_code_professional VARCHAR(20)")
+                )
+                db.session.commit()
+                migrations_applied.append("postal_code_professional")
+            
+            if "city_professional" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN city_professional VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("city_professional")
+            
+            if "country_professional" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN country_professional VARCHAR(255)")
+                )
+                db.session.commit()
+                migrations_applied.append("country_professional")
+            
+            if "phone_professional" not in user_cols:
+                db.session.execute(
+                    text("ALTER TABLE user ADD COLUMN phone_professional VARCHAR(50)")
+                )
+                db.session.commit()
+                migrations_applied.append("phone_professional")
+            
+            # Migrations appliquées silencieusement (pas de log pour éviter le spam CLI)
         except Exception as exc:  # pragma: no cover - dépend de l'état SQLite
             app.logger.warning("Impossible de vérifier les schémas SQLite: %s", exc)
         seed.ensure_default_admin()

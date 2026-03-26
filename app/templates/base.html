@@ -18,39 +18,50 @@
     <title>{% block title %}TemplateApp{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     <script>
-        // Pass server URLs to window object for external scripts
-        window.APP_URLS = {
-            server_time: "{{ url_for('main.server_time') }}"
-        };
-        
-        // Enregistrer le service worker IMMÉDIATEMENT pour iOS Safari
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
-                .then(function(registration) {
-                    console.log('Service Worker enregistré:', registration.scope);
-                    // Si le service worker n'est pas encore actif, attendre son activation
-                    if (registration.installing) {
-                        registration.installing.addEventListener('statechange', function() {
-                            if (this.state === 'activated') {
-                                console.log('Service Worker activé - contrôle de la page');
-                            }
-                        });
-                    }
-                })
-                .catch(function(error) {
-                    console.error('Erreur enregistrement Service Worker:', error);
-                });
-        }
+        // Pass server URLs to window object for external scripts (must be inline for template variables)
+        window.APP_SERVER_TIME_URL = "{{ url_for('main.server_time') }}";
+        window.CSRF_TOKEN = "{{ csrf_token() }}";
+        window.ADMIN_PENDING_TASKS = {{ admin_pending_tasks | tojson | safe }};
+        window.BROADCAST_NOTIFICATIONS = {{ broadcast_notifications | tojson | safe }};
     </script>
-
+    <script defer src="{{ url_for('static', filename='js/base-init.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/page-cache.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/pwa.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/filters.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/avatar-styles.js') }}"></script>
 </head>
 
 <body class="h-full bg-gradient-to-br from-slate-100 via-white to-sky-50 antialiased">
-    <div id="toast-container" class="pointer-events-none fixed inset-x-4 z-50 flex flex-col gap-3 md:items-end"
-        style="top: calc(env(safe-area-inset-top, 0px) + 4rem + 1rem);"></div>
+    {# ── Broadcast modal ───────────────────────────────────────────────────── #}
+    <div id="broadcast-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="broadcast-modal-title">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div id="broadcast-modal-card" class="w-full max-w-md rounded-3xl border bg-white p-6 shadow-2xl">
+                <div class="flex items-start gap-4">
+                    <span id="broadcast-modal-icon" class="mt-0.5 flex-shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-2xl">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 0 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
+                        </svg>
+                    </span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-semibold uppercase tracking-widest mb-1" id="broadcast-modal-badge">Notification globale</p>
+                        <h2 class="text-base font-semibold text-slate-900" id="broadcast-modal-title"></h2>
+                        <p class="mt-2 text-sm text-slate-600" id="broadcast-modal-message"></p>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button type="button" id="broadcast-modal-accept"
+                        class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        J'ai compris
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="flex min-h-screen">
         <aside
             class="fixed inset-y-0 left-0 z-30 hidden border-r border-slate-200 bg-white/90 backdrop-blur lg:flex lg:flex-col"
@@ -133,33 +144,27 @@
                 </a>
                 {% endif %}
                 {% if is_admin %}
-                <a href="{{ url_for('main.journal') }}"
-                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.journal' else '' }}"
-                    title="Journal">
-                    <span
-                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.journal' else '' }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5H12m-8.25 4.5H12" />
-                        </svg>
-                    </span>
-                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Journal</span>
-                </a>
-                {% endif %}
-                {% if is_admin %}
+                {# ── Administration (regroupe Utilisateurs + En attente + Journal) ── #}
+                {% set _is_admin_section = request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user', 'main.journal', 'admin.broadcast_notification'] %}
                 <a href="{{ url_for('admin.users') }}"
-                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user'] else '' }}"
-                    title="Utilisateurs">
-                    <span
-                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user'] else '' }}">
+                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if _is_admin_section else '' }}"
+                    title="Administration">
+                    <span class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if _is_admin_section else '' }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M15 19.125a3.375 3.375 0 1 0 6.75 0 3.375 3.375 0 0 0-6.75 0zM4.5 8.25a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0zM1.5 19.125a6 6 0 0 1 6-6h3a6 6 0 0 1 6 6" />
+                                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                         </svg>
                     </span>
-                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Utilisateurs</span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700 flex items-center gap-2">
+                        Administration
+                        {% set ns = namespace(count=0) %}
+                        {% for t in admin_pending_tasks %}{% if t.type == 'pending_users' %}{% set ns.count = t.count %}{% endif %}{% endfor %}
+                        {% if ns.count > 0 %}
+                        <span class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1 text-xs font-bold text-white">{{ ns.count }}</span>
+                        {% endif %}
+                    </span>
                 </a>
                 {% endif %}
             </nav>
@@ -201,14 +206,14 @@
                             data-profile-toggle>
                             {% if current_user.avatar_filename %}
                             <span class="inline-flex h-9 w-9 overflow-hidden rounded-full shadow-soft"
-                                style="box-shadow: {{ palette.shadow }};">
+                                data-avatar-shadow-only="{{ palette.shadow }}">
                                 <img src="{{ url_for('static', filename='uploads/' ~ current_user.avatar_filename) }}"
                                     alt="Avatar" class="h-9 w-9 object-cover" />
                             </span>
                             {% else %}
                             <span
                                 class="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold uppercase tracking-wide text-white shadow-soft"
-                                style="background: {{ palette.gradient }}; box-shadow: {{ palette.shadow }};">
+                                data-avatar-gradient="{{ palette.gradient }}" data-avatar-shadow="{{ palette.shadow }}">
                                 {{ current_user.username[:2].upper() }}
                             </span>
                             {% endif %}
@@ -242,7 +247,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round"
                                             d="M4.5 20.25a8.25 8.25 0 0 1 15 0" />
                                     </svg>
-                                    Profil
+                                    Mon profil
                                 </a>
                                 <a href="{{ url_for('auth.logout') }}"
                                     class="flex items-center gap-2 px-4 py-2 text-sm text-rose-500 transition hover:bg-rose-50 hover:text-rose-600">
@@ -476,31 +481,26 @@
             </a>
             {% endif %}
             {% if is_admin %}
-            <a href="{{ url_for('main.journal') }}"
-                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.journal' else '' }}">
-                <span
-                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5H12m-8.25 4.5H12" />
-                    </svg>
-                </span>
-                <span>Journal</span>
-            </a>
-            {% endif %}
-            {% if is_admin %}
+            {# ── Administration (regroupe Utilisateurs + Tâches + Journal) ── #}
+            {% set _is_admin_section_mobile = request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user', 'main.journal', 'admin.broadcast_notification'] %}
             <a href="{{ url_for('admin.users') }}"
-                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user'] else '' }}">
-                <span
-                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if _is_admin_section_mobile else '' }}">
+                <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor" stroke-width="1.5">
                         <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M15 19.125a3.375 3.375 0 1 0 6.75 0 3.375 3.375 0 0 0-6.75 0zM4.5 8.25a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0zM1.5 19.125a6 6 0 0 1 6-6h3a6 6 0 0 1 6 6" />
+                            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                     </svg>
                 </span>
-                <span>Utilisateurs</span>
+                <span class="flex items-center gap-2">
+                    Administration
+                    {% set ns = namespace(count=0) %}
+                    {% for t in admin_pending_tasks %}{% if t.type == 'pending_users' %}{% set ns.count = t.count %}{% endif %}{% endfor %}
+                    {% if ns.count > 0 %}
+                    <span class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1 text-xs font-bold text-white">{{ ns.count }}</span>
+                    {% endif %}
+                </span>
             </a>
             {% endif %}
         </nav>
@@ -512,134 +512,6 @@
     {% endif %}
     {% endwith %}
 
-    <script>
-        const CSRF_TOKEN = "{{ csrf_token() }}";
-        window.APP_URLS = window.APP_URLS || {};
-
-        // Mettre en cache la page actuelle pour le mode offline
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            const currentUrl = window.location.href;
-            navigator.serviceWorker.controller.postMessage({
-                type: 'CACHE_PAGE',
-                url: currentUrl
-            });
-        }
-
-        // Mettre en cache les pages visitées lors de la navigation
-        document.querySelectorAll('a[href]').forEach((anchor) => {
-            anchor.addEventListener('click', (event) => {
-                const href = anchor.getAttribute('href') || '';
-                if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
-                if (href.startsWith('#') || href.startsWith('javascript:')) return;
-                if (href.startsWith('/static/') || href.startsWith('/api/')) return;
-                
-                // Mettre en cache la page de destination avant la navigation
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    const targetUrl = href.startsWith('http') ? href : window.location.origin + href;
-                    navigator.serviceWorker.controller.postMessage({
-                        type: 'CACHE_PAGE',
-                        url: targetUrl
-                    });
-                }
-            });
-        });
-
-        const mobileToggle = document.querySelector('[data-mobile-nav-toggle]');
-        const mobileNav = document.querySelector('[data-mobile-nav]');
-        const mobileBackdrop = document.querySelector('[data-mobile-nav-backdrop]');
-        const mobileClose = document.querySelector('[data-mobile-nav-close]');
-        const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
-        const profileToggle = document.querySelector('[data-profile-toggle]');
-        const profileMenu = document.querySelector('[data-profile-menu]');
-        const toastContainer = document.getElementById('toast-container');
-        const body = document.body;
-        const SIDEBAR_STORAGE_KEY = 'dashboard.sidebar.collapsed';
-        const confirmModal = document.getElementById('confirm-modal');
-        const confirmMessageEl = confirmModal?.querySelector('[data-confirm-message]');
-        const confirmApproveBtn = confirmModal?.querySelector('[data-confirm-approve]');
-        const confirmCancelBtn = confirmModal?.querySelectorAll('[data-confirm-cancel]');
-        let pendingConfirmForm = null;
-
-        const toastVariants = {
-            success: { title: 'Succès', indicator: 'bg-emerald-500', accent: 'text-emerald-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-            warning: { title: 'Attention', indicator: 'bg-white', accent: 'text-white', bg: 'bg-red-600', text: 'text-white', border: 'border-red-700' },
-            danger: { title: 'Erreur', indicator: 'bg-rose-500', accent: 'text-rose-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-            info: { title: 'Information', indicator: 'bg-sky-500', accent: 'text-sky-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-            default: { title: 'Notification', indicator: 'bg-slate-400', accent: 'text-slate-600', bg: 'bg-white', text: 'text-slate-700', border: 'border-slate-200' },
-        };
-
-        function createToast(category = 'info', message = '') {
-            if (!toastContainer || !message) return;
-
-            const variant = toastVariants[category] || toastVariants.default;
-            const toast = document.createElement('div');
-            
-            // Pour les warnings, positionner plus bas et utiliser le style rouge
-            const isWarning = category === 'warning';
-            const toastClasses = isWarning 
-                ? `pointer-events-auto overflow-hidden rounded-2xl border ${variant.border} ${variant.bg} shadow-lg ring-1 ring-black/5 transition duration-200 ease-out`
-                : `pointer-events-auto overflow-hidden rounded-2xl border ${variant.border} ${variant.bg} shadow-lg ring-1 ring-black/5 transition duration-200 ease-out`;
-            
-            toast.className = toastClasses;
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateY(-12px)';
-            
-            // Pour les warnings, ajouter un style pour les positionner plus bas
-            if (isWarning) {
-                toast.style.marginTop = '4rem';
-            }
-
-            const inner = document.createElement('div');
-            inner.className = `flex items-start gap-3 p-4 text-sm ${variant.text}`;
-
-            const dot = document.createElement('span');
-            dot.className = `mt-1.5 h-2.5 w-2.5 rounded-full ${variant.indicator}`;
-            inner.appendChild(dot);
-
-            const content = document.createElement('div');
-            content.className = 'flex-1';
-
-            const titleEl = document.createElement('p');
-            titleEl.className = `font-semibold text-base ${variant.accent}`;
-            titleEl.textContent = variant.title;
-            
-            content.appendChild(titleEl);
-            
-            const messageEl = document.createElement('p');
-            messageEl.className = `mt-0.5 ${variant.text}`;
-            messageEl.textContent = message;
-            content.appendChild(messageEl);
-            
-            inner.appendChild(content);
-            toast.appendChild(inner);
-            toastContainer.appendChild(toast);
-            
-            requestAnimationFrame(() => {
-                toast.style.opacity = '1';
-                toast.style.transform = 'translateY(0)';
-            });
-            
-            // Afficher pendant 5 secondes pour tous les messages
-            const displayTime = 5000;
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateY(-12px)';
-                setTimeout(() => toast.remove(), 200);
-            }, displayTime);
-        }
-        
-        // Rendre la fonction accessible globalement
-        window.createToast = createToast;
-        
-        // Écouter les événements de toast depuis pwa.js
-        window.addEventListener('app:toast', (event) => {
-            const { category, message } = event.detail;
-            createToast(category, message);
-        });
-        
-        // Global variable for main.js to use
-        window.CSRF_TOKEN = CSRF_TOKEN;
-    </script>
 
     <!-- Menu mobile fixe en bas -->
     <nav class="hidden" data-mobile-footer>

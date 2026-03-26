@@ -1,20 +1,102 @@
+import secrets
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from werkzeug.security import generate_password_hash
 
-from . import db
-from .forms import UserForm
+from . import db, limiter
+from .forms import BroadcastNotificationForm, ProfileForm
 from .mailer import send_email
 from .models import User
 from .services import create_notification, notify_admins
-from .utils import build_changes, delete_avatar, save_avatar
+from .utils import delete_avatar, populate_form_from_user, save_avatar
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
+# ---------------------------------------------------------------------------
+# Helpers privés
+# ---------------------------------------------------------------------------
+
+def _handle_avatar(form, user) -> None:
+    """Gère l'upload ou la suppression de l'avatar d'un utilisateur."""
+    if form.remove_avatar.data:
+        delete_avatar(user.avatar_filename)
+        user.avatar_filename = None
+    elif (
+        form.avatar.data
+        and hasattr(form.avatar.data, "filename")
+        and form.avatar.data.filename
+    ):
+        delete_avatar(user.avatar_filename)
+        user.avatar_filename = save_avatar(form.avatar.data)
+
+
+
+def _apply_user_fields(user, form) -> None:
+    """Applique tous les champs du formulaire sur l'objet utilisateur."""
+    user.title = (form.title.data or "").strip() or None
+    user.first_name = (form.first_name.data or "").strip() or None
+    user.last_name = (form.last_name.data or "").strip() or None
+    user.email = (form.email.data or "").strip() or None
+    user.date_of_birth = form.date_of_birth.data
+    user.bio = (form.bio.data or "").strip() or None
+    user.company = (form.company.data or "").strip() or None
+    user.job_title = (form.job_title.data or "").strip() or None
+    user.website = (form.website.data or "").strip() or None
+    user.linkedin = (form.linkedin.data or "").strip() or None
+    user.street = (form.street.data or "").strip() or None
+    user.postal_code = (form.postal_code.data or "").strip() or None
+    user.city = (form.city.data or "").strip() or None
+    user.country = (form.country.data or "").strip() or None
+    user.phone = (form.phone.data or "").strip() or None
+    user.phone_mobile = (form.phone_mobile.data or "").strip() or None
+    user.email_professional = (form.email_professional.data or "").strip() or None
+    user.street_professional = (form.street_professional.data or "").strip() or None
+    user.postal_code_professional = (form.postal_code_professional.data or "").strip() or None
+    user.city_professional = (form.city_professional.data or "").strip() or None
+    user.country_professional = (form.country_professional.data or "").strip() or None
+    user.phone_professional = (form.phone_professional.data or "").strip() or None
+
+
+def _build_audit_changes(original: dict, updated: dict, form) -> list:
+    """Construit la liste des changements entre deux états pour le journal d'audit."""
+    changes = []
+    if original["username"] != updated["username"]:
+        changes.append(
+            f"nom d'utilisateur: \u00ab {original['username']} \u00bb \u2192 \u00ab {updated['username']} \u00bb"
+        )
+    if original["email"] != updated["email"]:
+        changes.append(
+            f"email: \u00ab {original['email'] or 'aucun'} \u00bb \u2192 \u00ab {updated['email'] or 'aucun'} \u00bb"
+        )
+    if original["role"] != updated["role"]:
+        changes.append(f"r\u00f4le: {original['role']} \u2192 {updated['role']}")
+    if original["active"] != updated["active"]:
+        old = "Actif" if original["active"] else "Inactif"
+        new = "Actif" if updated["active"] else "Inactif"
+        changes.append(f"statut: {old} \u2192 {new}")
+    if original["twofa_enabled"] != updated["twofa_enabled"]:
+        old = "Activ\u00e9e" if original["twofa_enabled"] else "D\u00e9sactiv\u00e9e"
+        new = "Activ\u00e9e" if updated["twofa_enabled"] else "D\u00e9sactiv\u00e9e"
+        changes.append(f"2FA: {old} \u2192 {new}")
+    if form.password.data:
+        changes.append("mot de passe modifi\u00e9")
+    if original["avatar_filename"] != updated["avatar_filename"]:
+        changes.append("photo de profil modifi\u00e9e")
+    return changes
+
+
+# ---------------------------------------------------------------------------
+# Guard admin
+# ---------------------------------------------------------------------------
+
 def _require_admin():
     if current_user.role != "admin":
-        flash("Accès réservé à l’administrateur.", "danger")
+        flash("Accès réservé à l'administrateur.", "danger")
         return False
     return True
 
@@ -27,9 +109,52 @@ def before_request():
         return redirect(url_for("main.dashboard"))
 
 
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
 @admin_bp.route("/utilisateurs")
 @login_required
 def users():
+    from collections import defaultdict
+
+    tab = request.args.get("tab", "all")
+    pending_count = User.query.filter_by(active=False).count()
+
+    # ── Tab "En attente" ─────────────────────────────────────────────────────
+    if tab == "pending":
+        search = request.args.get("q", "").strip()
+        query = User.query.filter_by(active=False)
+        if search:
+            like = f"%{search}%"
+            query = query.filter(db.or_(User.username.ilike(like), User.email.ilike(like)))
+        pending_users = query.order_by(User.created_at.desc()).all()
+
+        by_day: dict = defaultdict(list)
+        for u in pending_users:
+            day = u.created_at.date() if u.created_at else datetime.utcnow().date()
+            by_day[day].append(u)
+        sorted_days = sorted(by_day.keys(), reverse=True)
+        groups = [{"date": d, "users": by_day[d]} for d in sorted_days]
+        today = datetime.utcnow().date()
+        yesterday = datetime.utcnow().date().__class__.fromordinal(today.toordinal() - 1)
+
+        return render_template(
+            "dashboard/users.html",
+            tab=tab,
+            pending_count=pending_count,
+            groups=groups,
+            pending_total=len(pending_users),
+            search=search,
+            today=today,
+            yesterday=yesterday,
+            users=[],
+            pagination=None,
+            filters={},
+        )
+
+    # ── Tab "Tous les utilisateurs" (défaut) ─────────────────────────────────
+    db.session.expire_all()
     search = request.args.get("q", "").strip()
     role = request.args.get("role", "")
     status = request.args.get("status", "")
@@ -37,353 +162,379 @@ def users():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 10, type=int)
 
-    # Expirer toutes les sessions pour forcer une nouvelle requête fraîche
-    db.session.expire_all()
-    
     query = User.query
-
     if search:
         like = f"%{search}%"
         query = query.filter(db.or_(User.username.ilike(like), User.email.ilike(like)))
-
     if role in {"admin", "user"}:
         query = query.filter_by(role=role)
-
     if status == "active":
         query = query.filter_by(active=True)
     elif status == "inactive":
         query = query.filter_by(active=False)
 
-    # Gestion du tri
     sort_order = request.args.get("order", "desc" if sort == "recent" else "asc")
     if sort == "name":
-        if sort_order == "desc":
-            query = query.order_by(User.username.desc())
-        else:
-            query = query.order_by(User.username.asc())
+        query = query.order_by(User.username.desc() if sort_order == "desc" else User.username.asc())
     elif sort == "email":
-        if sort_order == "desc":
-            query = query.order_by(User.email.desc())
-        else:
-            query = query.order_by(User.email.asc())
+        query = query.order_by(User.email.desc() if sort_order == "desc" else User.email.asc())
     elif sort == "role":
-        if sort_order == "desc":
-            query = query.order_by(User.role.desc())
-        else:
-            query = query.order_by(User.role.asc())
+        query = query.order_by(User.role.desc() if sort_order == "desc" else User.role.asc())
     elif sort == "status":
-        if sort_order == "desc":
-            query = query.order_by(User.active.desc())
-        else:
-            query = query.order_by(User.active.asc())
+        query = query.order_by(User.active.desc() if sort_order == "desc" else User.active.asc())
     elif sort == "last_login":
-        if sort_order == "desc":
-            query = query.order_by(User.last_login.desc().nullslast())
-        else:
-            query = query.order_by(User.last_login.asc().nullslast())
+        query = query.order_by(
+            User.last_login.desc().nullslast() if sort_order == "desc"
+            else User.last_login.asc().nullslast()
+        )
     else:
-        # Tri par défaut : plus récent en premier
         query = query.order_by(User.created_at.desc())
 
-    # Pagination
-    pagination = query.paginate(
-        page=page,
-        per_page=per_page,
-        error_out=False
-    )
-
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     return render_template(
         "dashboard/users.html",
+        tab=tab,
+        pending_count=pending_count,
         users=pagination.items,
         pagination=pagination,
         filters={"q": search, "role": role, "status": status, "sort": sort, "order": sort_order},
+        groups=[],
+        pending_total=0,
+        search="",
+        today=None,
+        yesterday=None,
     )
 
 
 @admin_bp.route("/utilisateurs/nouveau", methods=["GET", "POST"])
+@limiter.limit("100 per hour")
 @login_required
 def create_user():
-    form = UserForm()
+    form = ProfileForm()
     if form.validate_on_submit():
         if User.query.filter_by(username=form.username.data).first():
             flash("Nom d'utilisateur déjà utilisé.", "warning")
-            return render_template("dashboard/user_form.html", form=form, is_edit=False, user=None)
-        elif (
-            form.email.data
-            and form.email.data.strip()
-            and User.query.filter_by(email=form.email.data.strip()).first()
-        ):
-            flash(f"L'adresse email « {form.email.data.strip()} » est déjà utilisée par un autre compte. Veuillez utiliser une autre adresse email.", "warning")
-            return render_template("dashboard/user_form.html", form=form, is_edit=False, user=None)
-        else:
-            if form.twofa_enabled.data and not form.email.data:
-                flash("Un email est requis pour activer la 2FA.", "danger")
-                return render_template("dashboard/user_form.html", form=form, is_edit=False, user=None)
-            # Récupérer la valeur du champ active (peut être None si non coché)
-            active_value = form.active.data if form.active.data is not None else True
-            
-            user = User(
-                title=form.title.data.strip() if form.title.data else None,
-                first_name=form.first_name.data.strip() if form.first_name.data else None,
-                last_name=form.last_name.data.strip() if form.last_name.data else None,
-                username=form.username.data,
-                email=form.email.data.strip() if form.email.data else None,
-                role=form.role.data,
-                active=active_value,
+            return render_template("dashboard/profile.html", form=form, user=None)
+
+        new_email = (form.email.data or "").strip()
+        if new_email and User.query.filter_by(email=new_email).first():
+            flash(
+                f"L'adresse email \u00ab\u00a0{new_email}\u00a0\u00bb est déjà utilisée. "
+                "Veuillez utiliser une autre adresse email.",
+                "warning",
             )
-            if form.avatar.data:
-                user.avatar_filename = save_avatar(form.avatar.data)
-            user.street = form.street.data.strip() if form.street.data else None
-            user.postal_code = form.postal_code.data.strip() if form.postal_code.data else None
-            user.city = form.city.data.strip() if form.city.data else None
-            user.country = form.country.data.strip() if form.country.data else None
-            user.phone = form.phone.data.strip() if form.phone.data else None
-            user.twofa_enabled = form.twofa_enabled.data
-            if not user.twofa_enabled:
-                user.twofa_code_hash = None
-                user.twofa_code_sent_at = None
-                user.twofa_trusted_token_hash = None
-                user.twofa_trusted_created_at = None
-            # Pour la création, le mot de passe est obligatoire
-            password = form.password.data.strip() if form.password.data else ""
-            confirm_password = form.confirm_password.data.strip() if form.confirm_password.data else ""
-            
-            has_errors = False
-            
-            if not password:
-                form.password.errors.append("Le mot de passe est obligatoire pour créer un utilisateur.")
-                has_errors = True
-                current_app.logger.warning(f"Tentative de création d'utilisateur « {form.username.data} » sans mot de passe par {current_user.username}")
-            
-            if not confirm_password:
-                form.confirm_password.errors.append("La confirmation du mot de passe est obligatoire.")
-                has_errors = True
-                current_app.logger.warning(f"Tentative de création d'utilisateur « {form.username.data} » sans confirmation de mot de passe par {current_user.username}")
-            
-            if password and confirm_password and password != confirm_password:
-                form.confirm_password.errors.append("Les mots de passe ne correspondent pas.")
-                has_errors = True
-                current_app.logger.warning(f"Tentative de création d'utilisateur « {form.username.data} » avec mots de passe non correspondants par {current_user.username}")
-            
-            if has_errors:
-                flash("Veuillez corriger les erreurs dans le formulaire.", "danger")
-                return render_template("dashboard/user_form.html", form=form, is_edit=False, user=None)
-            user.set_password(password)
-            db.session.add(user)
-            try:
-                # Flush pour s'assurer que tout est prêt avant le commit
-                db.session.flush()
-                db.session.commit()
-                # Rafraîchir l'objet pour obtenir l'ID généré
-                db.session.refresh(user)
-                current_app.logger.info(f"Création d'utilisateur réussie: « {user.username} » (ID: {user.id}, Rôle: {user.role}, Statut: {'Actif' if user.active else 'Inactif'}) par {current_user.username}")
-                
-                # Vérifier que l'utilisateur existe bien dans la base avec une nouvelle requête
-                db.session.expire_all()  # Expirer toutes les sessions pour forcer une nouvelle requête
-                user_check = User.query.filter_by(username=user.username).first()
-                if not user_check:
-                    current_app.logger.error(f"ERREUR CRITIQUE: L'utilisateur « {user.username} » n'a pas été trouvé après la création!")
-                    raise Exception("L'utilisateur n'a pas été trouvé après le commit")
-                
-                if user.username not in [u.username for u in User.query.all()]:
-                    current_app.logger.error(f"ERREUR CRITIQUE: L'utilisateur « {user.username} » n'apparaît pas dans la liste complète!")
-            except Exception as e:
-                db.session.rollback()
-                current_app.logger.error(f"Erreur lors de la création de l'utilisateur « {form.username.data} » par {current_user.username}: {str(e)}")
-                flash("Erreur lors de la création de l'utilisateur. Veuillez réessayer.", "danger")
-                return render_template("dashboard/user_form.html", form=form, is_edit=False, user=None)
-            if user.email:
-                create_notification(
-                    title="Bienvenue sur TemplateApp",
-                    message="Votre compte a été créé par un administrateur. Vous pouvez vous connecter avec vos identifiants.",
-                    user=user,
-                    level="info",
-                    action_endpoint="auth.login",
-                    persistent=True,
-                )
-            notify_admins(
-                title="Nouvel utilisateur créé",
-                message=f"{current_user.username} a créé le compte « {user.username} ».",
+            return render_template("dashboard/profile.html", form=form, user=None)
+
+        if form.twofa_enabled.data and not new_email:
+            flash("Un email est requis pour activer la 2FA.", "danger")
+            return render_template("dashboard/profile.html", form=form, user=None)
+
+        password = (form.password.data or "").strip()
+        confirm = (form.confirm_password.data or "").strip()
+        has_errors = False
+        if not password:
+            form.password.errors.append("Le mot de passe est obligatoire pour créer un utilisateur.")
+            has_errors = True
+        if not confirm:
+            form.confirm_password.errors.append("La confirmation du mot de passe est obligatoire.")
+            has_errors = True
+        if password and confirm and password != confirm:
+            form.confirm_password.errors.append("Les mots de passe ne correspondent pas.")
+            has_errors = True
+        if has_errors:
+            flash("Veuillez corriger les erreurs dans le formulaire.", "danger")
+            return render_template("dashboard/profile.html", form=form, user=None)
+
+        active_value = (
+            form.active.data
+            if hasattr(form, "active") and form.active.data is not None
+            else True
+        )
+        user = User(username=form.username.data, role=form.role.data, active=active_value)
+        _apply_user_fields(user, form)
+        _handle_avatar(form, user)
+        user.twofa_enabled = form.twofa_enabled.data
+        if not user.twofa_enabled:
+            user.twofa_code_hash = None
+            user.twofa_code_sent_at = None
+            user.twofa_trusted_token_hash = None
+            user.twofa_trusted_created_at = None
+        user.set_password(password)
+        db.session.add(user)
+        try:
+            db.session.flush()
+            db.session.commit()
+            db.session.refresh(user)
+            current_app.logger.info(
+                f"Création d'utilisateur réussie: \u00ab {user.username} \u00bb "
+                f"(ID: {user.id}, Rôle: {user.role}, "
+                f"Statut: {'Actif' if user.active else 'Inactif'}) par {current_user.username}"
+            )
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(
+                f"Erreur lors de la création de \u00ab {form.username.data} \u00bb "
+                f"par {current_user.username}: {e}"
+            )
+            flash("Erreur lors de la création de l'utilisateur. Veuillez réessayer.", "danger")
+            return render_template("dashboard/profile.html", form=form, user=None)
+
+        if user.email:
+            create_notification(
+                title="Bienvenue sur TemplateApp",
+                message="Votre compte a été créé par un administrateur. Vous pouvez vous connecter avec vos identifiants.",
+                user=user,
                 level="info",
-                action_endpoint="admin.users",
+                action_endpoint="auth.login",
                 persistent=True,
             )
-            flash("Utilisateur créé.", "success")
-            return redirect(url_for("admin.users"))
+        notify_admins(
+            title="Nouvel utilisateur créé",
+            message=f"{current_user.username} a créé le compte \u00ab {user.username} \u00bb.",
+            level="info",
+            action_endpoint="admin.users",
+            persistent=True,
+        )
+        flash("Utilisateur créé.", "success")
+        return redirect(url_for("admin.users"))
     else:
         if request.method == "POST":
-            current_app.logger.warning(f"Formulaire de création d'utilisateur invalide par {current_user.username}: {form.errors}")
-    return render_template("dashboard/user_form.html", form=form, is_edit=False, user=None)
+            current_app.logger.warning(
+                f"Formulaire de création invalide par {current_user.username}: {form.errors}"
+            )
+    return render_template("dashboard/profile.html", form=form, user=None)
 
 
 @admin_bp.route("/utilisateurs/<int:user_id>/modifier", methods=["GET", "POST"])
+@limiter.limit("100 per hour")
 @login_required
 def edit_user(user_id: int):
     user = User.query.get_or_404(user_id)
-    form = UserForm(obj=user)
+    form = ProfileForm()
+
     if form.validate_on_submit():
-        if user.username != form.username.data and User.query.filter_by(username=form.username.data).first():
-            flash(f"Le nom d'utilisateur « {form.username.data} » est déjà utilisé par un autre compte. Veuillez en choisir un autre.", "warning")
-            return render_template("dashboard/user_form.html", form=form, is_edit=True, user=user)
-        elif (
-            form.email.data
-            and form.email.data.strip()
-            and form.email.data.strip() != (user.email or "").strip()
-            and User.query.filter_by(email=form.email.data.strip()).first()
+        new_username = form.username.data
+        if user.username != new_username and User.query.filter_by(username=new_username).first():
+            flash(
+                f"Le nom d'utilisateur \u00ab {new_username} \u00bb est déjà utilisé. "
+                "Veuillez en choisir un autre.",
+                "warning",
+            )
+            return render_template("dashboard/profile.html", form=form, user=user)
+
+        new_email = (form.email.data or "").strip()
+        if (
+            new_email
+            and new_email != (user.email or "").strip()
+            and User.query.filter_by(email=new_email).first()
         ):
-            flash(f"L'adresse email « {form.email.data.strip()} » est déjà utilisée par un autre compte. Veuillez utiliser une autre adresse email.", "warning")
-            return render_template("dashboard/user_form.html", form=form, is_edit=True, user=user)
+            flash(
+                f"L'adresse email \u00ab {new_email} \u00bb est déjà utilisée. "
+                "Veuillez utiliser une autre adresse email.",
+                "warning",
+            )
+            return render_template("dashboard/profile.html", form=form, user=user)
+
+        if form.twofa_enabled.data and not new_email:
+            flash("Un email est requis pour activer la 2FA.", "danger")
+            return render_template("dashboard/profile.html", form=form, user=user)
+
+        if form.password.data and (
+            not form.confirm_password.data
+            or form.password.data != form.confirm_password.data
+        ):
+            flash("Merci de confirmer le nouveau mot de passe.", "danger")
+            return render_template("dashboard/profile.html", form=form, user=user)
+
+        # Capturer l'état avant modification
+        original_state = {
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "active": user.active,
+            "twofa_enabled": user.twofa_enabled,
+            "avatar_filename": user.avatar_filename,
+        }
+        was_active = user.active
+        twofa_before = user.twofa_enabled
+
+        # Appliquer les modifications
+        _handle_avatar(form, user)
+        _apply_user_fields(user, form)
+        user.username = new_username
+        if user.username != "admin":
+            user.role = form.role.data if form.role.data else user.role
+        user.active = True if user.username == "admin" else (
+            form.active.data if form.active.data is not None else user.active
+        )
+        user.twofa_enabled = bool(form.twofa_enabled.data)
+        if not user.twofa_enabled:
+            user.twofa_code_hash = None
+            user.twofa_code_sent_at = None
+            user.twofa_trusted_token_hash = None
+            user.twofa_trusted_created_at = None
+        if form.password.data:
+            user.set_password(form.password.data)
+
+        db.session.add(user)
+
+        # Notification si changement 2FA
+        if twofa_before != user.twofa_enabled and user.email:
+            status_2fa = "activée" if user.twofa_enabled else "désactivée"
+            create_notification(
+                user=user,
+                title="Double authentification",
+                message=f"La 2FA a été {status_2fa} par un administrateur.",
+                level="success" if user.twofa_enabled else "info",
+                persistent=True,
+                action_endpoint="main.profile",
+            )
+
+        # Journal d'audit
+        updated_state = {
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "active": user.active,
+            "twofa_enabled": user.twofa_enabled,
+            "avatar_filename": user.avatar_filename,
+        }
+        changes = _build_audit_changes(original_state, updated_state, form)
+        if changes:
+            current_app.logger.info(
+                f"Modification d'utilisateur \u00ab {user.username} \u00bb "
+                f"par {current_user.username}: {', '.join(changes)}"
+            )
         else:
-            if form.twofa_enabled.data and not form.email.data:
-                flash("Un email est requis pour activer la 2FA.", "danger")
-                return render_template("dashboard/user_form.html", form=form, is_edit=True, user=user)
-            original_state = {
-                "username": user.username,
-                "email": user.email,
-                "role": user.role,
-                "active": user.active,
-                "twofa_enabled": user.twofa_enabled,
-                "avatar_filename": user.avatar_filename,
-            }
-            was_active = user.active
-            twofa_before = user.twofa_enabled
-            if form.remove_avatar.data:
-                delete_avatar(user.avatar_filename)
-                user.avatar_filename = None
-            elif form.avatar.data:
-                delete_avatar(user.avatar_filename)
-                user.avatar_filename = save_avatar(form.avatar.data)
-            user.title = form.title.data.strip() if form.title.data else None
-            user.first_name = form.first_name.data.strip() if form.first_name.data else None
-            user.last_name = form.last_name.data.strip() if form.last_name.data else None
-            user.username = form.username.data
-            user.email = form.email.data.strip() if form.email.data else None
-            user.role = form.role.data
-            user.street = form.street.data.strip() if form.street.data else None
-            user.postal_code = form.postal_code.data.strip() if form.postal_code.data else None
-            user.city = form.city.data.strip() if form.city.data else None
-            user.country = form.country.data.strip() if form.country.data else None
-            user.phone = form.phone.data.strip() if form.phone.data else None
-            if user.username == "admin":
-                user.active = True
-            else:
-                user.active = form.active.data
-            if form.twofa_enabled.data:
-                user.twofa_enabled = True
-            else:
-                user.twofa_enabled = False
-                user.twofa_code_hash = None
-                user.twofa_code_sent_at = None
-                user.twofa_trusted_token_hash = None
-                user.twofa_trusted_created_at = None
-            if form.password.data:
-                if not form.confirm_password.data or form.password.data != form.confirm_password.data:
-                    flash("Merci de confirmer le nouveau mot de passe.", "danger")
-                    return render_template("dashboard/user_form.html", form=form, is_edit=True, user=user)
-                user.set_password(form.password.data)
-            db.session.add(user)
-            updated_state = {
-                "username": user.username,
-                "email": user.email,
-                "role": user.role,
-                "active": user.active,
-                "twofa_enabled": user.twofa_enabled,
-                "avatar_filename": user.avatar_filename,
-            }
-            if twofa_before != user.twofa_enabled:
-                status = "activée" if user.twofa_enabled else "désactivée"
-                if user.email:
-                    create_notification(
-                        user=user,
-                        title="Double authentification",
-                        message=f"La 2FA a été {status} par un administrateur.",
-                        level="success" if user.twofa_enabled else "info",
-                        persistent=True,
-                        action_endpoint="main.profile",
-                    )
-            # Construire un message de log détaillé des changements
-            changes = []
-            if original_state["username"] != updated_state["username"]:
-                changes.append(f"nom d'utilisateur: « {original_state['username']} » → « {updated_state['username']} »")
-            if original_state["email"] != updated_state["email"]:
-                changes.append(f"email: « {original_state['email'] or 'aucun'} » → « {updated_state['email'] or 'aucun'} »")
-            if original_state["role"] != updated_state["role"]:
-                changes.append(f"rôle: {original_state['role']} → {updated_state['role']}")
-            if original_state["active"] != updated_state["active"]:
-                changes.append(f"statut: {'Actif' if original_state['active'] else 'Inactif'} → {'Actif' if updated_state['active'] else 'Inactif'}")
-            if original_state["twofa_enabled"] != updated_state["twofa_enabled"]:
-                changes.append(f"2FA: {'Activée' if original_state['twofa_enabled'] else 'Désactivée'} → {'Activée' if updated_state['twofa_enabled'] else 'Désactivée'}")
-            if form.password.data:
-                changes.append("mot de passe modifié")
-            if original_state["avatar_filename"] != updated_state["avatar_filename"]:
-                changes.append("photo de profil modifiée")
-            
-            if changes:
-                current_app.logger.info(f"Modification d'utilisateur « {user.username} » par {current_user.username}: {', '.join(changes)}")
-            else:
-                current_app.logger.info(f"Modification d'utilisateur « {user.username} » par {current_user.username} (aucun changement détecté)")
-            
-            db.session.commit()
-            if not was_active and user.active and user.email:
-                text_body = render_template("email/account_approved.txt", user=user)
-                html_body = render_template("email/account_approved.html", user=user)
-                send_email(
-                    subject="TemplateApp — Votre accès est activé",
-                    recipients=user.email,
-                    body=text_body,
-                    html_body=html_body,
-                )
-                create_notification(
-                    title="Compte activé",
-                    message="Votre accès à TemplateApp vient d'être activé.",
-                    user=user,
-                    level="success",
-                    action_endpoint="auth.login",
-                    persistent=True,
-                )
-                notify_admins(
-                    title="Compte utilisateur activé",
-                    message=f"{current_user.username} a activé le compte « {user.username} ».",
-                    level="success",
-                    action_endpoint="admin.users",
-                    persistent=True,
-                )
-                flash("Utilisateur activé et notification envoyée.", "success")
-            elif was_active and not user.active and user.email:
-                text_body = render_template("email/account_deactivated.txt", user=user)
-                html_body = render_template("email/account_deactivated.html", user=user)
-                send_email(
-                    subject="TemplateApp — Compte désactivé",
-                    recipients=user.email,
-                    body=text_body,
-                    html_body=html_body,
-                )
-                create_notification(
-                    title="Compte désactivé",
-                    message="Votre accès à TemplateApp a été suspendu par un administrateur.",
-                    user=user,
-                    level="warning",
-                    persistent=True,
-                )
-                notify_admins(
-                    title="Compte utilisateur désactivé",
-                    message=f"{current_user.username} a désactivé le compte « {user.username} ».",
-                    level="warning",
-                    action_endpoint="admin.users",
-                    persistent=True,
-                )
-                flash("Utilisateur désactivé et notification envoyée.", "info")
-            else:
-                flash("Utilisateur mis à jour.", "success")
-                notify_admins(
-                    title="Profil utilisateur mis à jour",
-                    message=f"{current_user.username} a modifié les informations de « {user.username} ».",
-                    level="info",
-                    action_endpoint="admin.users",
-                    persistent=False,
-                )
-            return redirect(url_for("admin.users"))
-    return render_template("dashboard/user_form.html", form=form, is_edit=True, user=user)
+            current_app.logger.info(
+                f"Modification d'utilisateur \u00ab {user.username} \u00bb "
+                f"par {current_user.username} (aucun changement détecté)"
+            )
+
+        db.session.commit()
+
+        # Notifications activation/désactivation compte
+        if not was_active and user.active and user.email:
+            send_email(
+                subject="TemplateApp \u2014 Votre accès est activé",
+                recipients=user.email,
+                body=render_template("email/account_approved.txt", user=user),
+                html_body=render_template("email/account_approved.html", user=user),
+            )
+            create_notification(
+                title="Compte activé",
+                message="Votre accès à TemplateApp vient d'être activé.",
+                user=user, level="success",
+                action_endpoint="auth.login", persistent=True,
+            )
+            notify_admins(
+                title="Compte utilisateur activé",
+                message=f"{current_user.username} a activé le compte \u00ab {user.username} \u00bb.",
+                level="success", action_endpoint="admin.users", persistent=True,
+            )
+            flash("Utilisateur activé et notification envoyée.", "success")
+        elif was_active and not user.active and user.email:
+            send_email(
+                subject="TemplateApp \u2014 Compte désactivé",
+                recipients=user.email,
+                body=render_template("email/account_deactivated.txt", user=user),
+                html_body=render_template("email/account_deactivated.html", user=user),
+            )
+            create_notification(
+                title="Compte désactivé",
+                message="Votre accès à TemplateApp a été suspendu par un administrateur.",
+                user=user, level="warning", persistent=True,
+            )
+            notify_admins(
+                title="Compte utilisateur désactivé",
+                message=f"{current_user.username} a désactivé le compte \u00ab {user.username} \u00bb.",
+                level="warning", action_endpoint="admin.users", persistent=True,
+            )
+            flash("Utilisateur désactivé et notification envoyée.", "info")
+        else:
+            flash("Utilisateur mis à jour.", "success")
+            notify_admins(
+                title="Profil utilisateur mis à jour",
+                message=f"{current_user.username} a modifié les informations de \u00ab {user.username} \u00bb.",
+                level="info", action_endpoint="admin.users", persistent=False,
+            )
+
+        return redirect(url_for("admin.users"))
+
+    # GET : pré-remplir le formulaire
+    if request.method == "GET":
+        populate_form_from_user(form, user)
+
+    return render_template("dashboard/profile.html", form=form, user=user)
+
+
+@admin_bp.route("/taches")
+@login_required
+def tasks():
+    """Redirige vers le tab En attente de la page Utilisateurs."""
+    return redirect(url_for("admin.users", tab="pending"))
+
+
+@admin_bp.route("/taches/<int:user_id>/approuver", methods=["POST"])
+@login_required
+def approve_user(user_id: int):
+    """Active un compte utilisateur en attente et envoie un email de confirmation."""
+    user = User.query.get_or_404(user_id)
+    user.active = True
+    db.session.commit()
+    current_app.logger.info(
+        f"Compte \u00ab {user.username} \u00bb approuvé par {current_user.username}"
+    )
+    if user.email:
+        send_email(
+            subject="TemplateApp \u2014 Votre accès est activé",
+            recipients=user.email,
+            body=render_template("email/account_approved.txt", user=user),
+            html_body=render_template("email/account_approved.html", user=user),
+        )
+        create_notification(
+            title="Compte activé",
+            message="Votre accès à TemplateApp vient d'être activé.",
+            user=user,
+            level="success",
+            action_endpoint="auth.login",
+            persistent=True,
+        )
+    notify_admins(
+        title="Compte approuvé",
+        message=f"{current_user.username} a approuvé le compte \u00ab {user.username} \u00bb.",
+        level="success",
+        action_endpoint="admin.users",
+        persistent=False,
+    )
+    flash(f"Compte \u00ab {user.username} \u00bb activé.", "success")
+    return redirect(url_for("admin.users", tab="pending"))
+
+
+@admin_bp.route("/taches/<int:user_id>/rejeter", methods=["POST"])
+@login_required
+def reject_user(user_id: int):
+    """Supprime un compte en attente (refus d'inscription)."""
+    user = User.query.get_or_404(user_id)
+    if user.username == "admin":
+        flash("Impossible de supprimer le compte administrateur par défaut.", "danger")
+        return redirect(url_for("admin.tasks"))
+    username = user.username
+    delete_avatar(user.avatar_filename)
+    db.session.delete(user)
+    db.session.commit()
+    current_app.logger.info(
+        f"Inscription de \u00ab {username} \u00bb rejetée par {current_user.username}"
+    )
+    notify_admins(
+        title="Inscription rejetée",
+        message=f"{current_user.username} a rejeté l'inscription de \u00ab {username} \u00bb.",
+        level="warning",
+        action_endpoint="admin.tasks",
+        persistent=False,
+    )
+    flash(f"Inscription de \u00ab {username} \u00bb rejetée.", "info")
+    return redirect(url_for("admin.users", tab="pending"))
 
 
 @admin_bp.route("/utilisateurs/<int:user_id>/supprimer", methods=["POST"])
@@ -397,13 +548,125 @@ def delete_user(user_id: int):
     delete_avatar(user.avatar_filename)
     db.session.delete(user)
     db.session.commit()
-    current_app.logger.info(f"Suppression d'utilisateur « {username_to_delete} » par {current_user.username}")
+    current_app.logger.info(
+        f"Suppression d'utilisateur \u00ab {username_to_delete} \u00bb par {current_user.username}"
+    )
     notify_admins(
         title="Utilisateur supprimé",
-        message=f"{current_user.username} a supprimé le compte « {user.username} ».",
+        message=f"{current_user.username} a supprimé le compte \u00ab {username_to_delete} \u00bb.",
         level="warning",
         action_endpoint="admin.users",
         persistent=True,
     )
     flash("Utilisateur supprimé.", "info")
     return redirect(url_for("admin.users"))
+
+
+@admin_bp.route("/utilisateurs/<int:user_id>/reinitialiser-mot-de-passe", methods=["POST"])
+@login_required
+def reset_user_password(user_id: int):
+    """Envoie un lien de réinitialisation de mot de passe à l'utilisateur."""
+    user = User.query.get_or_404(user_id)
+    if not user.email:
+        flash(
+            f"L'utilisateur « {user.username} » n'a pas d'adresse email. "
+            "Impossible d'envoyer le lien.",
+            "danger",
+        )
+        return redirect(url_for("admin.users"))
+
+    token = secrets.token_urlsafe(32)
+    user.reset_token_hash = generate_password_hash(token, method="pbkdf2:sha256")
+    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+    db.session.commit()
+
+    reset_url = url_for("auth.reset_password", token=token, _external=True)
+    send_email(
+        subject="TemplateApp \u2014 Réinitialisation de votre mot de passe",
+        recipients=user.email,
+        body=render_template(
+            "email/reset_password.txt",
+            user=user,
+            reset_url=reset_url,
+            current_year=datetime.now().year,
+        ),
+        html_body=render_template(
+            "email/reset_password.html",
+            user=user,
+            reset_url=reset_url,
+            current_year=datetime.now().year,
+        ),
+    )
+
+    current_app.logger.info(
+        f"Réinitialisation de mot de passe envoyée pour « {user.username} » "
+        f"par {current_user.username} (email: {user.email})"
+    )
+    create_notification(
+        title="Réinitialisation de mot de passe",
+        message="Un administrateur vous a envoyé un lien de réinitialisation de mot de passe.",
+        user=user,
+        level="info",
+        persistent=True,
+    )
+    flash(
+        f"Lien de réinitialisation envoyé à {user.email} (valable 24 h).",
+        "success",
+    )
+    return redirect(url_for("admin.users"))
+
+
+def _detect_broadcast_level(title: str) -> str:
+    """Déduit le niveau d'une notification broadcast à partir de son titre."""
+    t = title.lower()
+    _title_map = {
+        "avis de maintenance": "warning",
+        "avis d'interruption de service": "error",
+        "maintenance planifiée": "warning",
+        "incident en cours": "error",
+        "incident résolu": "info",
+        "dégradation de service": "warning",
+        "retour à la normale": "info",
+        "nouvelle version disponible": "info",
+        "mise à jour de l'application": "info",
+        "information importante": "info",
+        "changement de procédure": "info",
+        "rappel": "info",
+        "message de l'équipe": "info",
+    }
+    if t in _title_map:
+        return _title_map[t]
+    for kw in ("incident", "panne", "critique", "urgence", "interruption", "indisponible"):
+        if kw in t:
+            return "error"
+    for kw in ("maintenance", "dégradation", "attention", "avertissement", "alerte", "lenteur"):
+        if kw in t:
+            return "warning"
+    return "info"
+
+
+@admin_bp.route("/notifications/broadcast", methods=["GET", "POST"])
+@login_required
+def broadcast_notification():
+    """Envoie une notification globale à tous les utilisateurs."""
+    form = BroadcastNotificationForm()
+    if form.validate_on_submit():
+        title = form.title.data.strip()
+        level = _detect_broadcast_level(title)
+        create_notification(
+            title=title,
+            message=form.message.data.strip(),
+            level=level,
+            audience="global",
+            persistent=False,
+        )
+        current_app.logger.info(
+            f"[BROADCAST] Notification broadcast envoyée par {current_user.username} "
+            f"— titre : « {title} » "
+            f"— niveau : {level} "
+            f"— message : {form.message.data.strip()[:100]}"
+        )
+        flash("Notification envoyée à tous les utilisateurs.", "success")
+        return redirect(url_for("admin.broadcast_notification"))
+
+    return render_template("dashboard/broadcast.html", form=form)

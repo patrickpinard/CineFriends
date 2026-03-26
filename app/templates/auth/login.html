@@ -17,16 +17,34 @@
     {{ form.hidden_tag() }}
     <div>
         {{ form.username.label(class_='text-xs font-semibold uppercase tracking-wide text-slate-500') }}
-        {{ form.username(class_='mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-200') }}
+        {{ form.username(
+            class_='mt-2 w-full rounded-2xl border bg-white px-4 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:ring-2 '
+                ~ ('border-rose-300 focus:border-rose-400 focus:ring-rose-200' if form.username.errors else 'border-slate-200 focus:border-sky-400 focus:ring-sky-200'),
+            autocomplete='username'
+        ) }}
         {% for error in form.username.errors %}
-        <p class="mt-2 text-xs text-rose-500">{{ error }}</p>
+        <p class="mt-1.5 flex items-center gap-1 text-xs text-rose-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+            {{ error }}
+        </p>
         {% endfor %}
     </div>
     <div>
         {{ form.password.label(class_='text-xs font-semibold uppercase tracking-wide text-slate-500') }}
-        {{ form.password(class_='mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-200') }}
+        {{ form.password(
+            class_='mt-2 w-full rounded-2xl border bg-white px-4 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:ring-2 '
+                ~ ('border-rose-300 focus:border-rose-400 focus:ring-rose-200' if form.password.errors else 'border-slate-200 focus:border-sky-400 focus:ring-sky-200'),
+            autocomplete='current-password'
+        ) }}
         {% for error in form.password.errors %}
-        <p class="mt-2 text-xs text-rose-500">{{ error }}</p>
+        <p class="mt-1.5 flex items-center gap-1 text-xs text-rose-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+            {{ error }}
+        </p>
         {% endfor %}
     </div>
     <div class="flex items-center justify-end text-xs text-slate-500">

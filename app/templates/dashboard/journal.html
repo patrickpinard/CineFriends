@@ -1,13 +1,71 @@
 {% extends 'base.html' %}
-{% block title %}Journal{% endblock %}
-{% block header_title %}Journal{% endblock %}
+{% block title %}Administration — Journal{% endblock %}
+{% block header_title %}Administration{% endblock %}
 {% block content %}
-<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+{# ── Tabs Administration ─────────────────────────────────────────────────── #}
+<div class="mb-6 flex items-center gap-4">
+    <nav class="flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+        <a href="{{ url_for('admin.users', tab='all') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+            </svg>
+            Utilisateurs
+        </a>
+        <a href="{{ url_for('admin.users', tab='pending') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            Tâches
+            {% set ns = namespace(count=0) %}
+            {% for t in admin_pending_tasks %}{% if t.type == 'pending_users' %}{% set ns.count = t.count %}{% endif %}{% endfor %}
+            {% if ns.count > 0 %}
+            <span class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[0.65rem] font-bold text-white">{{ ns.count }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('main.journal') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition bg-white text-slate-900 shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5H12m-8.25 4.5H12" />
+            </svg>
+            Journal
+        </a>
+        <a href="{{ url_for('admin.broadcast_notification') }}"
+           class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 0 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
+            </svg>
+            Broadcast
+        </a>
+    </nav>
+</div>
+
+<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="flex items-center gap-2 text-sm text-slate-500">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
         </svg>
-        <span>{{ total_logs }} entrée{{ 's' if total_logs != 1 else '' }} métier sur {{ total_days }} jour{{ 's' if total_days != 1 else '' }} ({{ total_lines }} ligne{{ 's' if total_lines != 1 else '' }} de logs)</span>
+        <span>{{ total_logs }} entrée{{ 's' if total_logs != 1 else '' }} métier — {{ total_days }} jour{{ 's' if total_days != 1 else '' }} — {{ total_lines }} ligne{{ 's' if total_lines != 1 else '' }} au total</span>
+    </div>
+    <div class="flex items-center gap-2">
+        <a href="{{ url_for('main.journal_export', format='csv', action=action_filter, search=search_query) }}"
+           class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-50"
+           title="Exporter tous les logs filtrés en CSV">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            CSV
+        </a>
+        <a href="{{ url_for('main.journal_export', format='json', action=action_filter, search=search_query) }}"
+           class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-50"
+           title="Exporter tous les logs filtrés en JSON">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            JSON
+        </a>
     </div>
 </div>
 
@@ -30,6 +88,14 @@
         <option value="account_deactivated" {% if action_filter == 'account_deactivated' %}selected{% endif %}>Comptes désactivés</option>
         <option value="twofa_enabled" {% if action_filter == 'twofa_enabled' %}selected{% endif %}>2FA activée</option>
         <option value="twofa_disabled" {% if action_filter == 'twofa_disabled' %}selected{% endif %}>2FA désactivée</option>
+        <option value="broadcast" {% if action_filter == 'broadcast' %}selected{% endif %}>Notifications broadcast</option>
+    </select>
+    <select name="per_page" onchange="this.form.submit()"
+            class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 focus:border-sky-400 focus:ring-sky-200"
+            title="Jours par page">
+        {% for n in [7, 14, 30, 50] %}
+        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} jours</option>
+        {% endfor %}
     </select>
     {% if action_filter != 'all' or search_query %}
     <a href="{{ url_for('main.journal') }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
@@ -42,7 +108,7 @@
 {% if logs_by_month and logs_by_month|length > 0 %}
 <div class="mt-6 space-y-6">
     {% for month_group in logs_by_month %}
-    <div class="space-y-4" data-month-accordion>
+    <div class="w-full space-y-4" data-month-accordion>
         <!-- En-tête du mois/année -->
         <button type="button"
                 class="w-full flex items-center justify-between gap-3 rounded-xl border-2 border-slate-300 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-4 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-inset"
@@ -69,16 +135,15 @@
         
         <!-- Jours du mois -->
         <div id="month-content-{{ loop.index }}"
-             class="overflow-hidden transition-all duration-300 ease-in-out"
-             data-month-content
-             style="max-height: 0;">
-            <div class="space-y-4 pl-4 pt-2">
+             class="w-full overflow-hidden transition-all duration-300 ease-in-out journal-accordion-closed"
+             data-month-content>
+            <div class="w-full space-y-4 pt-4 pb-2">
             {% for day_group in month_group.days %}
             {% set day_date = day_group.date %}
             {% set is_today = (day_date == today) %}
-            <div class="rounded-xl border border-slate-200 bg-white shadow-sm" data-day-accordion>
+            <div class="w-full rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden" data-day-accordion>
         <button type="button" 
-                class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-inset rounded-xl"
+                class="w-full flex items-center justify-between gap-3 px-6 py-3 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-inset rounded-xl"
                 data-day-toggle
                 aria-expanded="false"
                 aria-controls="day-content-{{ month_group.year }}-{{ month_group.month }}-{{ loop.index }}">
@@ -108,10 +173,10 @@
             </svg>
         </button>
         <div id="day-content-{{ month_group.year }}-{{ month_group.month }}-{{ loop.index }}" 
-             class="overflow-hidden transition-all duration-300 ease-in-out"
-             data-day-content
-             style="max-height: 0;">
-            <div class="px-4 pt-4 pb-6 space-y-2 border-t border-slate-100">
+             class="overflow-hidden transition-all duration-300 ease-in-out journal-accordion-closed"
+             data-day-content>
+            <div class="px-6 pt-5 pb-6 space-y-3 border-t border-slate-100">
+                <div class="h-2"></div>
                 {% for log in day_group.logs %}
     {% set action_labels = {
         'user_created': 'Création utilisateur',
@@ -124,7 +189,8 @@
         'account_deactivated': 'Compte désactivé',
         'twofa_enabled': '2FA activée',
         'twofa_disabled': '2FA désactivée',
-        'other': 'Autre'
+        'broadcast': 'Broadcast',
+        'other': 'Messages'
     } %}
     {% set action_colors = {
         'user_created': 'bg-teal-100 text-teal-700',
@@ -137,6 +203,7 @@
         'account_deactivated': 'bg-orange-100 text-orange-700',
         'twofa_enabled': 'bg-purple-100 text-purple-700',
         'twofa_disabled': 'bg-pink-100 text-pink-700',
+        'broadcast': 'bg-sky-100 text-sky-700',
         'other': 'bg-slate-100 text-slate-700'
     } %}
     {% set action_icons = {
@@ -150,6 +217,7 @@
         'account_deactivated': '<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />',
         'twofa_enabled': '<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Zm.75-11.25h6v6h-6v-6Z" />',
         'twofa_disabled': '<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0 1 12 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 0 1 1.563-3.029m5.858.908a3 3 0 1 1 4.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532 3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0 1 12 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 0 1-4.132 5.411m0 0L21 21" />',
+        'broadcast': '<path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 0 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />',
         'other': '<path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />'
     } %}
     {% set action_icon_colors = {
@@ -163,9 +231,10 @@
         'account_deactivated': 'bg-orange-100 text-orange-600',
         'twofa_enabled': 'bg-purple-100 text-purple-600',
         'twofa_disabled': 'bg-pink-100 text-pink-600',
+        'broadcast': 'bg-sky-100 text-sky-600',
         'other': 'bg-slate-100 text-slate-600'
     } %}
-    <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md {% if log.level == 'error' %}border-rose-200 bg-rose-50/30{% elif log.level == 'warning' %}border-amber-200 bg-amber-50/30{% elif log.level == 'info' %}border-sky-200 bg-sky-50/30{% elif log.level == 'debug' %}border-purple-200 bg-purple-50/30{% endif %} {% if loop.first %}mt-2{% endif %} {% if loop.last %}mb-2{% endif %}">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md {% if log.level == 'error' %}border-rose-200 bg-rose-50/30{% elif log.level == 'warning' %}border-amber-200 bg-amber-50/30{% elif log.level == 'info' %}border-sky-200 bg-sky-50/30{% elif log.level == 'debug' %}border-purple-200 bg-purple-50/30{% endif %}">
         <div class="flex items-start gap-3">
             <div class="flex-shrink-0">
                 {% set icon_path = action_icons.get(log.action_type, action_icons['other']) %}
@@ -179,7 +248,7 @@
             <div class="flex-1 min-w-0">
                 <div class="flex flex-wrap items-center gap-2 mb-1">
                     <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide {{ action_colors.get(log.action_type, 'bg-slate-100 text-slate-700') }}">
-                        {{ action_labels.get(log.action_type, 'Autre') }}
+                        {{ action_labels.get(log.action_type, 'Messages') }}
                     </span>
                     {% if log.level == 'error' or log.level == 'warning' %}
                     <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide {% if log.level == 'error' %}bg-rose-100 text-rose-700{% else %}bg-amber-100 text-amber-700{% endif %}">
@@ -203,6 +272,7 @@
                 {% endfor %}
             </div>
         </div>
+            </div>
             {% endfor %}
             </div>
         </div>
@@ -246,10 +316,10 @@
             </svg>
         </button>
         <div id="day-content-{{ month_group.year }}-{{ month_group.month }}-{{ loop.index }}" 
-             class="overflow-hidden transition-all duration-300 ease-in-out"
-             data-day-content
-             style="max-height: 0;">
-            <div class="px-4 pt-4 pb-6 space-y-2 border-t border-slate-100">
+             class="overflow-hidden transition-all duration-300 ease-in-out journal-accordion-closed"
+             data-day-content>
+            <div class="px-6 pt-5 pb-6 space-y-3 border-t border-slate-100">
+                <div class="h-2"></div>
                 {% for log in day_group.logs %}
     {% set action_labels = {
         'user_created': 'Création utilisateur',
@@ -262,7 +332,8 @@
         'account_deactivated': 'Compte désactivé',
         'twofa_enabled': '2FA activée',
         'twofa_disabled': '2FA désactivée',
-        'other': 'Autre'
+        'broadcast': 'Broadcast',
+        'other': 'Messages'
     } %}
     {% set action_colors = {
         'user_created': 'bg-teal-100 text-teal-700',
@@ -275,6 +346,7 @@
         'account_deactivated': 'bg-orange-100 text-orange-700',
         'twofa_enabled': 'bg-purple-100 text-purple-700',
         'twofa_disabled': 'bg-pink-100 text-pink-700',
+        'broadcast': 'bg-sky-100 text-sky-700',
         'other': 'bg-slate-100 text-slate-700'
     } %}
     {% set action_icons = {
@@ -288,6 +360,7 @@
         'account_deactivated': '<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />',
         'twofa_enabled': '<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Zm.75-11.25h6v6h-6v-6Z" />',
         'twofa_disabled': '<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0 1 12 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 0 1 1.563-3.029m5.858.908a3 3 0 1 1 4.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532 3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0 1 12 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 0 1-4.132 5.411m0 0L21 21" />',
+        'broadcast': '<path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 0 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />',
         'other': '<path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />'
     } %}
     {% set action_icon_colors = {
@@ -301,9 +374,10 @@
         'account_deactivated': 'bg-orange-100 text-orange-600',
         'twofa_enabled': 'bg-purple-100 text-purple-600',
         'twofa_disabled': 'bg-pink-100 text-pink-600',
+        'broadcast': 'bg-sky-100 text-sky-600',
         'other': 'bg-slate-100 text-slate-600'
     } %}
-    <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md {% if log.level == 'error' %}border-rose-200 bg-rose-50/30{% elif log.level == 'warning' %}border-amber-200 bg-amber-50/30{% elif log.level == 'info' %}border-sky-200 bg-sky-50/30{% elif log.level == 'debug' %}border-purple-200 bg-purple-50/30{% endif %} {% if loop.first %}mt-2{% endif %} {% if loop.last %}mb-2{% endif %}">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md {% if log.level == 'error' %}border-rose-200 bg-rose-50/30{% elif log.level == 'warning' %}border-amber-200 bg-amber-50/30{% elif log.level == 'info' %}border-sky-200 bg-sky-50/30{% elif log.level == 'debug' %}border-purple-200 bg-purple-50/30{% endif %}">
         <div class="flex items-start gap-3">
             <div class="flex-shrink-0">
                 {% set icon_path = action_icons.get(log.action_type, action_icons['other']) %}
@@ -317,7 +391,7 @@
             <div class="flex-1 min-w-0">
                 <div class="flex flex-wrap items-center gap-2 mb-1">
                     <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide {{ action_colors.get(log.action_type, 'bg-slate-100 text-slate-700') }}">
-                        {{ action_labels.get(log.action_type, 'Autre') }}
+                        {{ action_labels.get(log.action_type, 'Messages') }}
                     </span>
                     {% if log.level == 'error' or log.level == 'warning' %}
                     <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide {% if log.level == 'error' %}bg-rose-100 text-rose-700{% else %}bg-amber-100 text-amber-700{% endif %}">
