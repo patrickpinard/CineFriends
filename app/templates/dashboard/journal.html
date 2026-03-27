@@ -76,14 +76,14 @@
     </div>
 </div>
 
-<form method="get" class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm" data-filter-form>
-    <div class="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+<form method="get" class="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center" data-filter-form>
+    <div class="flex w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 sm:flex-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.2-5.2M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z" />
         </svg>
         <input type="search" id="search" name="search" value="{{ search_query }}" placeholder="Rechercher dans les logs…" class="h-8 flex-1 border-none bg-transparent focus:ring-0" />
     </div>
-    <select id="action" name="action" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 focus:border-primary-400 focus:ring-primary-400/40">
+    <select id="action" name="action" class="w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 focus:border-primary-400 focus:ring-primary-400/40 sm:w-auto">
         <option value="all" {% if action_filter == 'all' %}selected{% endif %}>Toutes les actions</option>
         <option value="user_registered" {% if action_filter == 'user_registered' %}selected{% endif %}>Inscriptions en attente</option>
         <option value="user_created" {% if action_filter == 'user_created' %}selected{% endif %}>Création d'utilisateur</option>
@@ -100,18 +100,20 @@
         <option value="user_exported" {% if action_filter == 'user_exported' %}selected{% endif %}>Export utilisateurs</option>
         <option value="user_imported" {% if action_filter == 'user_imported' %}selected{% endif %}>Import utilisateurs</option>
     </select>
-    <select name="per_page" onchange="this.form.submit()"
-            class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 focus:border-sky-400 focus:ring-sky-200"
-            title="Jours par page">
-        {% for n in [7, 14, 30, 50] %}
-        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} jours</option>
-        {% endfor %}
-    </select>
-    {% if action_filter != 'all' or search_query or year_filter %}
-    <a href="{{ url_for('main.journal') }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
-        Réinitialiser
-    </a>
-    {% endif %}
+    <div class="flex w-full items-center gap-3 sm:w-auto">
+        <select name="per_page" onchange="this.form.submit()"
+                class="flex-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 focus:border-sky-400 focus:ring-sky-200 sm:flex-none"
+                title="Jours par page">
+            {% for n in [7, 14, 30, 50] %}
+            <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} jours</option>
+            {% endfor %}
+        </select>
+        {% if action_filter != 'all' or search_query or year_filter %}
+        <a href="{{ url_for('main.journal') }}" class="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100 sm:flex-none">
+            Réinitialiser
+        </a>
+        {% endif %}
+    </div>
     <input type="hidden" name="page" value="1" />
     {% if year_filter %}<input type="hidden" name="year" value="{{ year_filter }}" />{% endif %}
     {% if quarter_filter %}<input type="hidden" name="quarter" value="{{ quarter_filter }}" />{% endif %}
