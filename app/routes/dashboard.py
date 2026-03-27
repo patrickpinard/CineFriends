@@ -132,6 +132,14 @@ _ACTION_PATTERNS: dict[str, list[str]] = {
         r"Notification broadcast",
         r"\[BROADCAST\]",
     ],
+    "user_exported": [
+        r"Export (CSV|JSON) utilisateurs",
+        r"Export.*utilisateurs par",
+    ],
+    "user_imported": [
+        r"Import utilisateurs par",
+        r"Import.*utilisateurs.*créés",
+    ],
 }
 
 _TECHNICAL_EXCLUDES = [
