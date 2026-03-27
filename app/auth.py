@@ -40,7 +40,7 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
-@limiter.limit("5 per minute")
+@limiter.limit("20 per minute")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))

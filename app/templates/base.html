@@ -33,35 +33,6 @@
 </head>
 
 <body class="h-full bg-gradient-to-br from-slate-100 via-white to-sky-50 antialiased">
-    {# ── Broadcast modal ───────────────────────────────────────────────────── #}
-    <div id="broadcast-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="broadcast-modal-title">
-        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
-        <div class="absolute inset-0 flex items-center justify-center p-4">
-            <div id="broadcast-modal-card" class="w-full max-w-md rounded-3xl border bg-white p-6 shadow-2xl">
-                <div class="flex items-start gap-4">
-                    <span id="broadcast-modal-icon" class="mt-0.5 flex-shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-2xl">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 0 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
-                        </svg>
-                    </span>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-xs font-semibold uppercase tracking-widest mb-1" id="broadcast-modal-badge">Notification globale</p>
-                        <h2 class="text-base font-semibold text-slate-900" id="broadcast-modal-title"></h2>
-                        <p class="mt-2 text-sm text-slate-600" id="broadcast-modal-message"></p>
-                    </div>
-                </div>
-                <div class="mt-6 flex justify-end">
-                    <button type="button" id="broadcast-modal-accept"
-                        class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                        J'ai compris
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
     <div class="flex min-h-screen">
         <aside
             class="fixed inset-y-0 left-0 z-30 hidden border-r border-slate-200 bg-white/90 backdrop-blur lg:flex lg:flex-col"
@@ -170,6 +141,70 @@
                     </div>
                     <div class="relative flex items-center gap-2 flex-1 justify-end">
                         {% if current_user.is_authenticated %}
+
+                        {# ── Centre de notifications (broadcasts) ── #}
+                        <div class="relative" id="notif-bell-wrap">
+                            <button type="button" id="notif-bell-btn"
+                                class="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700"
+                                aria-label="Centre de notifications">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                                </svg>
+                                <span id="notif-bell-badge"
+                                    class="absolute -top-1 -right-1 hidden h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.55rem] font-black leading-none tabular-nums text-white ring-2 ring-white shadow-sm">
+                                    0
+                                </span>
+                            </button>
+
+                            {# Panneau déroulant — rendu serveur pour police et styles cohérents #}
+                            <div id="notif-bell-panel"
+                                class="invisible absolute right-0 top-full mt-2 w-80 origin-top-right scale-95 rounded-xl border border-slate-200 bg-white shadow-lg opacity-0 transition z-50 overflow-hidden">
+                                <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                                    <p class="text-sm font-semibold text-slate-800">Notifications</p>
+                                    <button id="notif-mark-all" type="button"
+                                        class="text-xs font-medium text-teal-500 transition hover:text-teal-700">Tout marquer comme lu</button>
+                                </div>
+                                <ul id="notif-list" class="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                                    {% set _ns = namespace(last_label='') %}
+                                    {% for notif in broadcast_notifications %}
+                                    {% set _lvl = notif.level if notif.level in ('error','warning','info') else 'info' %}
+                                    {% if notif.date_label and notif.date_label != _ns.last_label %}
+                                    {% set _ns.last_label = notif.date_label %}
+                                    <li class="notif-separator px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-widest text-slate-400 bg-slate-50 sticky top-0 z-10">{{ notif.date_label }}</li>
+                                    {% endif %}
+                                    {% set _border = 'border-rose-400' if _lvl == 'error' else ('border-amber-400' if _lvl == 'warning' else 'border-sky-400') %}
+                                    {% set _bg     = 'bg-rose-50'     if _lvl == 'error' else ('bg-amber-50'    if _lvl == 'warning' else 'bg-sky-50') %}
+                                    {% set _badge  = 'bg-rose-100 text-rose-600' if _lvl == 'error' else ('bg-amber-100 text-amber-700' if _lvl == 'warning' else 'bg-sky-100 text-sky-600') %}
+                                    <li data-notif-id="{{ notif.id }}" class="flex">
+                                        <span class="w-1 flex-shrink-0 {{ _border }} border-l-2 {{ _bg }}"></span>
+                                        <div class="flex flex-1 items-start gap-2 px-3 py-2.5 min-w-0">
+                                            <div class="flex-1 min-w-0">
+                                                <div class="flex items-center gap-1.5 mb-0.5 min-w-0">
+                                                    <span class="flex-shrink-0 rounded-sm px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider {{ _badge }}">{{ _lvl }}</span>
+                                                    <p class="flex-1 truncate text-xs font-semibold text-slate-800">{{ notif.title }}</p>
+                                                    {% if notif.created_at %}
+                                                    <time class="flex-shrink-0 text-[0.6rem] tabular-nums text-slate-400">{{ notif.created_at | local_datetime('%d/%m %H:%M') }}</time>
+                                                    {% endif %}
+                                                </div>
+                                                {% if notif.message %}
+                                                <p class="text-[0.7rem] leading-relaxed text-slate-500 line-clamp-2">{{ notif.message }}</p>
+                                                {% endif %}
+                                            </div>
+                                            <button type="button"
+                                                class="notif-item-read mt-0.5 flex-shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-600"
+                                                data-id="{{ notif.id }}" title="Marquer comme lu">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                <p id="notif-empty" class="hidden px-4 py-6 text-center text-sm text-slate-400">Aucune nouvelle notification</p>
+                            </div>
+                        </div>
+
                         {% set palette = avatar_palette(current_user.username or '') %}
                         <button type="button"
                             class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
@@ -209,7 +244,7 @@
                             </div>
                             <div class="border-t border-slate-100">
                                 <a href="{{ url_for('main.profile') }}"
-                                    class="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 transition hover:bg-sky-50 hover:text-sky-600">
+                                    class="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 transition hover:bg-teal-50 hover:text-teal-600">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                                         <path stroke-linecap="round" stroke-linejoin="round"
@@ -219,6 +254,15 @@
                                     </svg>
                                     Mon profil
                                 </a>
+                                <button type="button" id="about-modal-trigger"
+                                    class="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-600 transition hover:bg-teal-50 hover:text-teal-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                                    </svg>
+                                    À propos
+                                </button>
                                 <a href="{{ url_for('auth.logout') }}"
                                     class="flex items-center gap-2 px-4 py-2 text-sm text-rose-500 transition hover:bg-rose-50 hover:text-rose-600">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
@@ -486,6 +530,97 @@
             </div>
         </div>
     </nav>
+
+{# ── Modal À propos ────────────────────────────────────────────────────────── #}
+<div id="about-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" id="about-modal-backdrop"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="w-full max-w-sm rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+
+            {# En-tête #}
+            <div class="bg-gradient-to-br from-teal-500 to-teal-600 px-6 pt-8 pb-6 text-center">
+                <span class="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm shadow-inner">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo" class="h-10 w-10 object-contain" />
+                </span>
+                <h2 class="mt-3 text-lg font-bold text-white" id="about-modal-title">TemplateApp</h2>
+                <span class="mt-1 inline-block rounded-full bg-white/20 px-3 py-0.5 text-xs font-semibold text-white/90">Version 1.0</span>
+            </div>
+
+            {# Corps #}
+            <div class="px-6 py-5">
+                <p class="text-sm text-slate-600 leading-relaxed">Application de gestion des utilisateurs et de communication interne, conçue pour les équipes qui ont besoin d'un espace de travail simple, sécurisé et accessible sur tous les appareils.</p>
+                <ul class="mt-4 space-y-2">
+                    <li class="flex items-center gap-2.5 text-xs text-slate-500">
+                        <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-50">
+                            <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                        </span>
+                        Gestion des comptes et des rôles
+                    </li>
+                    <li class="flex items-center gap-2.5 text-xs text-slate-500">
+                        <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-50">
+                            <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                        </span>
+                        Notifications broadcast pour toute l'équipe
+                    </li>
+                    <li class="flex items-center gap-2.5 text-xs text-slate-500">
+                        <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-50">
+                            <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                        </span>
+                        Journal d'activité et tableau de bord admin
+                    </li>
+                    <li class="flex items-center gap-2.5 text-xs text-slate-500">
+                        <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-50">
+                            <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                        </span>
+                        Double authentification (2FA) et sécurité renforcée
+                    </li>
+                    <li class="flex items-center gap-2.5 text-xs text-slate-500">
+                        <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-50">
+                            <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                        </span>
+                        Progressive Web App — installable sur mobile et desktop
+                    </li>
+                </ul>
+            </div>
+
+            {# Pied de page #}
+            <div class="border-t border-slate-100 px-6 py-4 flex items-center justify-between">
+                <p class="text-xs text-slate-400">© {{ current_year }} Patrick Pinard</p>
+                <button type="button" id="about-modal-close-btn"
+                    class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-400 active:scale-95">
+                    Fermer
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce() }}">
+(function() {
+    'use strict';
+    function openAbout() {
+        document.getElementById('about-modal').classList.remove('hidden');
+        // Fermer le menu profil
+        var pm = document.querySelector('[data-profile-menu]');
+        if (pm) { pm.classList.add('invisible', 'opacity-0', 'scale-95'); pm.classList.remove('opacity-100', 'scale-100'); }
+    }
+    function closeAbout() {
+        document.getElementById('about-modal').classList.add('hidden');
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        var trigger  = document.getElementById('about-modal-trigger');
+        var closeBtn = document.getElementById('about-modal-close-btn');
+        var backdrop = document.getElementById('about-modal-backdrop');
+        if (trigger)  trigger.addEventListener('click', openAbout);
+        if (closeBtn) closeBtn.addEventListener('click', closeAbout);
+        if (backdrop) backdrop.addEventListener('click', closeAbout);
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeAbout();
+        });
+    });
+})();
+</script>
 </body>
 
 </html>

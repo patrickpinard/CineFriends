@@ -229,12 +229,34 @@ def create_app(config_name=None):
             # Notifications broadcast globales des 30 derniers jours (localStorage gère le "vu" par utilisateur)
             from datetime import timedelta
             _cutoff = utcnow() - timedelta(days=30)
+            _today     = utcnow().date()
+            _yesterday = _today - timedelta(days=1)
+
+            def _date_label(dt):
+                if dt is None:
+                    return None
+                d = dt.date() if hasattr(dt, 'date') else dt
+                if d == _today:
+                    return "Aujourd'hui"
+                if d == _yesterday:
+                    return "Hier"
+                if (_today - d).days <= 7:
+                    return "Cette semaine"
+                return d.strftime('%d/%m/%Y')
+
             broadcast_notifications = [
-                {"id": n.id, "title": n.title, "message": n.message, "level": n.level or "info"}
+                {
+                    "id": n.id,
+                    "title": n.title,
+                    "message": n.message,
+                    "level": n.level or "info",
+                    "created_at": n.created_at,
+                    "date_label": _date_label(n.created_at),
+                }
                 for n in Notification.query.filter(
                     Notification.audience == "global",
                     Notification.created_at >= _cutoff,
-                ).order_by(Notification.created_at.asc()).limit(20).all()
+                ).order_by(Notification.created_at.desc()).limit(20).all()
             ]
 
         return {

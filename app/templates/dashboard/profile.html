@@ -565,7 +565,37 @@
     </div>
 </div>
 
-<script>
+{# ── Modal confirmation suppression avatar ──────────────────────────────── #}
+<div id="avatar-delete-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-avatar-delete-backdrop></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div class="flex items-center gap-3">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-rose-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </span>
+                <div>
+                    <p class="text-sm font-semibold text-slate-900">Supprimer la photo de profil</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Cette action est irréversible.</p>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end gap-2">
+                <button type="button" data-avatar-delete-cancel
+                    class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50">
+                    Annuler
+                </button>
+                <button type="button" data-avatar-delete-approve
+                    class="inline-flex items-center rounded-full bg-rose-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-400">
+                    Supprimer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce() }}">
 (function() {
     function initAvatarHandlers() {
         const avatarModal = document.getElementById('avatar-modal');
@@ -646,118 +676,55 @@
         
         // Fermer avec Escape
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && !avatarModal.classList.contains('hidden')) {
-                closeModal();
-            }
+            if (e.key !== 'Escape') return;
+            if (!avatarModal.classList.contains('hidden')) closeModal();
+            var delDlg = document.getElementById('avatar-delete-modal');
+            if (delDlg && !delDlg.classList.contains('hidden')) delDlg.classList.add('hidden');
         });
         
-        // Gérer la suppression de l'avatar via la modale
-        if (removeAvatarBtn && removeAvatarInput) {
-        removeAvatarBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            
-            // Si on est en train de cocher (supprimer), demander confirmation
-            if (!removeAvatarInput.checked) {
-                if (!confirm('Êtes-vous sûr de vouloir supprimer cette photo de profil ?')) {
-                    return; // Annuler si l'utilisateur ne confirme pas
-                }
-            }
-            
-            removeAvatarInput.checked = !removeAvatarInput.checked;
-            
-            // Mettre à jour l'affichage dans la modal
-            if (removeAvatarInput.checked) {
-                removeAvatarBtn.classList.add('bg-rose-100', 'border-rose-600');
-                removeAvatarBtn.classList.remove('bg-rose-50');
-                // Afficher l'icône vide dans la modal
-                const modalImg = document.getElementById('avatar-modal-img');
-                if (modalImg) {
-                    modalImg.src = '';
-                    modalImg.classList.add('hidden');
-                }
-                // Mettre à jour l'affichage principal aussi
-                if (avatarPreviewBtn) {
-                    avatarPreviewBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>';
-                }
-                // Réinitialiser le champ fichier
-                if (avatarFileInput) {
-                    avatarFileInput.value = '';
-                }
-                // Masquer le bouton supprimer en bas de la carte
-                if (removeAvatarBtnOverlay) {
-                    removeAvatarBtnOverlay.classList.add('hidden');
-                }
-            } else {
-                removeAvatarBtn.classList.remove('bg-rose-100', 'border-rose-600');
-                removeAvatarBtn.classList.add('bg-rose-50');
-                // Afficher le bouton supprimer en bas de la carte si on décoche
-                if (removeAvatarBtnOverlay) {
-                    removeAvatarBtnOverlay.classList.remove('hidden');
-                }
-            }
-        });
+        // Suppression de l'avatar — confirmation via modal dédié
+        var avatarDeleteDlg = document.getElementById('avatar-delete-modal');
+
+        function applyDelete() {
+            removeAvatarInput.checked = true;
+            if (avatarFileInput) avatarFileInput.value = '';
+            var emptyIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>';
+            if (avatarPreviewBtn) avatarPreviewBtn.innerHTML = emptyIcon;
+            if (removeAvatarBtnOverlay) removeAvatarBtnOverlay.classList.add('hidden');
+            if (avatarModal) { avatarModal.classList.add('hidden'); document.body.style.overflow = ''; }
+            var form = document.getElementById('profile-form');
+            if (form) form.submit();
+        }
+
+        function doAvatarDelete(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            if (!removeAvatarInput || !avatarDeleteDlg) return;
+            avatarDeleteDlg.classList.remove('hidden');
+        }
+
+        if (avatarDeleteDlg) {
+            avatarDeleteDlg.querySelector('[data-avatar-delete-approve]').addEventListener('click', function() {
+                avatarDeleteDlg.classList.add('hidden');
+                applyDelete();
+            });
+            avatarDeleteDlg.querySelector('[data-avatar-delete-cancel]').addEventListener('click', function() {
+                avatarDeleteDlg.classList.add('hidden');
+            });
+            avatarDeleteDlg.querySelector('[data-avatar-delete-backdrop]').addEventListener('click', function() {
+                avatarDeleteDlg.classList.add('hidden');
+            });
+        }
+
+        if (removeAvatarBtn)        removeAvatarBtn.addEventListener('click', doAvatarDelete);
+        if (removeAvatarBtnOverlay) removeAvatarBtnOverlay.addEventListener('click', doAvatarDelete);
     }
-    }
-    
+
     // Initialiser quand le DOM est prêt
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initAvatarHandlers);
     } else {
         initAvatarHandlers();
     }
-})();
-
-// Délégation d'événements pour le bouton supprimer (hors de initAvatarHandlers pour éviter les doublons)
-(function() {
-    function handleRemoveAvatarClick(e) {
-        // Vérifier si le clic est sur le bouton supprimer ou un élément enfant
-        const removeBtn = e.target.closest('#remove-avatar-btn-overlay');
-        if (!removeBtn) return;
-        
-        e.preventDefault();
-        e.stopPropagation();
-        
-        console.log('Bouton supprimer cliqué');
-        
-        // Trouver le checkbox remove_avatar
-        const checkbox = document.getElementById('remove-avatar-input');
-        if (!checkbox) {
-            console.error('Checkbox remove_avatar introuvable');
-            alert('Erreur: impossible de trouver le champ de suppression. Veuillez recharger la page.');
-            return;
-        }
-        
-        console.log('Checkbox trouvé, état actuel:', checkbox.checked);
-        
-        // Demander confirmation avant de supprimer
-        if (!confirm('Êtes-vous sûr de vouloir supprimer cette photo de profil ?')) {
-            console.log('Suppression annulée par l\'utilisateur');
-            return;
-        }
-        
-        // Cocher le checkbox pour indiquer qu'on veut supprimer
-        checkbox.checked = true;
-        console.log('Checkbox coché:', checkbox.checked);
-        
-        // Réinitialiser le champ fichier si une photo était sélectionnée
-        const fileInput = document.getElementById('avatar-file-input');
-        if (fileInput) {
-            fileInput.value = '';
-        }
-        
-        // Afficher l'icône vide dans la prévisualisation
-        const previewBtn = document.getElementById('avatar-preview-btn');
-        if (previewBtn) {
-            previewBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>';
-        }
-        
-        // Masquer le bouton supprimer car la photo sera supprimée
-        removeBtn.classList.add('hidden');
-        console.log('Bouton supprimer masqué, photo sera supprimée à la sauvegarde');
-    }
-    
-    // Attacher l'événement une seule fois au document
-    document.addEventListener('click', handleRemoveAvatarClick);
 })();
 
 // Gestion du bouton Retour

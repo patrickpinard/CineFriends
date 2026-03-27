@@ -126,6 +126,12 @@ def users():
 
     # ── Tab "Dashboard" ───────────────────────────────────────────────────────
     if tab == "dashboard":
+        bc_page = request.args.get("bc_page", 1, type=int)
+        bc_pagination = (
+            Notification.query.filter_by(audience="global")
+            .order_by(Notification.created_at.desc())
+            .paginate(page=bc_page, per_page=5, max_per_page=50, error_out=False)
+        )
         stats = {
             "total": User.query.count(),
             "active": User.query.filter_by(active=True).count(),
@@ -137,12 +143,8 @@ def users():
                 .limit(5)
                 .all()
             ),
-            "broadcasts": (
-                Notification.query.filter_by(audience="global")
-                .order_by(Notification.created_at.desc())
-                .limit(3)
-                .all()
-            ),
+            "broadcasts": bc_pagination.items,
+            "bc_pagination": bc_pagination,
         }
         return render_template(
             "dashboard/users.html",
@@ -438,6 +440,40 @@ def delete_users_bulk():
         flash(f"{deleted} utilisateur(s) supprimé(s), {skipped} ignoré(s) (compte admin protégé).", "warning")
     else:
         flash(f"{deleted} utilisateur(s) supprimé(s).", "success")
+    return redirect(url_for("admin.users"))
+
+
+@admin_bp.route("/utilisateurs/activer-selection", methods=["POST"])
+@login_required
+def activate_users_bulk():
+    ids_raw = request.form.getlist("user_ids")
+    action = request.form.get("action", "activate")
+    ids = []
+    for id_str in ids_raw:
+        try:
+            ids.append(int(id_str))
+        except ValueError:
+            pass
+    if not ids:
+        flash("Aucun utilisateur sélectionné.", "warning")
+        return redirect(url_for("admin.users"))
+    updated = skipped = 0
+    for uid in ids:
+        user = User.query.get(uid)
+        if not user or user.username == "admin":
+            skipped += 1
+            continue
+        user.active = (action == "activate")
+        updated += 1
+    db.session.commit()
+    verb = "activé" if action == "activate" else "désactivé"
+    current_app.logger.info(
+        f"{updated} utilisateur(s) {verb}(s) en groupe par {current_user.username}"
+    )
+    if skipped:
+        flash(f"{updated} utilisateur(s) {verb}(s), {skipped} ignoré(s).", "warning")
+    else:
+        flash(f"{updated} utilisateur(s) {verb}(s).", "success")
     return redirect(url_for("admin.users"))
 
 
