@@ -100,13 +100,40 @@
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} jours</option>
         {% endfor %}
     </select>
-    {% if action_filter != 'all' or search_query %}
+    {% if action_filter != 'all' or search_query or year_filter %}
     <a href="{{ url_for('main.journal') }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
         Réinitialiser
     </a>
     {% endif %}
     <input type="hidden" name="page" value="1" />
+    {% if year_filter %}<input type="hidden" name="year" value="{{ year_filter }}" />{% endif %}
+    {% if quarter_filter %}<input type="hidden" name="quarter" value="{{ quarter_filter }}" />{% endif %}
 </form>
+
+{# ── Sélecteur Année / Trimestre ─────────────────────────────────────────── #}
+{% if available_periods %}
+<div class="mt-4 flex flex-wrap items-center gap-2">
+    <span class="text-xs font-semibold uppercase tracking-wide text-slate-400 mr-1">Période :</span>
+    <a href="{{ url_for('main.journal', action=action_filter, search=search_query, per_page=per_page) }}"
+       class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition {{ 'bg-slate-700 text-white shadow-sm' if not year_filter else 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50' }}">
+        Tout
+    </a>
+    {% for year, quarters in available_periods.items() %}
+    <div class="flex items-center gap-1 rounded-2xl border border-slate-100 bg-slate-50 px-2 py-1">
+        <a href="{{ url_for('main.journal', action=action_filter, search=search_query, per_page=per_page, year=year) }}"
+           class="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold transition {{ 'bg-sky-500 text-white shadow-sm' if year_filter == year and not quarter_filter else 'text-slate-700 hover:bg-white hover:shadow-sm' }}">
+            {{ year }}
+        </a>
+        {% for q in quarters %}
+        <a href="{{ url_for('main.journal', action=action_filter, search=search_query, per_page=per_page, year=year, quarter=q) }}"
+           class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold transition {{ 'bg-sky-500 text-white shadow-sm' if year_filter == year and quarter_filter == q else 'text-slate-500 hover:bg-white hover:text-slate-700 hover:shadow-sm' }}">
+            T{{ q }}
+        </a>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
 
 {% if logs_by_month and logs_by_month|length > 0 %}
 <div class="mt-6 space-y-6">
@@ -449,20 +476,16 @@
 {% if total_pages > 1 %}
 <div class="mt-6 flex items-center justify-center gap-2">
     {% if page > 1 %}
-    <a href="{{ url_for('main.journal', page=page-1, action=action_filter, search=search_query) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+    <a href="{{ url_for('main.journal', page=page-1, action=action_filter, search=search_query, per_page=per_page, year=year_filter, quarter=quarter_filter) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
         </svg>
         Précédent
     </a>
     {% endif %}
-    
-    <span class="text-sm text-slate-500">
-        Page {{ page }} sur {{ total_pages }}
-    </span>
-    
+    <span class="text-sm text-slate-500">Page {{ page }} sur {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="{{ url_for('main.journal', page=page+1, action=action_filter, search=search_query) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+    <a href="{{ url_for('main.journal', page=page+1, action=action_filter, search=search_query, per_page=per_page, year=year_filter, quarter=quarter_filter) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
         Suivant
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

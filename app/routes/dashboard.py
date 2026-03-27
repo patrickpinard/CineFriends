@@ -332,6 +332,8 @@ def journal():
 
     action_filter = request.args.get("action", "all").lower()
     search_query = request.args.get("search", "").strip()
+    year_filter = request.args.get("year", type=int)
+    quarter_filter = request.args.get("quarter", type=int)
     page = max(1, int(request.args.get("page", 1)))
     per_page = int(request.args.get("per_page", 7))
     if per_page not in (7, 14, 30, 50):
@@ -342,6 +344,21 @@ def journal():
         flash("Le fichier de log n'a pas encore de données métier.", "info")
     elif not _LOG_FILE.exists():
         flash("Le fichier de log n'existe pas encore.", "info")
+
+    # ── Périodes disponibles (année + trimestre) ──────────────────────────────
+    _periods: dict = {}
+    for log in logs:
+        if log["timestamp"]:
+            y = log["timestamp"].year
+            q = (log["timestamp"].month - 1) // 3 + 1
+            _periods.setdefault(y, set()).add(q)
+    available_periods = {y: sorted(_periods[y]) for y in sorted(_periods.keys(), reverse=True)}
+
+    # ── Filtre par année / trimestre ─────────────────────────────────────────
+    if year_filter:
+        logs = [l for l in logs if l["timestamp"] and l["timestamp"].year == year_filter]
+        if quarter_filter in (1, 2, 3, 4):
+            logs = [l for l in logs if (l["timestamp"].month - 1) // 3 + 1 == quarter_filter]
 
     logs_by_month_paginated, sorted_days, logs_by_day = _group_logs_by_month(logs, page, per_page)
     logs_by_day_paginated = [
@@ -366,6 +383,9 @@ def journal():
         total_pages=total_pages,
         action_filter=action_filter,
         search_query=search_query,
+        year_filter=year_filter,
+        quarter_filter=quarter_filter,
+        available_periods=available_periods,
         today=today,
         yesterday=yesterday,
     )
