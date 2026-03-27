@@ -35,7 +35,7 @@ migrate = Migrate()
 #     default_limits=["200 per day", "50 per hour"],
 #     storage_uri=os.getenv("RATELIMIT_STORAGE_URL", "memory://")
 # )
-limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter = Limiter(key_func=get_remote_address, default_limits=["2000 per day", "500 per hour"])
 cache = Cache()
 
 
