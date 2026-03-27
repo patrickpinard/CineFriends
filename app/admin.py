@@ -12,7 +12,7 @@ from werkzeug.security import generate_password_hash
 from . import db, limiter
 from .forms import BroadcastNotificationForm, ProfileForm
 from .mailer import send_email
-from .models import User
+from .models import Notification, User
 from .services import create_notification, notify_admins
 from .utils import delete_avatar, populate_form_from_user, save_avatar
 
@@ -123,6 +123,42 @@ def users():
 
     tab = request.args.get("tab", "all")
     pending_count = User.query.filter_by(active=False).count()
+
+    # ── Tab "Dashboard" ───────────────────────────────────────────────────────
+    if tab == "dashboard":
+        stats = {
+            "total": User.query.count(),
+            "active": User.query.filter_by(active=True).count(),
+            "pending": User.query.filter_by(active=False).count(),
+            "admins": User.query.filter_by(role="admin", active=True).count(),
+            "recent_logins": (
+                User.query.filter(User.last_login.isnot(None))
+                .order_by(User.last_login.desc())
+                .limit(5)
+                .all()
+            ),
+            "broadcasts": (
+                Notification.query.filter_by(audience="global")
+                .order_by(Notification.created_at.desc())
+                .limit(3)
+                .all()
+            ),
+        }
+        return render_template(
+            "dashboard/users.html",
+            tab=tab,
+            pending_count=pending_count,
+            stats=stats,
+            users=[],
+            pagination=None,
+            filters={},
+            groups=[],
+            pending_total=0,
+            pending_pagination=None,
+            search="",
+            today=None,
+            yesterday=None,
+        )
 
     # ── Tab "En attente" ─────────────────────────────────────────────────────
     if tab == "pending":

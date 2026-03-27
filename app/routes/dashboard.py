@@ -16,7 +16,7 @@ from flask_login import current_user, login_required
 
 from . import main_bp
 from .. import db
-from ..models import User, Notification
+from ..models import Notification
 
 
 # ---------------------------------------------------------------------------
@@ -42,24 +42,7 @@ def invalidate_settings_cache() -> None:
 @login_required
 def dashboard():
     stats = {}
-    if current_user.role == "admin":
-        stats["total"] = User.query.count()
-        stats["active"] = User.query.filter_by(active=True).count()
-        stats["pending"] = User.query.filter_by(active=False).count()
-        stats["admins"] = User.query.filter_by(role="admin", active=True).count()
-        stats["recent_logins"] = (
-            User.query.filter(User.last_login.isnot(None))
-            .order_by(User.last_login.desc())
-            .limit(5)
-            .all()
-        )
-        stats["broadcasts"] = (
-            Notification.query.filter_by(audience="global")
-            .order_by(Notification.created_at.desc())
-            .limit(3)
-            .all()
-        )
-    else:
+    if current_user.role != "admin":
         stats["unread"] = (
             Notification.query
             .filter(
