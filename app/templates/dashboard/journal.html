@@ -29,7 +29,7 @@
             {% set ns = namespace(count=0) %}
             {% for t in admin_pending_tasks %}{% if t.type == 'pending_users' %}{% set ns.count = t.count %}{% endif %}{% endfor %}
             {% if ns.count > 0 %}
-            <span class="inline-flex h-5 min-w-[1.375rem] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[0.65rem] font-bold text-white shadow-sm">{{ ns.count }}</span>
+            <span class="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[0.6rem] font-extrabold leading-none tabular-nums text-white ring-2 ring-rose-200 shadow-sm">{{ ns.count }}</span>
             {% endif %}
         </a>
         <a href="{{ url_for('main.journal') }}"
