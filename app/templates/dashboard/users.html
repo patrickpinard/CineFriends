@@ -461,9 +461,9 @@
 {% endif %}
 
 {# ════════════════════════════════════════════════════════════════════════════
-   TAB : TOUS LES UTILISATEURS (fin du if tab == 'pending')
+   TAB : TOUS LES UTILISATEURS
    ════════════════════════════════════════════════════════════════════════════ #}
-{% else %}
+{% elif tab != 'dashboard' %}
 
 <form method="get" class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm" data-filter-form>
     <div class="flex flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
@@ -919,6 +919,6 @@
 })();
 </script>
 
-{% endif %}{# end tab != 'pending' #}
+{% endif %}{# end tabs #}
 
 {% endblock %}
