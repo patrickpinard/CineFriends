@@ -54,7 +54,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
         </svg>
-        <span>{{ total_logs }} entrée{{ 's' if total_logs != 1 else '' }} métier — {{ total_days }} jour{{ 's' if total_days != 1 else '' }} — {{ total_lines }} ligne{{ 's' if total_lines != 1 else '' }} au total</span>
+        <span>{{ total_logs }} entrée{{ 's' if total_logs != 1 else '' }} — {{ total_days }} jour{{ 's' if total_days != 1 else '' }} — {{ total_lines }} ligne{{ 's' if total_lines != 1 else '' }} au total</span>
     </div>
     <div class="flex items-center gap-2">
         <a href="{{ url_for('main.journal_export', format='csv', action=action_filter, search=search_query) }}"
