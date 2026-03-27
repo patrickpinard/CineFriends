@@ -127,14 +127,19 @@ def users():
     # ── Tab "En attente" ─────────────────────────────────────────────────────
     if tab == "pending":
         search = request.args.get("q", "").strip()
+        page = request.args.get("page", 1, type=int)
+        per_page = 20
+
         query = User.query.filter_by(active=False)
         if search:
             like = f"%{search}%"
             query = query.filter(db.or_(User.username.ilike(like), User.email.ilike(like)))
-        pending_users = query.order_by(User.created_at.desc()).all()
+        pending_pagination = query.order_by(User.created_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
 
         by_day: dict = defaultdict(list)
-        for u in pending_users:
+        for u in pending_pagination.items:
             day = u.created_at.date() if u.created_at else datetime.utcnow().date()
             by_day[day].append(u)
         sorted_days = sorted(by_day.keys(), reverse=True)
@@ -147,7 +152,8 @@ def users():
             tab=tab,
             pending_count=pending_count,
             groups=groups,
-            pending_total=len(pending_users),
+            pending_total=pending_pagination.total,
+            pending_pagination=pending_pagination,
             search=search,
             today=today,
             yesterday=yesterday,
