@@ -113,36 +113,6 @@
                     <span class="nav-label font-semibold transition group-hover:text-sky-700">Automatisation</span>
                 </a>
                 {% endif %}
-                <a href="{{ url_for('main.camera') }}"
-                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint in ['main.camera', 'main.camera_feed'] else '' }}"
-                    title="Caméra">
-                    <span
-                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint in ['main.camera', 'main.camera_feed'] else '' }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="m15.75 10.5 4.5-3v9l-4.5-3m-9 3h6.75A2.25 2.25 0 0 0 15.75 14.25V9.75A2.25 2.25 0 0 0 13.5 7.5H6.75A2.25 2.25 0 0 0 4.5 9.75v4.5A2.25 2.25 0 0 0 6.75 16.5z" />
-                        </svg>
-                    </span>
-                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Caméra</span>
-                </a>
-                {% if is_admin %}
-                <a href="{{ url_for('main.settings') }}"
-                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.settings' else '' }}"
-                    title="Hardware">
-                    <span
-                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.settings' else '' }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M9.594 3.94c.09-.54.56-.94 1.11-.94h2.59c.55 0 1.02.4 1.11.94l.21 1.26a1.13 1.13 0 0 0 1.13.94h1.05c.7 0 1.26.56 1.26 1.26v2.2c0 .43-.22.83-.58 1.06l-.9.58a1.13 1.13 0 0 0 0 1.92l.9.58c.36.23.58.63.58 1.06v2.2c0 .7-.56 1.26-1.26 1.26H15.7c-.55 0-1.02.4-1.11.94l-.21 1.26c-.09.54-.56.94-1.11.94h-2.59c-.55 0-1.02-.4-1.11-.94l-.21-1.26a1.13 1.13 0 0 0-1.13-.94H6.68a1.26 1.26 0 0 1-1.26-1.26v-2.2c0-.43.22-.83.58-1.06l.9-.58a1.13 1.13 0 0 0 0-1.92l-.9-.58a1.26 1.26 0 0 1-.58-1.06v-2.2c0-.7.56-1.26 1.26-1.26h1.05a1.13 1.13 0 0 0 1.13-.94l.21-1.26z" />
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5z" />
-                        </svg>
-                    </span>
-                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Hardware</span>
-                </a>
-                {% endif %}
                 {% if is_admin %}
                 {# ── Administration (regroupe Utilisateurs + En attente + Journal) ── #}
                 {% set _is_admin_section = request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user', 'main.journal', 'admin.broadcast_notification'] %}
@@ -452,34 +422,6 @@
                 <span>Automatisation</span>
             </a>
             {% endif %}
-            <a href="{{ url_for('main.camera') }}"
-                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint in ['main.camera', 'main.camera_feed'] else '' }}">
-                <span
-                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="m15.75 10.5 4.5-3v9l-4.5-3m-9 3h6.75A2.25 2.25 0 0 0 15.75 14.25V9.75A2.25 2.25 0 0 0 13.5 7.5H6.75A2.25 2.25 0 0 0 4.5 9.75v4.5A2.25 2.25 0 0 0 6.75 16.5z" />
-                    </svg>
-                </span>
-                <span>Caméra</span>
-            </a>
-            {% if is_admin %}
-            <a href="{{ url_for('main.settings') }}"
-                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.settings' else '' }}">
-                <span
-                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M9.594 3.94c.09-.54.56-.94 1.11-.94h2.59c.55 0 1.02.4 1.11.94l.21 1.26a1.13 1.13 0 0 0 1.13.94h1.05c.7 0 1.26.56 1.26 1.26v2.2c0 .43-.22.83-.58 1.06l-.9.58a1.13 1.13 0 0 0 0 1.92l.9.58c.36.23.58.63.58 1.06v2.2c0 .7-.56 1.26-1.26 1.26H15.7c-.55 0-1.02.4-1.11.94l-.21 1.26c-.09.54-.56.94-1.11.94h-2.59c-.55 0-1.02-.4-1.11-.94l-.21-1.26a1.13 1.13 0 0 0-1.13-.94H6.68a1.26 1.26 0 0 1-1.26-1.26v-2.2c0-.43.22-.83.58-1.06l.9-.58a1.13 1.13 0 0 0 0-1.92l-.9-.58a1.26 1.26 0 0 1-.58-1.06v-2.2c0-.7.56-1.26 1.26-1.26h1.05a1.13 1.13 0 0 0 1.13-.94l.21-1.26z" />
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M12 15.75a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5z" />
-                    </svg>
-                </span>
-                <span>Hardware</span>
-            </a>
-            {% endif %}
             {% if is_admin %}
             {# ── Administration (regroupe Utilisateurs + Tâches + Journal) ── #}
             {% set _is_admin_section_mobile = request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user', 'main.journal', 'admin.broadcast_notification'] %}
@@ -541,18 +483,6 @@
                             </svg>
                         </span>
                         <span class="mt-0.5">Graphiques</span>
-                    </a>
-                    <a href="{{ url_for('main.camera') }}"
-                        class="flex flex-col items-center text-[10px] font-semibold transition {{ 'text-teal-600' if request.endpoint in ['main.camera', 'main.camera_feed'] else 'text-slate-400 hover:text-teal-500' }}">
-                        <span
-                            class="flex h-9 w-9 items-center justify-center rounded-lg border shadow-sm text-slate-500 {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint in ['main.camera', 'main.camera_feed'] else 'border-slate-200 bg-white' }}">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor" stroke-width="1.5">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="m15.75 10.5 4.5-3v9l-4.5-3m-9 3h6.75A2.25 2.25 0 0 0 15.75 14.25V9.75A2.25 2.25 0 0 0 13.5 7.5H6.75A2.25 2.25 0 0 0 4.5 9.75v4.5A2.25 2.25 0 0 0 6.75 16.5z" />
-                            </svg>
-                        </span>
-                        <span class="mt-0.5">Caméra</span>
                     </a>
                 </div>
             </div>

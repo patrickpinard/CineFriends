@@ -54,17 +54,6 @@ def automation():
     return render_template("dashboard/automation.html")
 
 
-@main_bp.route("/camera")
-@login_required
-def camera():
-    return render_template("dashboard/camera.html")
-
-
-@main_bp.route("/parametres")
-@login_required
-def settings():
-    return render_template("dashboard/settings.html")
-
 
 # ---------------------------------------------------------------------------
 # Journal d'activité
