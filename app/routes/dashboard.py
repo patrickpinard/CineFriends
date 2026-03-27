@@ -61,6 +61,9 @@ def automation():
 
 # Patterns pour identifier les actions métier pertinentes
 _ACTION_PATTERNS: dict[str, list[str]] = {
+    "user_registered": [
+        r"Nouvelle inscription",
+    ],
     "user_created": [
         r"Création d'utilisateur réussie",
         r"Utilisateur créé",
@@ -73,20 +76,18 @@ _ACTION_PATTERNS: dict[str, list[str]] = {
         r"Utilisateur mis à jour",
         r"Profil utilisateur mis à jour",
         r"a modifié",
-        r"Utilisateur activé",
-        r"Utilisateur désactivé",
     ],
     "user_deleted": [
         r"Suppression d'utilisateur",
         r"Utilisateur supprimé",
         r"a supprimé le compte",
+        r"Inscription.*rejetée par",
     ],
     "login": [
         r"Connexion réussie",
         r"s'est connecté",
         r"last_login",
         r"Utilisateur ajouté à la session",
-        r"Connexion réussie: Utilisateur",
     ],
     "logout": [
         r"Déconnexion:",
@@ -96,16 +97,16 @@ _ACTION_PATTERNS: dict[str, list[str]] = {
         r"mot de passe.*réinitialisé",
         r"reset.*password",
         r"réinitialisation.*mot de passe",
+        r"Réinitialisation de mot de passe",
     ],
     "account_activated": [
         r"Compte activé",
         r"accès.*activé",
-        r"Utilisateur activé",
+        r"Compte.*approuvé par",
     ],
     "account_deactivated": [
         r"Compte désactivé",
         r"accès.*désactivé",
-        r"Utilisateur désactivé",
     ],
     "twofa_enabled": [
         r"Double authentification.*activée",
@@ -124,6 +125,8 @@ _ACTION_PATTERNS: dict[str, list[str]] = {
     "user_exported": [
         r"Export (CSV|JSON) utilisateurs",
         r"Export.*utilisateurs par",
+        r"Export (CSV|JSON) du journal par",
+        r"Export.*journal par",
     ],
     "user_imported": [
         r"Import utilisateurs par",
