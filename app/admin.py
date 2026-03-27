@@ -372,6 +372,39 @@ def import_users():
     return redirect(url_for("admin.users"))
 
 
+@admin_bp.route("/utilisateurs/supprimer-selection", methods=["POST"])
+@login_required
+def delete_users_bulk():
+    ids_raw = request.form.getlist("user_ids")
+    ids = []
+    for id_str in ids_raw:
+        try:
+            ids.append(int(id_str))
+        except ValueError:
+            pass
+    if not ids:
+        flash("Aucun utilisateur sélectionné.", "warning")
+        return redirect(url_for("admin.users"))
+    deleted = skipped = 0
+    for uid in ids:
+        user = User.query.get(uid)
+        if not user or user.username == "admin":
+            skipped += 1
+            continue
+        delete_avatar(user.avatar_filename)
+        db.session.delete(user)
+        deleted += 1
+    db.session.commit()
+    current_app.logger.info(
+        f"Suppression groupée de {deleted} utilisateur(s) par {current_user.username}"
+    )
+    if skipped:
+        flash(f"{deleted} utilisateur(s) supprimé(s), {skipped} ignoré(s) (compte admin protégé).", "warning")
+    else:
+        flash(f"{deleted} utilisateur(s) supprimé(s).", "success")
+    return redirect(url_for("admin.users"))
+
+
 @admin_bp.route("/utilisateurs/nouveau", methods=["GET", "POST"])
 @limiter.limit("100 per hour")
 @login_required

@@ -15,6 +15,8 @@ from flask import Response, current_app, flash, make_response, redirect, render_
 from flask_login import current_user, login_required
 
 from . import main_bp
+from .. import db
+from ..models import User, Notification
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +41,37 @@ def invalidate_settings_cache() -> None:
 @main_bp.route("/")
 @login_required
 def dashboard():
-    return render_template("dashboard/index.html")
+    stats = {}
+    if current_user.role == "admin":
+        stats["total"] = User.query.count()
+        stats["active"] = User.query.filter_by(active=True).count()
+        stats["pending"] = User.query.filter_by(active=False).count()
+        stats["admins"] = User.query.filter_by(role="admin", active=True).count()
+        stats["recent_logins"] = (
+            User.query.filter(User.last_login.isnot(None))
+            .order_by(User.last_login.desc())
+            .limit(5)
+            .all()
+        )
+        stats["broadcasts"] = (
+            Notification.query.filter_by(audience="global")
+            .order_by(Notification.created_at.desc())
+            .limit(3)
+            .all()
+        )
+    else:
+        stats["unread"] = (
+            Notification.query
+            .filter(
+                db.or_(
+                    Notification.user_id == current_user.id,
+                    Notification.audience == "global"
+                )
+            )
+            .filter_by(read=False)
+            .count()
+        )
+    return render_template("dashboard/index.html", stats=stats)
 
 
 @main_bp.route("/graphiques")
