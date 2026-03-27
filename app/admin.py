@@ -1,8 +1,11 @@
+import csv
+import io
+import json
 import secrets
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, make_response, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from werkzeug.security import generate_password_hash
 
@@ -204,6 +207,163 @@ def users():
         today=None,
         yesterday=None,
     )
+
+
+@admin_bp.route("/utilisateurs/export")
+@login_required
+def export_users():
+    """Export de la liste des utilisateurs au format CSV ou JSON (admin uniquement)."""
+    fmt = request.args.get("format", "csv").lower()
+    search = request.args.get("q", "").strip()
+    role = request.args.get("role", "")
+    status = request.args.get("status", "")
+
+    query = User.query
+    if search:
+        like = f"%{search}%"
+        query = query.filter(db.or_(User.username.ilike(like), User.email.ilike(like)))
+    if role in {"admin", "user"}:
+        query = query.filter_by(role=role)
+    if status == "active":
+        query = query.filter_by(active=True)
+    elif status == "inactive":
+        query = query.filter_by(active=False)
+    all_users = query.order_by(User.username.asc()).all()
+
+    def _fmt_dt(dt):
+        return dt.strftime("%Y-%m-%d %H:%M:%S") if dt else ""
+
+    rows = [
+        {
+            "username":      u.username or "",
+            "email":         u.email or "",
+            "role":          u.role or "",
+            "actif":         "oui" if u.active else "non",
+            "prenom":        u.first_name or "",
+            "nom":           u.last_name or "",
+            "telephone":     u.phone or "",
+            "entreprise":    u.company or "",
+            "poste":         u.job_title or "",
+            "2fa":           "oui" if u.twofa_enabled else "non",
+            "cree_le":       _fmt_dt(u.created_at),
+            "derniere_connexion": _fmt_dt(u.last_login),
+        }
+        for u in all_users
+    ]
+
+    now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    current_app.logger.info(
+        f"Export {fmt.upper()} utilisateurs par {current_user.username} ({len(rows)} entrées)"
+    )
+
+    if fmt == "json":
+        body = json.dumps(rows, ensure_ascii=False, indent=2)
+        resp = make_response(body)
+        resp.headers["Content-Type"] = "application/json; charset=utf-8"
+        resp.headers["Content-Disposition"] = f"attachment; filename=utilisateurs_{now_str}.json"
+        return resp
+
+    output = io.StringIO()
+    fieldnames = ["username", "email", "role", "actif", "prenom", "nom",
+                  "telephone", "entreprise", "poste", "2fa", "cree_le", "derniere_connexion"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL)
+    writer.writeheader()
+    writer.writerows(rows)
+    resp = make_response(output.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = f"attachment; filename=utilisateurs_{now_str}.csv"
+    return resp
+
+
+@admin_bp.route("/utilisateurs/import", methods=["POST"])
+@login_required
+def import_users():
+    """Import d'utilisateurs depuis un fichier CSV ou JSON (admin uniquement)."""
+    uploaded = request.files.get("file")
+    if not uploaded or not uploaded.filename:
+        flash("Aucun fichier sélectionné.", "danger")
+        return redirect(url_for("admin.users"))
+
+    filename = uploaded.filename.lower()
+    content  = uploaded.read().decode("utf-8-sig")  # utf-8-sig gère le BOM Excel
+
+    # ── Parsing ──────────────────────────────────────────────────────────────
+    rows = []
+    try:
+        if filename.endswith(".json"):
+            rows = json.loads(content)
+            if not isinstance(rows, list):
+                raise ValueError("Le fichier JSON doit être un tableau d'objets.")
+        elif filename.endswith(".csv"):
+            reader = csv.DictReader(io.StringIO(content))
+            rows = list(reader)
+        else:
+            flash("Format non supporté. Utilisez un fichier .csv ou .json.", "danger")
+            return redirect(url_for("admin.users"))
+    except Exception as exc:
+        flash(f"Erreur de lecture du fichier : {exc}", "danger")
+        return redirect(url_for("admin.users"))
+
+    # ── Traitement ligne par ligne ────────────────────────────────────────────
+    created = skipped = errors = 0
+    error_details = []
+
+    for i, row in enumerate(rows, start=1):
+        username = (row.get("username") or "").strip()
+        if not username:
+            errors += 1
+            error_details.append(f"Ligne {i} : username manquant.")
+            continue
+
+        if User.query.filter_by(username=username).first():
+            skipped += 1
+            continue
+
+        email = (row.get("email") or "").strip() or None
+        if email and User.query.filter_by(email=email).first():
+            errors += 1
+            error_details.append(f"Ligne {i} ({username}) : email « {email} » déjà utilisé.")
+            continue
+
+        role = row.get("role", "user").strip().lower()
+        if role not in {"admin", "user"}:
+            role = "user"
+
+        actif_raw = row.get("actif", "non").strip().lower()
+        active = actif_raw in ("oui", "true", "1", "yes")
+
+        tmp_password = secrets.token_urlsafe(16)
+        u = User(username=username)
+        u.set_password(tmp_password)
+        u.email      = email
+        u.role       = role
+        u.active     = active
+        u.first_name = (row.get("prenom") or "").strip() or None
+        u.last_name  = (row.get("nom") or "").strip() or None
+        u.phone      = (row.get("telephone") or "").strip() or None
+        u.company    = (row.get("entreprise") or "").strip() or None
+        u.job_title  = (row.get("poste") or "").strip() or None
+
+        db.session.add(u)
+        created += 1
+
+    db.session.commit()
+
+    # ── Flash récapitulatif ───────────────────────────────────────────────────
+    parts = []
+    if created:  parts.append(f"{created} créé{'s' if created > 1 else ''}")
+    if skipped:  parts.append(f"{skipped} ignoré{'s' if skipped > 1 else ''} (déjà existants)")
+    if errors:   parts.append(f"{errors} erreur{'s' if errors > 1 else ''}")
+    flash(f"Import terminé — {', '.join(parts)}.", "success" if not errors else "warning")
+
+    for detail in error_details[:5]:  # Limiter l'affichage à 5 détails
+        flash(detail, "warning")
+
+    current_app.logger.info(
+        f"Import utilisateurs par {current_user.username} — "
+        f"{created} créés, {skipped} ignorés, {errors} erreurs (fichier : {uploaded.filename})"
+    )
+    return redirect(url_for("admin.users"))
 
 
 @admin_bp.route("/utilisateurs/nouveau", methods=["GET", "POST"])
