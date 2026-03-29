@@ -1,0 +1,396 @@
+{% extends 'base.html' %}
+{% block title %}Médiathèque{% endblock %}
+{% block header_title %}Médiathèque{% endblock %}
+{% block content %}
+
+{# ── Helpers macro ─────────────────────────────────────────────────────────── #}
+{% macro sort_url(col) %}{{ url_for('movies.index', q=search, genre=genre_filter, year=year_filter, actor=actor_filter, type=type_filter, sort=col, order='asc' if (sort == col and order == 'desc') else 'desc', page=1, per_page=per_page) }}{% endmacro %}
+{% macro sort_icon(col) %}
+{% if sort == col %}
+<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline ml-0.5 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    {% if order == 'desc' %}<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+    {% else %}<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />{% endif %}
+</svg>
+{% endif %}
+{% endmacro %}
+
+<div class="space-y-4">
+
+    {# ── Barre de recherche & filtres ──────────────────────────────────────── #}
+    <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <form method="get" id="filter-form" class="flex flex-col gap-2">
+            {# Champs cachés — NE PAS inclure per_page ici (le <select> le fournit) #}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="order" value="{{ order }}">
+            <input type="hidden" name="type" id="hidden-type" value="{{ type_filter }}">
+
+            {# Ligne 1 : Recherche + Ajouter + Toggle vue #}
+            <div class="flex items-center gap-2">
+                <div class="relative flex-1">
+                    <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                        </svg>
+                    </span>
+                    <input type="text" name="q" value="{{ search }}" placeholder="Rechercher…"
+                        class="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 py-0 pl-9 pr-3 text-sm text-slate-700 shadow-sm transition focus:border-teal-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-100">
+                </div>
+                <button type="submit"
+                    class="h-9 flex-shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-teal-500 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                    <span class="hidden sm:inline">Rechercher</span>
+                </button>
+                {% if search or genre_filter or year_filter or actor_filter or type_filter %}
+                <a href="{{ url_for('movies.index') }}" title="Effacer les filtres"
+                    class="h-9 flex-shrink-0 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white w-9 text-slate-400 shadow-sm transition hover:bg-slate-50 hover:text-rose-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                </a>
+                {% endif %}
+                <div class="flex-1 hidden sm:block"></div>
+                <div class="flex-shrink-0 flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+                    <button type="button" id="btn-grid" class="view-btn flex h-8 w-9 items-center justify-center rounded-lg text-slate-500 transition" title="Vue grille">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                        </svg>
+                    </button>
+                    <button type="button" id="btn-list" class="view-btn flex h-8 w-9 items-center justify-center rounded-lg text-slate-500 transition" title="Vue liste">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                        </svg>
+                    </button>
+                </div>
+                <a href="{{ url_for('movies.upload') }}"
+                    class="flex-shrink-0 h-9 inline-flex items-center gap-1.5 rounded-xl bg-teal-500 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span class="hidden sm:inline">Ajouter</span>
+                </a>
+            </div>
+
+            {# Ligne 2 : Filtres + par page #}
+            <div class="flex flex-wrap items-center gap-2">
+
+                {# Type Film / Série #}
+                <div class="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5 gap-0.5">
+                    <a href="{{ url_for('movies.index', q=search, genre=genre_filter, year=year_filter, actor=actor_filter, sort=sort, order=order, per_page=per_page) }}"
+                       class="h-8 px-3 inline-flex items-center rounded-lg text-xs font-semibold transition {{ 'bg-white shadow-sm text-teal-600' if not type_filter else 'text-slate-500 hover:text-slate-700' }}">Tout</a>
+                    <a href="{{ url_for('movies.index', q=search, genre=genre_filter, year=year_filter, actor=actor_filter, type='film', sort=sort, order=order, per_page=per_page) }}"
+                       class="h-8 px-3 inline-flex items-center rounded-lg text-xs font-semibold transition {{ 'bg-white shadow-sm text-teal-600' if type_filter == 'film' else 'text-slate-500 hover:text-slate-700' }}">Films</a>
+                    <a href="{{ url_for('movies.index', q=search, genre=genre_filter, year=year_filter, actor=actor_filter, type='série', sort=sort, order=order, per_page=per_page) }}"
+                       class="h-8 px-3 inline-flex items-center rounded-lg text-xs font-semibold transition {{ 'bg-white shadow-sm text-teal-600' if type_filter == 'série' else 'text-slate-500 hover:text-slate-700' }}">Séries</a>
+                </div>
+
+                {# Genre #}
+                <div class="relative">
+                    <select name="genre" onchange="this.form.submit()"
+                        class="h-9 appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-8 text-sm font-medium text-slate-600 shadow-sm transition focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100 hover:bg-white" style="-webkit-appearance:none;-moz-appearance:none;background-image:none;">
+                        <option value="">Tous les genres</option>
+                        {% for g in all_genres %}
+                        <option value="{{ g }}" {% if g == genre_filter %}selected{% endif %}>{{ g }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+                    </span>
+                </div>
+
+                {# Acteur #}
+                <div class="relative">
+                    <input type="text" name="actor" id="actor-input" list="actors-list"
+                           value="{{ actor_filter }}"
+                           placeholder="Acteur…"
+                           autocomplete="off"
+                           class="h-9 w-40 rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-3 text-sm font-medium text-slate-600 shadow-sm transition focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100 hover:bg-white">
+                    <datalist id="actors-list">
+                        {% for a in all_actors %}
+                        <option value="{{ a }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+
+                {# Année #}
+                <div class="relative">
+                    <select name="year" onchange="this.form.submit()"
+                        class="h-9 appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-8 text-sm font-medium text-slate-600 shadow-sm transition focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100 hover:bg-white" style="-webkit-appearance:none;-moz-appearance:none;background-image:none;">
+                        <option value="">Toutes les années</option>
+                        {% for y in all_years %}
+                        <option value="{{ y }}" {% if y|string == year_filter %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+                    </span>
+                </div>
+
+                {# Films par page — navigation URL pour préserver tous les paramètres #}
+                <div class="relative ml-auto">
+                    <select id="per-page-select"
+                        class="h-9 appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-8 text-sm font-medium text-slate-600 shadow-sm transition focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-100 hover:bg-white" style="-webkit-appearance:none;-moz-appearance:none;background-image:none;">
+                        {% for n in per_page_opts %}
+                        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }} / page</option>
+                        {% endfor %}
+                    </select>
+                    <span class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+                    </span>
+                </div>
+
+            </div>
+        </form>
+    </div>
+
+    {# ── Contenu ──────────────────────────────────────────────────────────── #}
+    {% if movies %}
+
+    {# Vue grille #}
+    <div id="view-grid" class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {% for movie in movies %}
+        <a href="{{ url_for('movies.detail', movie_id=movie.id) }}"
+            class="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md hover:-translate-y-0.5">
+            <div class="relative aspect-[2/3] w-full flex-shrink-0 overflow-hidden bg-slate-100">
+                {% if movie.poster_url %}
+                <img src="{{ movie.poster_url }}" alt="{{ movie.title }}"
+                    class="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" draggable="false" />
+                {% else %}
+                <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                </div>
+                {% endif %}
+                {% if movie.year %}
+                <span class="absolute top-2 left-2 rounded-full bg-slate-900/70 px-2 py-0.5 text-[0.65rem] font-semibold text-white backdrop-blur-sm">{{ movie.year }}</span>
+                {% endif %}
+                {% if movie.rating %}
+                <span class="absolute top-2 right-2 flex items-center gap-0.5 rounded-full bg-amber-400/90 px-2 py-0.5 text-[0.65rem] font-bold text-white backdrop-blur-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 0 0 .95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 0 0-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 0 0-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 0 0-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 0 0 .951-.69l1.07-3.292Z" />
+                    </svg>
+                    {{ "%.1f"|format(movie.rating) }}
+                </span>
+                {% endif %}
+            </div>
+            <div class="flex flex-1 flex-col gap-1.5 p-3">
+                <p class="line-clamp-2 text-xs font-semibold leading-tight text-slate-800 group-hover:text-teal-600">{{ movie.title }}</p>
+                {% if movie.genres_list %}
+                <div class="flex flex-wrap gap-1">
+                    {% for genre in movie.genres_list[:2] %}
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[0.6rem] font-medium text-slate-500">{{ genre }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if movie.file_filename %}
+                <span class="mt-auto flex items-center gap-1 text-[0.6rem] text-teal-600 font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    {{ movie.file_size_human }}
+                </span>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+    {# Vue liste #}
+    <div id="view-list" class="hidden rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <th class="px-4 py-3 text-left">
+                        <a href="{{ sort_url('title') }}" class="inline-flex items-center gap-0.5 hover:text-teal-600 transition">
+                            Film{{ sort_icon('title') }}
+                        </a>
+                    </th>
+                    <th class="hidden px-4 py-3 text-left sm:table-cell">Genres</th>
+                    <th class="hidden px-4 py-3 text-left md:table-cell">Réalisateur</th>
+                    <th class="hidden px-4 py-3 text-left lg:table-cell">Ajouté par</th>
+                    <th class="px-4 py-3 text-center">
+                        <a href="{{ sort_url('year') }}" class="inline-flex items-center gap-0.5 hover:text-teal-600 transition">
+                            Année{{ sort_icon('year') }}
+                        </a>
+                    </th>
+                    <th class="hidden px-4 py-3 text-center sm:table-cell">
+                        <a href="{{ sort_url('rating') }}" class="inline-flex items-center gap-0.5 hover:text-teal-600 transition">
+                            Note{{ sort_icon('rating') }}
+                        </a>
+                    </th>
+                    <th class="hidden px-4 py-3 text-center lg:table-cell">
+                        <a href="{{ sort_url('downloads') }}" class="inline-flex items-center gap-0.5 hover:text-teal-600 transition">
+                            DL{{ sort_icon('downloads') }}
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-right">
+                        <a href="{{ sort_url('size') }}" class="inline-flex items-center gap-0.5 justify-end hover:text-teal-600 transition">
+                            Taille{{ sort_icon('size') }}
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for movie in movies %}
+                <tr class="group transition hover:bg-slate-50">
+                    <td class="px-4 py-3">
+                        <a href="{{ url_for('movies.detail', movie_id=movie.id) }}"
+                            class="flex items-center gap-3">
+                            {% if movie.poster_url %}
+                            <img src="{{ movie.poster_url }}" alt="" class="h-14 w-10 flex-shrink-0 rounded-lg object-cover shadow-sm" loading="lazy" draggable="false" />
+                            {% else %}
+                            <span class="flex h-14 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                </svg>
+                            </span>
+                            {% endif %}
+                            <div>
+                                <span class="font-semibold text-slate-800 group-hover:text-teal-600 line-clamp-1">{{ movie.title }}</span>
+                                {% if movie.original_title and movie.original_title != movie.title %}
+                                <p class="text-[0.65rem] text-slate-400 italic line-clamp-1">{{ movie.original_title }}</p>
+                                {% endif %}
+                            </div>
+                        </a>
+                    </td>
+                    <td class="hidden px-4 py-3 sm:table-cell">
+                        <div class="flex flex-wrap gap-1">
+                            {% for g in movie.genres_list[:2] %}
+                            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[0.65rem] font-medium text-slate-500">{{ g }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td class="hidden px-4 py-3 text-sm text-slate-500 md:table-cell">{{ movie.director or '—' }}</td>
+                    <td class="hidden px-4 py-3 text-sm text-slate-400 lg:table-cell">
+                        {% if movie.uploaded_by %}@{{ movie.uploaded_by.username }}{% else %}—{% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-center text-sm text-slate-500">{{ movie.year or '—' }}</td>
+                    <td class="hidden px-4 py-3 text-center sm:table-cell">
+                        {% if movie.rating %}
+                        <span class="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 0 0 .95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 0 0-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 0 0-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 0 0-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 0 0 .951-.69l1.07-3.292Z" />
+                            </svg>
+                            {{ "%.1f"|format(movie.rating) }}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="hidden px-4 py-3 text-center text-sm text-slate-400 lg:table-cell">
+                        {{ movie.download_count or 0 }}
+                    </td>
+                    <td class="px-4 py-3 text-right text-xs">
+                        {% if movie.file_filename %}
+                        <span class="text-teal-600 font-medium">{{ movie.file_size_human }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# ── Pagination ────────────────────────────────────────────────────────── #}
+    {% if total_pages > 1 or total > per_page %}
+    <div class="flex items-center justify-between gap-4">
+        <p class="text-xs text-slate-400">
+            {% set start = (page - 1) * per_page + 1 %}
+            {% set end = [page * per_page, total] | min %}
+            {{ start }}–{{ end }} sur {{ total }} film{{ 's' if total > 1 else '' }}
+        </p>
+        <div class="flex items-center gap-1">
+            {% if page > 1 %}
+            <a href="{{ url_for('movies.index', q=search, genre=genre_filter, year=year_filter, actor=actor_filter, type=type_filter, sort=sort, order=order, page=page-1, per_page=per_page) }}"
+               class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-teal-50 hover:text-teal-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                </svg>
+            </a>
+            {% endif %}
+            {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+            <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500 text-xs font-bold text-white shadow-sm">{{ p }}</span>
+            {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+            <a href="{{ url_for('movies.index', q=search, genre=genre_filter, year=year_filter, actor=actor_filter, type=type_filter, sort=sort, order=order, page=p, per_page=per_page) }}"
+               class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 transition hover:bg-teal-50 hover:text-teal-600">{{ p }}</a>
+            {% elif p == page - 3 or p == page + 3 %}
+            <span class="inline-flex h-8 w-8 items-center justify-center text-xs text-slate-400">…</span>
+            {% endif %}
+            {% endfor %}
+            {% if page < total_pages %}
+            <a href="{{ url_for('movies.index', q=search, genre=genre_filter, year=year_filter, actor=actor_filter, type=type_filter, sort=sort, order=order, page=page+1, per_page=per_page) }}"
+               class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-teal-50 hover:text-teal-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                </svg>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <p class="text-xs text-slate-400 text-right">{{ total }} film{{ 's' if total > 1 else '' }}</p>
+    {% endif %}
+
+    {% else %}
+    <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+        <p class="mt-3 text-sm font-medium text-slate-500">Aucun film trouvé</p>
+        {% if search or genre_filter or year_filter %}
+        <a href="{{ url_for('movies.index') }}" class="mt-2 text-xs text-teal-500 hover:underline">Effacer les filtres</a>
+        {% else %}
+        <a href="{{ url_for('movies.upload') }}" class="mt-3 inline-flex items-center gap-1.5 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-400">
+            Ajouter le premier film
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    // Changement de per_page : navigue vers la même URL en changeant per_page et page=1
+    var perPageSel = document.getElementById('per-page-select');
+    if (perPageSel) {
+        perPageSel.addEventListener('change', function () {
+            var url = new URL(window.location.href);
+            url.searchParams.set('per_page', this.value);
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        });
+    }
+
+    var KEY = 'mediatheque_view';
+    var grid = document.getElementById('view-grid');
+    var list = document.getElementById('view-list');
+    var btnGrid = document.getElementById('btn-grid');
+    var btnList = document.getElementById('btn-list');
+
+    function setView(v) {
+        var isGrid = v !== 'list';
+        grid.classList.toggle('hidden', !isGrid);
+        list.classList.toggle('hidden', isGrid);
+        btnGrid.classList.toggle('bg-white', isGrid);
+        btnGrid.classList.toggle('shadow-sm', isGrid);
+        btnGrid.classList.toggle('text-teal-600', isGrid);
+        btnGrid.classList.toggle('text-slate-500', !isGrid);
+        btnList.classList.toggle('bg-white', !isGrid);
+        btnList.classList.toggle('shadow-sm', !isGrid);
+        btnList.classList.toggle('text-teal-600', !isGrid);
+        btnList.classList.toggle('text-slate-500', isGrid);
+        try { localStorage.setItem(KEY, isGrid ? 'grid' : 'list'); } catch (e) {}
+    }
+
+    var saved = 'grid';
+    try { saved = localStorage.getItem(KEY) || 'grid'; } catch (e) {}
+    setView(saved);
+
+    if (btnGrid) btnGrid.addEventListener('click', function () { setView('grid'); });
+    if (btnList) btnList.addEventListener('click', function () { setView('list'); });
+})();
+</script>
+
+{% endblock %}

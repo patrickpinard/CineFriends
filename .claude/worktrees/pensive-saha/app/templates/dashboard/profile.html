@@ -1,0 +1,792 @@
+{% extends 'base.html' %}
+{% set is_admin_edit = user is not none and user != current_user if user is defined else False %}
+{% set is_creating_user = user is none and request.endpoint and 'admin' in request.endpoint if user is defined else False %}
+{% set target_user = user if user is defined and user is not none else current_user %}
+{% block title %}{% if is_creating_user %}Créer un utilisateur{% elif is_admin_edit %}Modifier l'utilisateur{% else %}Profil{% endif %}{% endblock %}
+{% block header_title %}{% if is_creating_user %}Créer un utilisateur{% elif is_admin_edit and user is defined %}Modifier l'utilisateur : {{ user.username }}{% else %}Mon profil{% endif %}{% endblock %}
+{% block content %}
+{% set is_admin_edit = user is not none and user != current_user if user is defined else False %}
+{% set is_creating_user = user is none and request.endpoint and 'admin' in request.endpoint if user is defined else False %}
+{% set target_user = user if user is defined and user is not none else current_user %}
+<a href="{% if is_admin_edit %}{{ url_for('admin.users') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" id="back-link" class="text-sm text-teal-600 hover:text-teal-500">← Retour</a>
+
+<div class="mt-4">
+    <form method="post" enctype="multipart/form-data" id="profile-form">
+        {{ form.hidden_tag() }}
+        
+        <!-- Onglets -->
+        <div class="mb-6">
+            <nav class="flex flex-wrap gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1" role="tablist">
+                <button type="button"
+                    class="tab-button inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition bg-white text-slate-900 shadow-sm"
+                    data-tab="photo" role="tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                    </svg>
+                    Photo
+                </button>
+                <button type="button"
+                    class="tab-button inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700"
+                    data-tab="personal" role="tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                    Privé
+                </button>
+                <button type="button"
+                    class="tab-button inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700"
+                    data-tab="professional" role="tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 .414-.336.75-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4.25m0 0h4.125c.621 0 1.125-.504 1.125-1.125V11.25c0-4.556-4.03-8.25-9-8.25S3 6.694 3 11.25v1.775c0 .621.504 1.125 1.125 1.125h4.125m4.125 0a.75.75 0 0 1-.375.65v2.199a.75.75 0 0 0 .375.65h4.5a.75.75 0 0 0 .375-.65v-2.2a.75.75 0 0 1 .375-.65m4.125 0H12" />
+                    </svg>
+                    Professionnel
+                </button>
+                <button type="button"
+                    class="tab-button inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide transition text-slate-500 hover:text-slate-700"
+                    data-tab="security" role="tab">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25z" />
+                    </svg>
+                    Sécurité
+                </button>
+            </nav>
+        </div>
+
+        <!-- Contenu des onglets -->
+        <div class="space-y-4">
+            <!-- Onglet Photo -->
+            <div id="tab-photo" class="tab-content">
+                <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm relative">
+                    <h2 class="text-lg font-semibold text-slate-900 mb-6">Photo</h2>
+                    
+                    <!-- Photo de profil -->
+                    <div class="flex flex-col items-center md:items-start mb-4">
+                        <div class="relative group">
+                            {% if is_creating_user %}
+                            <div id="avatar-preview-btn" class="inline-flex h-32 w-32 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-300 cursor-pointer hover:border-teal-300 hover:text-teal-400 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                                </svg>
+                            </div>
+                            {% elif target_user and target_user.avatar_filename %}
+                            <div id="avatar-preview-btn" class="inline-flex h-32 w-32 overflow-hidden rounded-xl shadow-soft cursor-pointer">
+                                <img src="{{ url_for('static', filename='uploads/' ~ target_user.avatar_filename) }}" alt="Avatar" class="h-32 w-32 object-cover" />
+                            </div>
+                            {% elif target_user %}
+                            <div id="avatar-preview-btn" class="inline-flex h-32 w-32 items-center justify-center rounded-xl bg-slate-100 text-2xl font-semibold uppercase tracking-wide text-slate-500 shadow-soft cursor-pointer">
+                                {{ target_user.username[:2].upper() }}
+                            </div>
+                            {% else %}
+                            <div id="avatar-preview-btn" class="inline-flex h-32 w-32 items-center justify-center rounded-xl bg-slate-100 text-slate-300 shadow-soft cursor-pointer">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                                </svg>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="mt-4 w-full md:w-auto">
+                            {{ form.avatar(id='avatar-file-input', class_='hidden') }}
+                            {{ form.remove_avatar(id='remove-avatar-input', class_='hidden') }}
+                            {% for error in form.avatar.errors %}
+                            <p class="text-xs text-rose-500">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- Boutons en bas à droite de la carte -->
+                    <div class="flex items-center justify-between gap-4 mt-4">
+                        <p class="text-xs text-slate-400">Formats acceptés : JPG, PNG, GIF. Taille max 5&nbsp;Mo.</p>
+                        <div class="flex items-center gap-2">
+                            <label for="avatar-file-input" class="inline-flex items-center justify-center rounded-xl border border-teal-500 bg-teal-50 p-2 text-teal-600 cursor-pointer hover:bg-teal-100 transition-colors" title="Changer la photo">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                            </label>
+                            {% if target_user and target_user.avatar_filename %}
+                            <button type="button" id="remove-avatar-btn-overlay" class="inline-flex items-center justify-center rounded-xl border border-rose-500 bg-rose-50 p-2 text-rose-600 cursor-pointer hover:bg-rose-100 transition-colors" title="Supprimer la photo">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Onglet Privé -->
+            <div id="tab-personal" class="tab-content hidden">
+                <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-lg font-semibold text-slate-900 mb-6">Informations personnelles</h2>
+                    
+                    <!-- Informations de base -->
+                    <div class="mb-6 pb-6 border-b border-slate-200">
+                        <div class="grid gap-4 md:grid-cols-3 mb-4">
+                            <div>
+                                {{ form.title.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.title(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.title.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.first_name.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.first_name(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.first_name.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.last_name.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.last_name(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.last_name.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                {{ form.username.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {% if current_user.role != 'admin' and not is_admin_edit %}
+                                <input type="hidden" name="username" value="{{ current_user.username }}">
+                                {{ form.username(class_='w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed', disabled=True) }}
+                                <p class="mt-1 text-xs text-slate-400">Le nom d'utilisateur ne peut être modifié que par un administrateur.</p>
+                                {% else %}
+                                {{ form.username(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% endif %}
+                                {% for error in form.username.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.date_of_birth.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.date_of_birth(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.date_of_birth.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contacts privés -->
+                    <div class="mb-6 pb-6 border-b border-slate-200">
+                        <label class="text-sm font-medium text-slate-600 mb-2 block">Contacts</label>
+                        <div class="grid gap-4 md:grid-cols-3">
+                            <div>
+                                {{ form.phone.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.phone(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.phone.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.phone_mobile.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.phone_mobile(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.phone_mobile.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.email.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.email(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.email.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Adresse privée -->
+                    <div class="mt-6">
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">Adresse privée</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                {{ form.street.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.street(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.street.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="grid gap-4 md:grid-cols-3">
+                                <div>
+                                    {{ form.postal_code.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                    {{ form.postal_code(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                    {% for error in form.postal_code.errors %}
+                                    <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                <div>
+                                    {{ form.city.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                    {{ form.city(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                    {% for error in form.city.errors %}
+                                    <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                <div>
+                                    {{ form.country.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                    {{ form.country(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                    {% for error in form.country.errors %}
+                                    <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Onglet Professionnel -->
+            <div id="tab-professional" class="tab-content hidden">
+                <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-lg font-semibold text-slate-900 mb-6">Informations professionnelles</h2>
+                    
+                    <!-- Entreprise et poste -->
+                    <div class="grid gap-4 md:grid-cols-2 mb-6">
+                        <div>
+                            {{ form.company.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                            {{ form.company(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                            {% for error in form.company.errors %}
+                            <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        <div>
+                            {{ form.job_title.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                            {{ form.job_title(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                            {% for error in form.job_title.errors %}
+                            <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Adresse professionnelle -->
+                    <div class="mb-6 pb-6 border-b border-slate-200">
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">Adresse professionnelle</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                {{ form.street_professional.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.street_professional(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.street_professional.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="grid gap-4 md:grid-cols-3">
+                                <div>
+                                    {{ form.postal_code_professional.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                    {{ form.postal_code_professional(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                    {% for error in form.postal_code_professional.errors %}
+                                    <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                <div>
+                                    {{ form.city_professional.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                    {{ form.city_professional(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                    {% for error in form.city_professional.errors %}
+                                    <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                <div>
+                                    {{ form.country_professional.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                    {{ form.country_professional(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                    {% for error in form.country_professional.errors %}
+                                    <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contacts professionnels -->
+                    <div class="mb-6 pb-6 border-b border-slate-200">
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">Contacts professionnels</h3>
+                        
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                {{ form.email_professional.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.email_professional(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.email_professional.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.phone_professional.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.phone_professional(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.phone_professional.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Réseaux professionnels -->
+                    <div class="mb-6">
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">Réseaux professionnels</h3>
+                        
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                {{ form.website.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.website(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', placeholder='https://') }}
+                                {% for error in form.website.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.linkedin.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.linkedin(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', placeholder='https://linkedin.com/in/...') }}
+                                {% for error in form.linkedin.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Biographie -->
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">Biographie</h3>
+                        {{ form.bio.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                        {{ form.bio(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500', placeholder='Parlez-nous de votre parcours professionnel...') }}
+                        <p class="mt-1 text-xs text-slate-400">Maximum 500 caractères</p>
+                        {% for error in form.bio.errors %}
+                        <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Onglet Sécurité -->
+            <div id="tab-security" class="tab-content hidden">
+                <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-lg font-semibold text-slate-900 mb-6">Sécurité</h2>
+                    
+                    <!-- Changement de mot de passe -->
+                    <div class="mb-6 pb-6 border-b border-slate-200">
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">Changer le mot de passe</h3>
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                {{ form.password.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.password(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                <p class="mt-1 text-xs text-slate-400">
+                                    {% if is_creating_user %}
+                                        Le mot de passe est obligatoire pour créer un utilisateur.
+                                    {% else %}
+                                        Laisser vide pour conserver le mot de passe actuel.
+                                    {% endif %}
+                                </p>
+                                {% for error in form.password.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.confirm_password.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {{ form.confirm_password(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% for error in form.confirm_password.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Double authentification et Rôle -->
+                    <div class="mb-6 pb-6 border-b border-slate-200">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-base font-semibold text-slate-900">Double authentification (2FA)</h3>
+                            <div>
+                                {% if target_user and target_user.twofa_enabled %}
+                                <span class="inline-flex items-center gap-2 rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-600">
+                                    <span class="h-2 w-2 rounded-full bg-teal-500"></span> Activée
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-2 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    <span class="h-2 w-2 rounded-full bg-slate-400"></span> Désactivée
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                {% if current_user.role != 'admin' and not is_admin_edit %}
+                                <label class="inline-flex items-center gap-2 cursor-not-allowed opacity-60">
+                                    {% if target_user and target_user.twofa_enabled %}
+                                    <input type="checkbox" checked disabled class="rounded border-slate-300 text-teal-500 focus:ring-teal-500">
+                                    {% else %}
+                                    <input type="checkbox" disabled class="rounded border-slate-300 text-teal-500 focus:ring-teal-500">
+                                    {% endif %}
+                                    <span class="text-sm font-medium text-slate-500">Activer la double authentification</span>
+                                </label>
+                                <input type="hidden" name="twofa_enabled" value="{{ 'y' if target_user and target_user.twofa_enabled else '' }}">
+                                <p class="mt-2 text-xs text-slate-400">La modification de la 2FA est réservée aux administrateurs.</p>
+                                {% else %}
+                                <label class="inline-flex items-center gap-2 cursor-pointer">
+                                    {{ form.twofa_enabled(class_='rounded border-slate-300 text-teal-500 focus:ring-teal-500') }}
+                                    <span class="text-sm font-medium text-slate-700">Activer la double authentification</span>
+                                </label>
+                                <p class="mt-2 text-xs text-slate-500">La double authentification ajoute une couche de sécurité supplémentaire à votre compte.</p>
+                                {% endif %}
+                                {% for error in form.twofa_enabled.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                            <div>
+                                {{ form.role.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                {% if target_user and target_user.username == 'admin' and target_user == current_user %}
+                                <input type="hidden" name="role" value="{{ target_user.role }}">
+                                {{ form.role(class_='w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed', disabled=True) }}
+                                <p class="mt-1 text-xs text-slate-400">Le compte admin par défaut ne peut pas changer de rôle.</p>
+                                {% elif current_user.role != 'admin' and not is_admin_edit %}
+                                <input type="hidden" name="role" value="{{ current_user.role }}">
+                                {{ form.role(class_='w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed', disabled=True) }}
+                                <p class="mt-1 text-xs text-slate-400">Le rôle ne peut être modifié que par un administrateur.</p>
+                                {% else %}
+                                {{ form.role(class_='w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:ring-teal-500') }}
+                                {% endif %}
+                                {% if is_admin_edit %}
+                                <div class="mt-4">
+                                    {{ form.active.label(class_='text-sm font-medium text-slate-600 mb-1 block') }}
+                                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                                        {{ form.active(class_='rounded border-slate-300 text-teal-500 focus:ring-teal-500') }}
+                                        <span class="text-sm font-medium text-slate-700">Compte actif</span>
+                                    </label>
+                                    <p class="mt-1 text-xs text-slate-400">Un compte inactif ne peut pas se connecter.</p>
+                                    {% for error in form.active.errors %}
+                                    <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                {% for error in form.role.errors %}
+                                <p class="mt-1 text-xs text-rose-500">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Informations du compte (uniquement pour les utilisateurs existants) -->
+                    {% if target_user %}
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">Informations du compte</h3>
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Dernière connexion</p>
+                                <p class="text-sm font-medium text-slate-700">
+                                    {% if target_user.last_login %}
+                                        {{ target_user.last_login|local_datetime('%d/%m/%Y %H:%M') }}
+                                    {% else %}
+                                        Jamais connecté
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Statut du compte</p>
+                                <div>
+                                    {% if target_user.active %}
+                                    <span class="inline-flex items-center gap-2 rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-600">
+                                        <span class="h-2 w-2 rounded-full bg-teal-500"></span> Actif
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center gap-2 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        <span class="h-2 w-2 rounded-full bg-slate-400"></span> Inactif
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Boutons d'action -->
+        <div class="mt-6 flex items-center justify-end gap-3">
+            <a href="{% if is_admin_edit %}{{ url_for('admin.users') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" id="cancel-link" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-100">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                </svg>
+                Annuler
+            </a>
+            {{ form.submit(class_='inline-flex items-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-teal-400', value='Enregistrer') }}
+        </div>
+    </form>
+</div>
+
+<!-- Modale pour agrandir la photo de profil -->
+<div id="avatar-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/75 backdrop-blur-sm">
+    <div class="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6">
+        <!-- Bouton fermer -->
+        <button type="button" id="avatar-modal-close" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+        
+        <!-- Photo agrandie -->
+        <div class="flex flex-col items-center gap-6">
+            <h3 class="text-lg font-semibold text-slate-900">Photo de profil</h3>
+            <div class="relative">
+                {% if target_user and target_user.avatar_filename %}
+                <img id="avatar-modal-img" src="{{ url_for('static', filename='uploads/' ~ target_user.avatar_filename) }}" alt="Avatar" class="max-h-96 max-w-full rounded-xl shadow-lg object-contain" />
+                {% elif target_user %}
+                <div class="flex items-center justify-center h-64 w-64 rounded-xl bg-slate-100 text-4xl font-semibold uppercase tracking-wide text-slate-500 shadow-lg">
+                    {{ target_user.username[:2].upper() }}
+                </div>
+                {% else %}
+                <div class="flex items-center justify-center h-64 w-64 rounded-xl bg-slate-100 text-slate-300 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Boutons d'action -->
+            <div class="flex gap-3">
+                <label for="avatar-file-input" class="inline-flex items-center gap-2 rounded-xl border border-teal-500 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-600 cursor-pointer hover:bg-teal-100 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Changer
+                </label>
+                {% if target_user and target_user.avatar_filename %}
+                <button type="button" id="remove-avatar-btn" class="inline-flex items-center gap-2 rounded-xl border border-rose-500 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-600 cursor-pointer hover:bg-rose-100 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Supprimer
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    function initAvatarHandlers() {
+        const avatarModal = document.getElementById('avatar-modal');
+        const avatarPreviewBtn = document.getElementById('avatar-preview-btn');
+        const avatarModalClose = document.getElementById('avatar-modal-close');
+        const avatarFileInput = document.getElementById('avatar-file-input');
+        const removeAvatarInput = document.getElementById('remove-avatar-input');
+        const removeAvatarBtn = document.getElementById('remove-avatar-btn');
+        const removeAvatarBtnOverlay = document.getElementById('remove-avatar-btn-overlay');
+        
+        if (!avatarModal || !avatarPreviewBtn || !avatarModalClose) {
+            console.log('Éléments avatar manquants, arrêt de l\'initialisation');
+            return;
+        }
+        
+        // Ouvrir la modale au clic sur la photo
+        avatarPreviewBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            avatarModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        });
+        
+        
+        // Gérer le changement de fichier pour mettre à jour la prévisualisation (sans sauvegarder)
+        if (avatarFileInput) {
+            avatarFileInput.addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    // Prévisualisation immédiate : mettre à jour l'image dans la vue principale
+                    let mainImg = avatarPreviewBtn.querySelector('img');
+                    if (mainImg) {
+                        // Mettre à jour l'image existante
+                        mainImg.src = event.target.result;
+                    } else {
+                        // Si pas d'image (avatar par défaut ou vide), remplacer le contenu par une image
+                        avatarPreviewBtn.innerHTML = '<img src="' + event.target.result + '" alt="Avatar" class="h-32 w-32 object-cover rounded-xl" />';
+                    }
+                    
+                    // Mettre à jour l'image dans la modale si elle est ouverte
+                    const modalImg = document.getElementById('avatar-modal-img');
+                    if (modalImg) {
+                        modalImg.src = event.target.result;
+                        modalImg.classList.remove('hidden');
+                    }
+                    
+                    // Décocher la suppression si une nouvelle photo est sélectionnée
+                    const removeCheckbox = document.getElementById('remove-avatar-input');
+                    if (removeCheckbox) {
+                        removeCheckbox.checked = false;
+                    }
+                    
+                    // Afficher le bouton supprimer lorsqu'une photo est sélectionnée
+                    if (removeAvatarBtnOverlay) {
+                        removeAvatarBtnOverlay.classList.remove('hidden');
+                    }
+                };
+                    // Lire le fichier comme Data URL pour la prévisualisation (ne sauvegarde pas sur le serveur)
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+        }
+        
+        // Fermer la modale
+        function closeModal() {
+            avatarModal.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        
+        avatarModalClose.addEventListener('click', closeModal);
+        
+        // Fermer en cliquant sur le fond
+        avatarModal.addEventListener('click', function(e) {
+            if (e.target === avatarModal) {
+                closeModal();
+            }
+        });
+        
+        // Fermer avec Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !avatarModal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+        
+        // Gérer la suppression de l'avatar via la modale
+        if (removeAvatarBtn && removeAvatarInput) {
+        removeAvatarBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Si on est en train de cocher (supprimer), demander confirmation
+            if (!removeAvatarInput.checked) {
+                if (!confirm('Êtes-vous sûr de vouloir supprimer cette photo de profil ?')) {
+                    return; // Annuler si l'utilisateur ne confirme pas
+                }
+            }
+            
+            removeAvatarInput.checked = !removeAvatarInput.checked;
+            
+            // Mettre à jour l'affichage dans la modal
+            if (removeAvatarInput.checked) {
+                removeAvatarBtn.classList.add('bg-rose-100', 'border-rose-600');
+                removeAvatarBtn.classList.remove('bg-rose-50');
+                // Afficher l'icône vide dans la modal
+                const modalImg = document.getElementById('avatar-modal-img');
+                if (modalImg) {
+                    modalImg.src = '';
+                    modalImg.classList.add('hidden');
+                }
+                // Mettre à jour l'affichage principal aussi
+                if (avatarPreviewBtn) {
+                    avatarPreviewBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>';
+                }
+                // Réinitialiser le champ fichier
+                if (avatarFileInput) {
+                    avatarFileInput.value = '';
+                }
+                // Masquer le bouton supprimer en bas de la carte
+                if (removeAvatarBtnOverlay) {
+                    removeAvatarBtnOverlay.classList.add('hidden');
+                }
+            } else {
+                removeAvatarBtn.classList.remove('bg-rose-100', 'border-rose-600');
+                removeAvatarBtn.classList.add('bg-rose-50');
+                // Afficher le bouton supprimer en bas de la carte si on décoche
+                if (removeAvatarBtnOverlay) {
+                    removeAvatarBtnOverlay.classList.remove('hidden');
+                }
+            }
+        });
+    }
+    }
+    
+    // Initialiser quand le DOM est prêt
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAvatarHandlers);
+    } else {
+        initAvatarHandlers();
+    }
+})();
+
+// Délégation d'événements pour le bouton supprimer (hors de initAvatarHandlers pour éviter les doublons)
+(function() {
+    function handleRemoveAvatarClick(e) {
+        // Vérifier si le clic est sur le bouton supprimer ou un élément enfant
+        const removeBtn = e.target.closest('#remove-avatar-btn-overlay');
+        if (!removeBtn) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('Bouton supprimer cliqué');
+        
+        // Trouver le checkbox remove_avatar
+        const checkbox = document.getElementById('remove-avatar-input');
+        if (!checkbox) {
+            console.error('Checkbox remove_avatar introuvable');
+            alert('Erreur: impossible de trouver le champ de suppression. Veuillez recharger la page.');
+            return;
+        }
+        
+        console.log('Checkbox trouvé, état actuel:', checkbox.checked);
+        
+        // Demander confirmation avant de supprimer
+        if (!confirm('Êtes-vous sûr de vouloir supprimer cette photo de profil ?')) {
+            console.log('Suppression annulée par l\'utilisateur');
+            return;
+        }
+        
+        // Cocher le checkbox pour indiquer qu'on veut supprimer
+        checkbox.checked = true;
+        console.log('Checkbox coché:', checkbox.checked);
+        
+        // Réinitialiser le champ fichier si une photo était sélectionnée
+        const fileInput = document.getElementById('avatar-file-input');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        
+        // Afficher l'icône vide dans la prévisualisation
+        const previewBtn = document.getElementById('avatar-preview-btn');
+        if (previewBtn) {
+            previewBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0zM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>';
+        }
+        
+        // Masquer le bouton supprimer car la photo sera supprimée
+        removeBtn.classList.add('hidden');
+        console.log('Bouton supprimer masqué, photo sera supprimée à la sauvegarde');
+    }
+    
+    // Attacher l'événement une seule fois au document
+    document.addEventListener('click', handleRemoveAvatarClick);
+})();
+
+// Gestion du bouton Retour
+(function() {
+    function goBack(e) {
+        e.preventDefault();
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            // Fallback si pas d'historique
+            const backLink = document.getElementById('back-link');
+            if (backLink && backLink.href) {
+                window.location.href = backLink.href;
+            }
+        }
+    }
+    
+    const backLink = document.getElementById('back-link');
+    if (backLink) {
+        backLink.addEventListener('click', goBack);
+    }
+    
+    // Gestion du bouton Annuler
+    const cancelLink = document.getElementById('cancel-link');
+    if (cancelLink) {
+        cancelLink.addEventListener('click', goBack);
+    }
+})();
+</script>
+
+<script src="{{ url_for('static', filename='js/profile-tabs.js') }}" defer></script>
+{% endblock %}

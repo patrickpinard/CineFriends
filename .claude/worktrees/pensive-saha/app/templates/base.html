@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-slate-100 text-slate-900">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="TemplateApp" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="{{ url_for('main.generate_icon', size=180) }}" />
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('main.generate_icon', size=180) }}" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="msapplication-TileColor" content="#ffffff" />
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='img/180.png') }}" />
+    <title>{% block title %}TemplateApp{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <script>
+        // Pass server URLs to window object for external scripts (must be inline for template variables)
+        window.APP_SERVER_TIME_URL = "{{ url_for('main.server_time') }}";
+        window.CSRF_TOKEN = "{{ csrf_token() }}";
+        window.ADMIN_PENDING_TASKS = {{ admin_pending_tasks | tojson | safe }};
+        window.BROADCAST_NOTIFICATIONS = {{ broadcast_notifications | tojson | safe }};
+    </script>
+    <script defer src="{{ url_for('static', filename='js/base-init.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/page-cache.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/pwa.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/filters.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/avatar-styles.js') }}"></script>
+</head>
+
+<body class="h-full bg-gradient-to-br from-slate-100 via-white to-sky-50 antialiased">
+    {# ── Broadcast modal ───────────────────────────────────────────────────── #}
+    <div id="broadcast-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="broadcast-modal-title">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div id="broadcast-modal-card" class="w-full max-w-md rounded-3xl border bg-white p-6 shadow-2xl">
+                <div class="flex items-start gap-4">
+                    <span id="broadcast-modal-icon" class="mt-0.5 flex-shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-2xl">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 0 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
+                        </svg>
+                    </span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-semibold uppercase tracking-widest mb-1" id="broadcast-modal-badge">Notification globale</p>
+                        <h2 class="text-base font-semibold text-slate-900" id="broadcast-modal-title"></h2>
+                        <p class="mt-2 text-sm text-slate-600" id="broadcast-modal-message"></p>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button type="button" id="broadcast-modal-accept"
+                        class="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        J'ai compris
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex min-h-screen">
+        <aside
+            class="fixed inset-y-0 left-0 z-30 hidden border-r border-slate-200 bg-white/90 backdrop-blur lg:flex lg:flex-col"
+            data-sidebar>
+            <div class="flex items-center gap-3 px-6 pb-6" style="padding-top: calc(var(--safe-area-top) + 1.75rem);">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo TemplateApp"
+                    class="h-10 w-10 rounded-2xl object-contain" />
+                <span class="sidebar-title text-xl font-semibold text-slate-900">TemplateApp</span>
+            </div>
+            <nav class="flex-1 space-y-1 px-4 pb-6 text-sm font-medium text-slate-600">
+                <a href="{{ url_for('main.dashboard') }}"
+                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.dashboard' else '' }}"
+                    title="DashBoard">
+                    <span
+                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.dashboard' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M3 9.75 12 3l9 6.75M4.5 10.5V21h15V10.5" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Dashboard</span>
+                </a>
+                <a href="{{ url_for('main.charts') }}"
+                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.charts' else '' }}"
+                    title="Graphiques">
+                    <span
+                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.charts' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M3 19.5V4.5M21 19.5H3M7.5 15l3-6 3 4.5 3-7.5" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Graphiques</span>
+                </a>
+                {% if is_admin %}
+                <a href="{{ url_for('main.automation') }}"
+                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if request.endpoint == 'main.automation' else '' }}"
+                    title="Automatisation">
+                    <span
+                        class="nav-icon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if request.endpoint == 'main.automation' else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M8.5 7h11M4.5 7h.01M8.5 12h11M4.5 12h.01M8.5 17h11M4.5 17h.01" />
+                        </svg>
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">Automatisation</span>
+                </a>
+                {% endif %}
+                {% if is_admin %}
+                {# ── Administration (regroupe Utilisateurs + En attente + Journal) ── #}
+                {% set _is_admin_section = request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user', 'main.journal', 'admin.broadcast_notification'] %}
+                <a href="{{ url_for('admin.users') }}"
+                    class="nav-link group flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-sky-100 hover:text-sky-700 {{ 'bg-sky-100 text-sky-700 shadow-sm ring-1 ring-sky-200' if _is_admin_section else '' }}"
+                    title="Administration">
+                    <span class="nav-icon relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition group-hover:border-sky-200 group-hover:text-sky-600 {{ 'border-sky-200 bg-white text-sky-600 ring-1 ring-sky-200' if _is_admin_section else '' }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        </svg>
+                        {% set ns = namespace(count=0) %}
+                        {% for t in admin_pending_tasks %}{% if t.type == 'pending_users' %}{% set ns.count = t.count %}{% endif %}{% endfor %}
+                        {% if ns.count > 0 %}
+                        <span class="absolute -top-1.5 -right-1.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.55rem] font-black leading-none tabular-nums text-white ring-2 ring-white shadow-sm">{{ ns.count }}</span>
+                        {% endif %}
+                    </span>
+                    <span class="nav-label font-semibold transition group-hover:text-sky-700">
+                        Administration
+                    </span>
+                </a>
+                {% endif %}
+            </nav>
+        </aside>
+
+        <div class="layout-shell flex min-h-screen flex-1 flex-col">
+            <header
+                class="fixed top-0 left-0 right-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur lg:left-72"
+                data-app-header style="padding-top: 0;">
+                <div class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8" style="padding-top: max(env(safe-area-inset-top, 0px), 0.5rem); min-height: calc(4rem + env(safe-area-inset-top, 0px));">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        <button type="button"
+                            class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 lg:hidden"
+                            data-mobile-nav-toggle>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                            </svg>
+                        </button>
+                        <button type="button"
+                            class="hidden rounded-lg border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-50 lg:inline-flex"
+                            data-sidebar-toggle aria-label="Basculer le menu">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M19.5 12h-15m0 0L9 6m-4.5 6L9 18" />
+                            </svg>
+                        </button>
+                        <div class="text-xs sm:text-sm font-semibold uppercase tracking-wide text-slate-500 truncate" style="line-height: 1.3;">
+                            {% block header_title %}{% endblock %}
+                        </div>
+                    </div>
+                    <div class="relative flex items-center gap-2 flex-1 justify-end">
+                        {% if current_user.is_authenticated %}
+                        {% set palette = avatar_palette(current_user.username or '') %}
+                        <button type="button"
+                            class="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
+                            data-profile-toggle>
+                            {% if current_user.avatar_filename %}
+                            <span class="inline-flex h-9 w-9 overflow-hidden rounded-full shadow-soft"
+                                data-avatar-shadow-only="{{ palette.shadow }}">
+                                <img src="{{ url_for('static', filename='uploads/' ~ current_user.avatar_filename) }}"
+                                    alt="Avatar" class="h-9 w-9 object-cover" />
+                            </span>
+                            {% else %}
+                            <span
+                                class="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold uppercase tracking-wide text-white shadow-soft"
+                                data-avatar-gradient="{{ palette.gradient }}" data-avatar-shadow="{{ palette.shadow }}">
+                                {{ current_user.username[:2].upper() }}
+                            </span>
+                            {% endif %}
+                            <span class="hidden sm:flex sm:flex-col sm:items-start">
+                                <span>{{ current_user.username }}</span>
+                                {% if current_user.email %}
+                                <span class="text-xs font-normal text-slate-400">{{ current_user.email }}</span>
+                                {% endif %}
+                            </span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="m6 9 6 6 6-6" />
+                            </svg>
+                        </button>
+                        <div class="invisible absolute right-0 top-full mt-2 w-52 origin-top-right scale-95 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg opacity-0 transition"
+                            data-profile-menu>
+                            <div class="px-4 py-3 text-sm text-slate-600">
+                                <p class="font-semibold text-slate-800">{{ current_user.username }}</p>
+                                {% if current_user.email %}
+                                <p class="mt-1 text-xs text-slate-400">{{ current_user.email }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="{{ url_for('main.profile') }}"
+                                    class="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 transition hover:bg-sky-50 hover:text-sky-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M4.5 20.25a8.25 8.25 0 0 1 15 0" />
+                                    </svg>
+                                    Mon profil
+                                </a>
+                                <a href="{{ url_for('auth.logout') }}"
+                                    class="flex items-center gap-2 px-4 py-2 text-sm text-rose-500 transition hover:bg-rose-50 hover:text-rose-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M15.75 9V5.25a2.25 2.25 0 0 0-2.25-2.25h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                                    </svg>
+                                    Déconnexion
+                                </a>
+                            </div>
+                        </div>
+                        {% else %}
+                        <a href="{{ url_for('auth.login') }}"
+                            class="rounded-full bg-teal-500 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-400">Connexion</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </header>
+
+            <div class="flex-1 px-4 pt-8 pb-8 sm:px-6 lg:px-8 lg:pt-24 lg:pb-8">
+                <section class="w-full max-w-full overflow-x-hidden" style="box-sizing: border-box;">
+                    {% block content %}{% endblock %}
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-confirm-cancel></div>
+        <div
+            class="relative mx-auto mt-28 w-[92%] max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+            <div class="flex items-start gap-3">
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v4.5m0 3h.008v.008H12V16.5Zm0-12a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" />
+                    </svg>
+                </span>
+                <div class="space-y-2 text-sm text-slate-600">
+                    <h2 class="text-base font-semibold text-slate-900">Confirmer l'action</h2>
+                    <p data-confirm-message></p>
+                </div>
+            </div>
+            <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button type="button" data-confirm-cancel
+                    class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+                    Annuler
+                </button>
+                <button type="button" data-confirm-approve
+                    class="inline-flex items-center justify-center gap-2 rounded-full bg-rose-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-rose-400">
+                    Supprimer
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="offline-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-offline-close></div>
+        <div
+            class="relative mx-auto w-[92%] max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+            <div class="flex items-start gap-3">
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m1.414 5.658a4.978 4.978 0 005.656 0m2.829-2.828l-2.829 2.829" />
+                    </svg>
+                </span>
+                <div class="space-y-2 text-sm text-slate-600 flex-1">
+                    <h2 class="text-base font-semibold text-slate-900">Connexion perdue</h2>
+                    <p>La connexion Internet a été perdue. Certaines fonctionnalités peuvent être limitées.</p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button type="button" data-offline-close
+                    class="inline-flex items-center justify-center gap-2 rounded-full bg-slate-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-slate-400">
+                    Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="install-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-install-close></div>
+        <div
+            class="relative mx-auto mt-24 w-[92%] max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+            <div class="flex items-start gap-3">
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-100 text-teal-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6" />
+                    </svg>
+                </span>
+                <div class="space-y-2 text-sm text-slate-600">
+                    <h2 class="text-base font-semibold text-slate-900">Installer TemplateApp</h2>
+                    <p data-install-description></p>
+                </div>
+            </div>
+            <div class="mt-4 space-y-3 text-sm text-slate-600">
+                <ol data-install-steps="default" class="space-y-2">
+                    <li class="flex items-start gap-2">
+                        <span
+                            class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">1</span>
+                        Cliquez sur « Installer » dans la boîte de dialogue système.
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span
+                            class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">2</span>
+                        L'application sera ajoutée à votre écran d'accueil pour un accès rapide.
+                    </li>
+                </ol>
+                <ol data-install-steps="ios" class="hidden space-y-2">
+                    <li class="flex items-start gap-2">
+                        <span
+                            class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">1</span>
+                        Touchez <span class="font-semibold">Partager</span> dans la barre inférieure de Safari.
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span
+                            class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">2</span>
+                        Choisissez <span class="font-semibold">Ajouter à l'écran d'accueil</span>.
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span
+                            class="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500 text-xs font-semibold text-white">3</span>
+                        Validez le nom « TemplateApp » puis touchez <span class="font-semibold">Ajouter</span>.
+                    </li>
+                </ol>
+            </div>
+            <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button type="button" data-install-close
+                    class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100">
+                    Plus tard
+                </button>
+                <button type="button" data-install-action
+                    class="inline-flex items-center justify-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400">
+                    Installer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="fixed inset-0 z-20 hidden bg-slate-900/40 backdrop-blur-sm" data-mobile-nav-backdrop></div>
+    <aside
+        class="fixed inset-y-0 left-0 z-30 flex w-72 max-w-xs -translate-x-full flex-col border-r border-slate-200 bg-white/95 shadow-lg transition-transform lg:hidden"
+        data-mobile-nav>
+        <div class="px-6 pb-6" style="padding-top: calc(var(--safe-area-top) + 1.5rem);">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo TemplateApp"
+                        class="h-10 w-10 rounded-2xl object-contain" />
+                    <span class="text-lg font-semibold text-slate-900">Navigation</span>
+                </div>
+                <button type="button" class="rounded-full p-2 text-slate-400 hover:text-slate-600"
+                    data-mobile-nav-close>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <nav class="flex-1 space-y-1 px-4 pb-6 text-sm font-medium text-slate-600">
+            <a href="{{ url_for('main.dashboard') }}"
+                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.dashboard' else '' }}">
+                <span
+                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M3 9.75 12 3l9 6.75M4.5 10.5V21h15V10.5" />
+                    </svg>
+                </span>
+                <span>Dashboard</span>
+            </a>
+            <a href="{{ url_for('main.charts') }}"
+                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.charts' else '' }}">
+                <span
+                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M3 19.5V4.5M21 19.5H3M7.5 15l3-6 3 4.5 3-7.5" />
+                    </svg>
+                </span>
+                <span>Graphiques</span>
+            </a>
+            {% if is_admin %}
+            <a href="{{ url_for('main.automation') }}"
+                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if request.endpoint == 'main.automation' else '' }}">
+                <span
+                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M8.5 7h11M4.5 7h.01M8.5 12h11M4.5 12h.01M8.5 17h11M4.5 17h.01" />
+                    </svg>
+                </span>
+                <span>Automatisation</span>
+            </a>
+            {% endif %}
+            {% if is_admin %}
+            {# ── Administration (regroupe Utilisateurs + Tâches + Journal) ── #}
+            {% set _is_admin_section_mobile = request.endpoint in ['admin.users', 'admin.create_user', 'admin.edit_user', 'main.journal', 'admin.broadcast_notification'] %}
+            <a href="{{ url_for('admin.users') }}"
+                class="nav-link-mobile flex items-center gap-3 rounded-xl px-4 py-2 hover:bg-teal-50 hover:text-teal-600 {{ 'bg-teal-50 text-teal-600' if _is_admin_section_mobile else '' }}">
+                <span class="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    </svg>
+                    {% set ns = namespace(count=0) %}
+                    {% for t in admin_pending_tasks %}{% if t.type == 'pending_users' %}{% set ns.count = t.count %}{% endif %}{% endfor %}
+                    {% if ns.count > 0 %}
+                    <span class="absolute -top-1.5 -right-1.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.55rem] font-black leading-none tabular-nums text-white ring-2 ring-white shadow-sm">{{ ns.count }}</span>
+                    {% endif %}
+                </span>
+                <span>Administration</span>
+            </a>
+            {% endif %}
+        </nav>
+    </aside>
+
+    {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+    <script id="flash-data" type="application/json">{{ messages|tojson }}</script>
+    {% endif %}
+    {% endwith %}
+
+
+    <!-- Menu mobile fixe en bas -->
+    <nav class="hidden" data-mobile-footer>
+        <div class="mx-auto flex max-w-sm items-center justify-around gap-1.5 px-4 pb-0.5">
+            <div class="rounded-2xl border border-slate-200 bg-white shadow-lg w-full">
+                <div class="flex items-center justify-around gap-1.5 px-2 py-1.5">
+                    <a href="{{ url_for('main.dashboard') }}"
+                        class="flex flex-col items-center text-[10px] font-semibold transition {{ 'text-teal-600' if request.endpoint == 'main.dashboard' else 'text-slate-400 hover:text-teal-500' }}">
+                        <span
+                            class="flex h-9 w-9 items-center justify-center rounded-lg border shadow-sm text-slate-500 {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint == 'main.dashboard' else 'border-slate-200 bg-white' }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M3 9.75 12 3l9 6.75M4.5 10.5V21h15V10.5" />
+                            </svg>
+                        </span>
+                        <span class="mt-0.5">Dashboard</span>
+                    </a>
+                    <a href="{{ url_for('main.charts') }}"
+                        class="flex flex-col items-center text-[10px] font-semibold transition {{ 'text-teal-600' if request.endpoint == 'main.charts' else 'text-slate-400 hover:text-teal-500' }}">
+                        <span
+                            class="flex h-9 w-9 items-center justify-center rounded-lg border shadow-sm text-slate-500 {{ 'border-teal-200 bg-teal-50 text-teal-600' if request.endpoint == 'main.charts' else 'border-slate-200 bg-white' }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M3 19.5V4.5M21 19.5H3M7.5 15l3-6 3 4.5 3-7.5" />
+                            </svg>
+                        </span>
+                        <span class="mt-0.5">Graphiques</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</body>
+
+</html>

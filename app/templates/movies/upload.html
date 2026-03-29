@@ -1,0 +1,631 @@
+{% extends 'base.html' %}
+{% block title %}Ajouter{% endblock %}
+{% block header_title %}Médiathèque — Ajouter{% endblock %}
+{% block content %}
+
+<div class="mx-auto max-w-2xl space-y-5">
+    <a href="{{ url_for('movies.index') }}" class="inline-flex items-center gap-1.5 text-sm text-teal-600 hover:text-teal-500">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+        </svg>
+        Retour à la médiathèque
+    </a>
+
+    {# ── Sélecteur Film / Série ─────────────────────────────────────────────── #}
+    <div class="flex gap-3">
+        <button type="button" id="type-film-btn"
+            class="flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-teal-400 bg-teal-50 px-4 py-3 text-sm font-bold text-teal-700 transition shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+            Film
+        </button>
+        <button type="button" id="type-serie-btn"
+            class="flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-500 transition hover:border-slate-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125Z" />
+            </svg>
+            Série TV
+        </button>
+    </div>
+
+    {# ════════════════════ SECTION FILM ════════════════════ #}
+    <div id="section-film">
+
+        {# Recherche TMDB film #}
+        {% if tmdb_configured %}
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-800">Rechercher via TMDB</h2>
+                <p class="text-xs text-slate-400">Remplissage automatique des informations.</p>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="tmdb-search-input" placeholder="Titre du film…"
+                    class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+                <button type="button" id="tmdb-search-btn"
+                    class="inline-flex items-center gap-1.5 rounded-xl bg-teal-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                    Rechercher
+                </button>
+            </div>
+            <p id="film-loading" class="hidden text-xs text-teal-500">Recherche en cours…</p>
+            <p id="film-no-results" class="hidden text-xs text-slate-400">Aucun résultat.</p>
+            <div id="film-results" class="hidden grid grid-cols-3 gap-2 sm:grid-cols-5"></div>
+        </div>
+        {% endif %}
+
+        {# Fichiers existants #}
+        {% if unregistered_files %}
+        <div class="rounded-2xl border border-teal-100 bg-teal-50 p-4 mt-4">
+            <p class="text-xs font-semibold text-teal-700 mb-2">Fichiers détectés non encore enregistrés :</p>
+            <div class="flex flex-wrap gap-2">
+                {% for f in unregistered_files %}
+                <button type="button" class="prefill-file rounded-lg border border-teal-300 bg-white px-3 py-1.5 text-xs font-medium text-teal-700 shadow-sm transition hover:bg-teal-100"
+                    data-filename="{{ f }}">{{ f }}</button>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{# /section-film #}
+
+    {# ════════════════════ SECTION SÉRIE ════════════════════ #}
+    <div id="section-serie" class="hidden space-y-4">
+
+        {# Dossiers détectés #}
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-800">Dossier de la série</h2>
+                <p class="text-xs text-slate-400">Sélectionnez un dossier présent dans votre répertoire Films.</p>
+            </div>
+
+            {% if unregistered_folders %}
+            <div>
+                <p class="text-xs font-semibold text-slate-500 mb-2">Dossiers non enregistrés :</p>
+                <div class="flex flex-col gap-1.5 max-h-48 overflow-y-auto" id="folder-list">
+                    {% for folder_info in unregistered_folders %}
+                    <button type="button" class="serie-folder-btn flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition hover:border-teal-300 hover:bg-teal-50"
+                        data-foldername="{{ folder_info.name }}"
+                        data-episodes="{{ folder_info.episode_count }}">
+                        <span class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0v.094a2.25 2.25 0 0 1-2.25 2.25H4.5a2.25 2.25 0 0 1-2.25-2.25v-.094m19.5 0h-3m-3 0h-3m-3 0h-3" />
+                            </svg>
+                            <span class="text-sm font-medium text-slate-700">{{ folder_info.name }}</span>
+                        </span>
+                        <span class="text-xs text-slate-400">{{ folder_info.episode_count }} épisode{{ 's' if folder_info.episode_count != 1 else '' }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400">Aucun dossier non enregistré détecté dans votre répertoire Films.</p>
+            {% endif %}
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 mb-1">Ou saisir manuellement le nom du dossier :</label>
+                <input type="text" id="serie-folder-manual" placeholder="Nom.Du.Dossier.S01-S05"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+
+            {# Dossier sélectionné — badge #}
+            <div id="serie-folder-selected" class="hidden">
+                <div class="flex items-center justify-between rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        <span id="serie-folder-name-display" class="text-sm font-semibold text-teal-700"></span>
+                    </div>
+                    <span id="serie-folder-ep-count" class="text-xs text-teal-500"></span>
+                </div>
+            </div>
+        </div>
+
+        {# Recherche TMDB série TV #}
+        {% if tmdb_configured %}
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-800">Recherche TMDB — Séries TV</h2>
+                    <p class="text-xs text-slate-400">Lancée automatiquement à partir du nom du dossier.</p>
+                </div>
+                <button type="button" id="tv-search-btn"
+                    class="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    Relancer
+                </button>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="tv-search-input" placeholder="Titre de la série…"
+                    class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <p id="tv-loading" class="hidden text-xs text-teal-500">Recherche en cours…</p>
+            <p id="tv-no-results" class="hidden text-xs text-slate-400">Aucune série trouvée.</p>
+            <div id="tv-results" class="hidden grid grid-cols-3 gap-2 sm:grid-cols-5"></div>
+            <p class="text-[0.65rem] text-slate-300">Plusieurs résultats ? Cliquez sur la bonne série pour remplir le formulaire.</p>
+        </div>
+        {% else %}
+        <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+            <strong>TMDB non configuré.</strong> Ajoutez <code>TMDB_API_KEY</code> dans votre <code>.env</code>.
+        </div>
+        {% endif %}
+
+    </div>{# /section-serie #}
+
+    {# ════════════════════ FORMULAIRE COMMUN ════════════════════ #}
+    <form method="post" enctype="multipart/form-data" class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5" id="main-form">
+        <input type="hidden" name="csrf_token"     value="{{ csrf_token() }}">
+        <input type="hidden" name="content_type"   id="f-content-type"  value="film">
+        <input type="hidden" name="tmdb_id"        id="f-tmdb-id">
+        <input type="hidden" name="poster_url"     id="f-poster-url">
+        <input type="hidden" name="existing_file"  id="f-existing-file">
+        <input type="hidden" name="serie_folder"   id="f-serie-folder">
+        <input type="hidden" name="episode_count"  id="f-episode-count">
+        <input type="hidden" name="seasons_count"  id="f-seasons-count">
+
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">Informations</h2>
+            <span id="form-type-badge"
+                class="rounded-full bg-teal-100 px-3 py-0.5 text-xs font-bold text-teal-700">Film</span>
+        </div>
+
+        {# Affiche sélectionnée #}
+        <div id="poster-preview" class="hidden">
+            <img id="poster-preview-img" src="" alt="Affiche" class="h-32 rounded-xl object-cover shadow" />
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="sm:col-span-2">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Titre <span class="text-rose-400">*</span></label>
+                <div class="flex gap-2">
+                    <input type="text" name="title" id="f-title" required
+                        class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+                    {% if tmdb_configured %}
+                    <button type="button" id="tmdb-from-title-btn"
+                        class="flex-shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                        title="Rechercher via TMDB avec ce titre">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                        </svg>
+                        TMDB
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Titre original</label>
+                <input type="text" name="original_title" id="f-original-title"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Année</label>
+                <input type="number" name="year" id="f-year" min="1900" max="2035"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Genres</label>
+                <input type="text" name="genres" id="f-genres" placeholder="Action, Thriller…"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1" id="label-director">Réalisateur</label>
+                <input type="text" name="director" id="f-director"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Acteurs principaux</label>
+                <input type="text" name="cast" id="f-cast" placeholder="Acteur 1, Acteur 2…"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Note TMDB <span class="text-slate-400">(sur 10)</span></label>
+                <input type="number" name="rating" id="f-rating" min="0" max="10" step="0.1"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Langue</label>
+                <input type="text" name="language" id="f-language" placeholder="fr, en, es…"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200" />
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Synopsis</label>
+                <textarea name="overview" id="f-overview" rows="3"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-200 resize-none"></textarea>
+            </div>
+        </div>
+
+        {# Upload fichier (film seulement) #}
+        <div id="file-section">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Fichier vidéo</label>
+            <div id="file-upload-zone" class="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition hover:border-teal-300 hover:bg-teal-50/30">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 flex-shrink-0 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                </svg>
+                <div class="flex-1 min-w-0">
+                    <p class="text-xs font-medium text-slate-600" id="file-label">Glissez un fichier ou cliquez pour parcourir</p>
+                    <p class="text-[0.65rem] text-slate-400">MKV, MP4, AVI, MOV, M4V…</p>
+                </div>
+                <input type="file" name="file" id="file-input" accept=".mkv,.mp4,.avi,.mov,.m4v,.wmv,.webm,.flv" class="hidden" />
+                <button type="button" id="file-pick-btn"
+                    class="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50">
+                    Parcourir
+                </button>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <a href="{{ url_for('movies.index') }}"
+                class="inline-flex items-center rounded-full border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50">
+                Annuler
+            </a>
+            <button type="submit" id="submit-btn"
+                class="inline-flex items-center gap-2 rounded-full bg-teal-500 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-400 active:scale-95">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Ajouter à la médiathèque
+            </button>
+        </div>
+    </form>
+</div>
+
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    'use strict';
+
+    var SEARCH_FILM_URL  = '{{ url_for("movies.api_tmdb_search") }}';
+    var DETAILS_FILM_URL = '{{ url_for("movies.api_tmdb_details", tmdb_id=0) }}'.replace('/0', '/');
+    var SEARCH_TV_URL    = '{{ url_for("movies.api_tmdb_search_tv") }}';
+    var DETAILS_TV_URL   = '{{ url_for("movies.api_tmdb_details_tv", tmdb_id=0) }}'.replace('/0', '/');
+
+    // ── État ──────────────────────────────────────────────────────────────────
+    var currentType = 'film';
+
+    // ── Éléments ──────────────────────────────────────────────────────────────
+    var filmBtn       = document.getElementById('type-film-btn');
+    var serieBtn      = document.getElementById('type-serie-btn');
+    var sectionFilm   = document.getElementById('section-film');
+    var sectionSerie  = document.getElementById('section-serie');
+    var fileSection   = document.getElementById('file-section');
+    var formTypeBadge = document.getElementById('form-type-badge');
+    var labelDirector = document.getElementById('label-director');
+    var submitBtn     = document.getElementById('submit-btn');
+
+    // ── Champs cachés ─────────────────────────────────────────────────────────
+    var fContentType  = document.getElementById('f-content-type');
+    var fTmdbId       = document.getElementById('f-tmdb-id');
+    var fPosterUrl    = document.getElementById('f-poster-url');
+    var fExistingFile = document.getElementById('f-existing-file');
+    var fSerieFolder  = document.getElementById('f-serie-folder');
+    var fEpisodeCount = document.getElementById('f-episode-count');
+    var fSeasonsCount = document.getElementById('f-seasons-count');
+
+    // ── Champs visibles ───────────────────────────────────────────────────────
+    var fields = {
+        title:         document.getElementById('f-title'),
+        originalTitle: document.getElementById('f-original-title'),
+        year:          document.getElementById('f-year'),
+        genres:        document.getElementById('f-genres'),
+        director:      document.getElementById('f-director'),
+        cast:          document.getElementById('f-cast'),
+        rating:        document.getElementById('f-rating'),
+        language:      document.getElementById('f-language'),
+        overview:      document.getElementById('f-overview'),
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Toggle Film / Série
+    // ─────────────────────────────────────────────────────────────────────────
+    function setType(type) {
+        currentType = type;
+        fContentType.value = type;
+
+        var isFilm = (type === 'film');
+
+        filmBtn.className = isFilm
+            ? 'flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-teal-400 bg-teal-50 px-4 py-3 text-sm font-bold text-teal-700 transition shadow-sm'
+            : 'flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-500 transition hover:border-slate-300';
+        serieBtn.className = !isFilm
+            ? 'flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-sky-400 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 transition shadow-sm'
+            : 'flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-500 transition hover:border-slate-300';
+
+        sectionFilm.classList.toggle('hidden', !isFilm);
+        sectionSerie.classList.toggle('hidden', isFilm);
+        fileSection.classList.toggle('hidden', !isFilm);
+
+        formTypeBadge.textContent = isFilm ? 'Film' : 'Série TV';
+        formTypeBadge.className = isFilm
+            ? 'rounded-full bg-teal-100 px-3 py-0.5 text-xs font-bold text-teal-700'
+            : 'rounded-full bg-sky-100 px-3 py-0.5 text-xs font-bold text-sky-700';
+        if (labelDirector) labelDirector.textContent = isFilm ? 'Réalisateur' : 'Créateur / Showrunner';
+
+        // Reset form fields when switching type
+        if (!isFilm) {
+            fExistingFile.value = '';
+            var fi = document.getElementById('file-input');
+            if (fi) fi.value = '';
+        } else {
+            fSerieFolder.value = '';
+            fEpisodeCount.value = '';
+            fSeasonsCount.value = '';
+        }
+    }
+
+    filmBtn.addEventListener('click', function () { setType('film'); });
+    serieBtn.addEventListener('click', function () { setType('série'); });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Poster preview
+    // ─────────────────────────────────────────────────────────────────────────
+    function showPoster(url) {
+        var wrap = document.getElementById('poster-preview');
+        var img  = document.getElementById('poster-preview-img');
+        if (url) { img.src = url; wrap.classList.remove('hidden'); }
+        else     { wrap.classList.add('hidden'); }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Remplir le formulaire depuis un objet TMDB
+    // ─────────────────────────────────────────────────────────────────────────
+    function fillForm(data) {
+        fTmdbId.value                  = data.id             || '';
+        fPosterUrl.value               = data.poster         || '';
+        fields.title.value             = data.title          || '';
+        fields.originalTitle.value     = data.original_title || '';
+        fields.year.value              = data.year           || '';
+        fields.genres.value            = data.genres         || '';
+        fields.director.value          = data.director       || '';
+        fields.cast.value              = data.cast           || '';
+        fields.rating.value            = data.rating         || '';
+        fields.language.value          = data.language       || '';
+        fields.overview.value          = data.overview       || '';
+        if (data.seasons_count) fSeasonsCount.value = data.seasons_count;
+        if (data.episode_count && !fEpisodeCount.value) fEpisodeCount.value = data.episode_count;
+        showPoster(data.poster || '');
+        fExistingFile.value = '';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Rendu des résultats TMDB (réutilisable)
+    // ─────────────────────────────────────────────────────────────────────────
+    function renderResults(container, results, detailsUrl) {
+        container.innerHTML = '';
+        if (!results || !results.length) return false;
+        results.forEach(function (m) {
+            var card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'tmdb-card group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left transition hover:border-teal-300 hover:shadow focus:outline-none focus:ring-2 focus:ring-teal-300';
+            card.innerHTML = (m.poster
+                ? '<img src="' + m.poster + '" alt="" class="aspect-[2/3] w-full object-cover transition group-hover:scale-105" />'
+                : '<div class="aspect-[2/3] w-full flex items-center justify-center bg-slate-200 text-slate-400 text-[0.6rem]">Pas d\'affiche</div>'
+            ) + '<div class="p-1.5">'
+              + '<p class="text-[0.6rem] font-semibold text-slate-800 line-clamp-2 leading-tight">' + m.title + '</p>'
+              + '<p class="text-[0.55rem] text-slate-400 mt-0.5">' + (m.year || '?') + '</p>'
+              + '</div>';
+            card.addEventListener('click', function () {
+                container.querySelectorAll('.tmdb-card').forEach(function (c) { c.classList.remove('ring-2', 'ring-teal-400'); });
+                card.classList.add('ring-2', 'ring-teal-400');
+                fetch(detailsUrl + m.id, { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(fillForm)
+                    .catch(function () { fillForm(m); });
+            });
+            container.appendChild(card);
+        });
+        return true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Recherche TMDB Film
+    // ─────────────────────────────────────────────────────────────────────────
+    var filmResults   = document.getElementById('film-results');
+    var filmLoading   = document.getElementById('film-loading');
+    var filmNoResults = document.getElementById('film-no-results');
+    var filmInput     = document.getElementById('tmdb-search-input');
+    var filmSearchBtn = document.getElementById('tmdb-search-btn');
+    var filmTimer     = null;
+
+    function doFilmSearch(q) {
+        if (!q || q.length < 2) return;
+        if (filmLoading)   filmLoading.classList.remove('hidden');
+        if (filmResults)   filmResults.classList.add('hidden');
+        if (filmNoResults) filmNoResults.classList.add('hidden');
+        fetch(SEARCH_FILM_URL + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (filmLoading) filmLoading.classList.add('hidden');
+                var ok = renderResults(filmResults, data, DETAILS_FILM_URL);
+                if (filmResults) filmResults.classList.toggle('hidden', !ok);
+                if (filmNoResults) filmNoResults.classList.toggle('hidden', ok || !data || !data.length);
+                if (ok && data.length === 1) {
+                    fetch(DETAILS_FILM_URL + data[0].id, { credentials: 'same-origin' }).then(function(r){return r.json();}).then(fillForm).catch(function(){fillForm(data[0]);});
+                }
+            })
+            .catch(function () { if (filmLoading) filmLoading.classList.add('hidden'); });
+    }
+
+    if (filmSearchBtn) filmSearchBtn.addEventListener('click', function () { doFilmSearch(filmInput ? filmInput.value.trim() : ''); });
+    if (filmInput) {
+        filmInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doFilmSearch(filmInput.value.trim()); } });
+        filmInput.addEventListener('input', function () {
+            clearTimeout(filmTimer);
+            filmTimer = setTimeout(function () { doFilmSearch(filmInput.value.trim()); }, 600);
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Bouton TMDB depuis le champ titre
+    // ─────────────────────────────────────────────────────────────────────────
+    var tmdbFromTitleBtn = document.getElementById('tmdb-from-title-btn');
+    if (tmdbFromTitleBtn) {
+        tmdbFromTitleBtn.addEventListener('click', function () {
+            var q = fields.title.value.trim();
+            if (!q) return;
+            var searchUrl = (currentType === 'série') ? SEARCH_TV_URL : SEARCH_FILM_URL;
+            var detailsUrl = (currentType === 'série') ? DETAILS_TV_URL : DETAILS_FILM_URL;
+            var container  = (currentType === 'série') ? tvResults : filmResults;
+            var loading    = (currentType === 'série') ? tvLoading : filmLoading;
+            var noResults  = (currentType === 'série') ? tvNoResults : filmNoResults;
+            var input      = (currentType === 'série') ? tvInput : filmInput;
+            if (input) input.value = q;
+            if (loading)   loading.classList.remove('hidden');
+            if (container) container.classList.add('hidden');
+            if (noResults) noResults.classList.add('hidden');
+            fetch(searchUrl + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (loading) loading.classList.add('hidden');
+                    var ok = renderResults(container, data, detailsUrl);
+                    if (container) container.classList.toggle('hidden', !ok);
+                    if (noResults) noResults.classList.toggle('hidden', ok);
+                    if (ok && data.length === 1) {
+                        fetch(detailsUrl + data[0].id, { credentials: 'same-origin' }).then(function(r){return r.json();}).then(fillForm).catch(function(){fillForm(data[0]);});
+                    }
+                })
+                .catch(function () { if (loading) loading.classList.add('hidden'); });
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Recherche TMDB TV
+    // ─────────────────────────────────────────────────────────────────────────
+    var tvResults   = document.getElementById('tv-results');
+    var tvLoading   = document.getElementById('tv-loading');
+    var tvNoResults = document.getElementById('tv-no-results');
+    var tvInput     = document.getElementById('tv-search-input');
+    var tvSearchBtn = document.getElementById('tv-search-btn');
+
+    function doTvSearch(q) {
+        if (!q || q.length < 2) return;
+        if (tvLoading)   tvLoading.classList.remove('hidden');
+        if (tvResults)   tvResults.classList.add('hidden');
+        if (tvNoResults) tvNoResults.classList.add('hidden');
+        fetch(SEARCH_TV_URL + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (tvLoading) tvLoading.classList.add('hidden');
+                var ok = renderResults(tvResults, data, DETAILS_TV_URL);
+                if (tvResults) tvResults.classList.toggle('hidden', !ok);
+                if (tvNoResults) tvNoResults.classList.toggle('hidden', ok || !data || !data.length);
+                // 1 résultat = auto-fill
+                if (ok && data.length === 1) {
+                    fetch(DETAILS_TV_URL + data[0].id, { credentials: 'same-origin' }).then(function(r){return r.json();}).then(fillForm).catch(function(){fillForm(data[0]);});
+                    tvResults.querySelectorAll('.tmdb-card')[0].classList.add('ring-2', 'ring-teal-400');
+                }
+            })
+            .catch(function () { if (tvLoading) tvLoading.classList.add('hidden'); });
+    }
+
+    if (tvSearchBtn) tvSearchBtn.addEventListener('click', function () { doTvSearch(tvInput ? tvInput.value.trim() : ''); });
+    if (tvInput) {
+        tvInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doTvSearch(tvInput.value.trim()); } });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sélection d'un dossier série
+    // ─────────────────────────────────────────────────────────────────────────
+    function selectFolder(name, epCount) {
+        fSerieFolder.value = name;
+        fEpisodeCount.value = epCount || '';
+
+        var display = document.getElementById('serie-folder-name-display');
+        var epBadge = document.getElementById('serie-folder-ep-count');
+        var badge   = document.getElementById('serie-folder-selected');
+        if (display) display.textContent = name;
+        if (epBadge) epBadge.textContent = epCount ? epCount + ' épisode' + (epCount > 1 ? 's' : '') : '';
+        if (badge)   { badge.classList.remove('hidden'); }
+
+        // Highlight button
+        document.querySelectorAll('.serie-folder-btn').forEach(function (b) {
+            b.classList.toggle('border-teal-400', b.dataset.foldername === name);
+            b.classList.toggle('bg-teal-50', b.dataset.foldername === name);
+        });
+
+        // Deviner le titre : nettoyer le nom de dossier
+        var guess = name
+            .replace(/\.(S\d+.*)?$/i, '')
+            .replace(/\./g, ' ')
+            .replace(/[-_]/g, ' ')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        var yearMatch = name.match(/(\d{4})/);
+        if (!fields.title.value) fields.title.value = guess;
+        if (fields.year && !fields.year.value && yearMatch) fields.year.value = yearMatch[1];
+
+        // Lancer recherche TMDB TV automatiquement
+        if (tvInput) tvInput.value = guess;
+        doTvSearch(guess);
+    }
+
+    document.querySelectorAll('.serie-folder-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            selectFolder(btn.dataset.foldername, parseInt(btn.dataset.episodes, 10) || 0);
+        });
+    });
+
+    // Saisie manuelle du dossier
+    var manualInput = document.getElementById('serie-folder-manual');
+    if (manualInput) {
+        manualInput.addEventListener('change', function () {
+            var val = manualInput.value.trim();
+            if (val) selectFolder(val, 0);
+        });
+        manualInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); var val = manualInput.value.trim(); if (val) selectFolder(val, 0); }
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Fichiers préexistants (film)
+    // ─────────────────────────────────────────────────────────────────────────
+    document.querySelectorAll('.prefill-file').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var filename = btn.dataset.filename || '';
+            fExistingFile.value = filename;
+            var guess    = filename.replace(/\.\w+$/, '').replace(/\./g, ' ').replace(/(\d{4})$/, '').trim();
+            var yearMatch = filename.match(/(\d{4})/);
+            if (!fields.title.value) fields.title.value = guess;
+            if (!fields.year.value && yearMatch) fields.year.value = yearMatch[1];
+            document.querySelectorAll('.prefill-file').forEach(function (b) { b.classList.remove('ring-2', 'ring-teal-400', 'bg-teal-50'); });
+            btn.classList.add('ring-2', 'ring-teal-400', 'bg-teal-50');
+            var label = document.getElementById('file-label');
+            if (label) label.textContent = filename + ' (fichier existant)';
+
+            // Auto-recherche TMDB film
+            doFilmSearch(guess);
+        });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Upload fichier
+    // ─────────────────────────────────────────────────────────────────────────
+    var fileInput   = document.getElementById('file-input');
+    var filePickBtn = document.getElementById('file-pick-btn');
+    var fileLabel   = document.getElementById('file-label');
+
+    if (filePickBtn) filePickBtn.addEventListener('click', function () { fileInput && fileInput.click(); });
+    if (fileInput) {
+        fileInput.addEventListener('change', function () {
+            if (fileInput.files[0]) {
+                var name = fileInput.files[0].name;
+                if (fileLabel) fileLabel.textContent = name;
+                fExistingFile.value = '';
+                document.querySelectorAll('.prefill-file').forEach(function (b) { b.classList.remove('ring-2', 'ring-teal-400', 'bg-teal-50'); });
+                // Auto-deviner le titre et rechercher TMDB
+                var guess = name.replace(/\.\w+$/, '').replace(/\./g, ' ').replace(/(\d{4}).*/g, '').trim();
+                if (!fields.title.value) fields.title.value = guess;
+                if (filmInput) filmInput.value = guess;
+                doFilmSearch(guess);
+            }
+        });
+    }
+
+})();
+</script>
+
+{% endblock %}

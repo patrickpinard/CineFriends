@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <title>Compte activé</title>
+    <style>
+        :root {
+            color-scheme: light;
+        }
+        body { margin: 0; padding: 0; background: #f4f9fb; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #0f172a; }
+        .wrapper { padding: 32px 16px; }
+        .card {
+            max-width: 560px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 32px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 22px 60px -40px rgba(15, 23, 42, 0.45);
+            overflow: hidden;
+        }
+        .header { padding: 36px 40px 0; text-align: center; }
+        .logo img { width: 72px; height: 72px; }
+        h1 { font-size: 26px; margin: 22px 0 6px; color: #0f172a; }
+        .subtitle { margin-bottom: 24px; font-size: 14px; color: #64748b; }
+        p { margin: 0 0 16px; line-height: 1.7; color: #334155; }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 22px;
+            background: #dcfce7;
+            color: #0f766e;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+        }
+        .button {
+            display: inline-block;
+            margin: 28px 0;
+            padding: 12px 32px;
+            background: #14b8a6;
+            color: #ffffff;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 999px;
+            box-shadow: 0 4px 14px 0 rgba(20, 184, 166, 0.39);
+            transition: background-color 0.2s;
+        }
+        .button:hover {
+            background: #0d9488;
+        }
+        .footer { font-size: 12px; text-align: center; color: #64748b; padding: 0 40px 36px; }
+        .divider { height: 1px; background: linear-gradient(90deg, rgba(34,197,94,0), rgba(34,197,94,0.25), rgba(34,197,94,0)); margin: 28px 40px; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="card">
+            <div class="header">
+                <div class="logo">
+                    <img src="{{ url_for('static', filename='img/logo.png', _external=True) }}" alt="Logo TemplateApp" />
+                </div>
+                <h1>Bienvenue {{ user.first_name if user.first_name else user.username }} !</h1>
+                <p class="subtitle">Votre accès à TemplateApp est prêt.</p>
+                <div class="badge">Compte activé</div>
+            </div>
+            <div class="divider"></div>
+            <div style="padding: 0 32px 32px;">
+                <p>Bonjour {{ user.first_name if user.first_name else user.username }},</p>
+                <p>Votre demande d'accès à TemplateApp a été approuvée par un administrateur. Votre compte est désormais actif et vous pouvez vous connecter avec vos identifiants.</p>
+                <p>Pour des raisons de sécurité, nous vous recommandons de modifier votre mot de passe régulièrement et de conserver vos identifiants en lieu sûr.</p>
+                <div style="text-align: center; margin: 32px 0;">
+                    <a href="{{ url_for('auth.login', _external=True) }}" class="button">Accéder à TemplateApp</a>
+                </div>
+                <p>Cordialement,<br>L'équipe TemplateApp</p>
+            </div>
+            <div class="footer">
+                © {{ current_year if current_year else 2025 }} TemplateApp · Cet email est généré automatiquement, merci de ne pas y répondre.
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

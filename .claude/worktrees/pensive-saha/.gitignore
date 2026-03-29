@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+instance/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+
+# Static files (uploads)
+app/static/uploads/*.png
+app/static/uploads/*.jpg
+app/static/uploads/*.jpeg
+app/static/uploads/*.gif
+!app/static/uploads/.gitkeep
+
+# Captures (photos et vidéos)
+app/static/captures/*
+!app/static/captures/.gitkeep
+
