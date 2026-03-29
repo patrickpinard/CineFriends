@@ -1,13 +1,13 @@
 Bonjour {{ user.first_name if user.first_name else user.username }},
 
-Une tentative de connexion à TemplateApp a été effectuée avec votre compte. Pour finaliser la connexion, veuillez saisir le code de vérification suivant :
+Une tentative de connexion à CinéFriends a été effectuée avec votre compte. Pour finaliser la connexion, veuillez saisir le code de vérification suivant :
 
 {{ code }}
 
 Ce code est valable pendant {{ ttl_minutes }} minute(s). Si vous n'êtes pas à l'origine de cette tentative de connexion, veuillez ignorer cet email et contacter votre administrateur.
 
 Cordialement,
-L'équipe TemplateApp
+L'équipe CinéFriends
 
 ---
 Cet email est généré automatiquement, merci de ne pas y répondre.

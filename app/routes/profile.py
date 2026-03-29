@@ -8,7 +8,7 @@ from flask_login import current_user, login_required
 from .. import db, limiter
 from ..forms import ProfileForm
 from ..models import User
-from ..utils import delete_avatar, populate_form_from_user, save_avatar
+from ..utils import handle_avatar, populate_form_from_user
 from . import main_bp
 
 
@@ -64,7 +64,7 @@ def profile():
         twofa_before = current_user.twofa_enabled
 
         # Avatar
-        _handle_avatar(form, current_user)
+        handle_avatar(form, current_user)
 
         # Champs personnels
         current_user.title = (form.title.data or "").strip() or None
@@ -121,19 +121,3 @@ def profile():
     return render_template("dashboard/profile.html", form=form, user=current_user)
 
 
-# ---------------------------------------------------------------------------
-# Helpers locaux
-# ---------------------------------------------------------------------------
-
-def _handle_avatar(form, user) -> None:
-    """Gère l'upload ou la suppression de l'avatar."""
-    if form.remove_avatar.data:
-        delete_avatar(user.avatar_filename)
-        user.avatar_filename = None
-    elif (
-        form.avatar.data
-        and hasattr(form.avatar.data, "filename")
-        and form.avatar.data.filename
-    ):
-        delete_avatar(user.avatar_filename)
-        user.avatar_filename = save_avatar(form.avatar.data)

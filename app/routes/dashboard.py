@@ -16,7 +16,7 @@ from flask_login import current_user, login_required
 
 from . import main_bp
 from .. import db
-from ..models import Notification
+from ..models import Movie, Notification, User
 
 
 # ---------------------------------------------------------------------------
@@ -38,12 +38,43 @@ def invalidate_settings_cache() -> None:
 # Pages simples
 # ---------------------------------------------------------------------------
 
+def _movie_stats(movies=None) -> dict:
+    """Retourne les statistiques de la médiathèque.
+
+    Si movies est fourni (liste de tuples avec genres, file_size, year), utilise ces données.
+    Sinon, charge les films depuis la base de données.
+    """
+    if movies is None:
+        movies = Movie.query.with_entities(Movie.genres, Movie.file_size, Movie.year).all()
+    total_size = sum(m.file_size or 0 for m in movies)
+    all_genres: set[str] = set()
+    for m in movies:
+        if m.genres:
+            for g in m.genres.split(','):
+                g = g.strip()
+                if g:
+                    all_genres.add(g)
+
+    if total_size >= 1024 ** 3:
+        size_str = f"{total_size / 1024 ** 3:.1f} Go"
+    elif total_size >= 1024 ** 2:
+        size_str = f"{total_size / 1024 ** 2:.1f} Mo"
+    else:
+        size_str = f"{total_size / 1024:.0f} Ko"
+
+    return {
+        "count": len(movies),
+        "total_size": size_str,
+        "genre_count": len(all_genres),
+    }
+
+
 @main_bp.route("/")
 @login_required
 def dashboard():
-    stats = {}
+    unread = 0
     if current_user.role != "admin":
-        stats["unread"] = (
+        unread = (
             Notification.query
             .filter(
                 db.or_(
@@ -54,19 +85,53 @@ def dashboard():
             .filter_by(read=False)
             .count()
         )
-    return render_template("dashboard/index.html", stats=stats)
 
+    # Chargement unique des films pour les stats et les graphiques
+    all_movies = Movie.query.with_entities(Movie.genres, Movie.file_size, Movie.year, Movie.cast).all()
+    movie_stats = _movie_stats(all_movies)
+    user_count = User.query.filter_by(active=True).count()
 
-@main_bp.route("/graphiques")
-@login_required
-def charts():
-    return render_template("dashboard/charts.html")
+    # 4 derniers films pour le carrousel de la page d'accueil
+    recent_movies = (
+        Movie.query
+        .order_by(Movie.created_at.desc())
+        .limit(4)
+        .all()
+    )
 
+    # Données graphiques
+    year_counts: dict[int, int] = defaultdict(int)
+    genre_counts: dict[str, int] = defaultdict(int)
+    actor_counts: dict[str, int] = defaultdict(int)
+    for m in all_movies:
+        if m.year:
+            year_counts[m.year] += 1
+        if m.genres:
+            for g in m.genres.split(','):
+                g = g.strip()
+                if g:
+                    genre_counts[g] += 1
+        if m.cast:
+            for a in m.cast.split(','):
+                a = a.strip()
+                if a:
+                    actor_counts[a] += 1
 
-@main_bp.route("/automatisation")
-@login_required
-def automation():
-    return render_template("dashboard/automation.html")
+    films_by_year = sorted(year_counts.items())
+    films_by_genre = sorted(genre_counts.items(), key=lambda x: -x[1])
+    films_by_actor = sorted(actor_counts.items(), key=lambda x: -x[1])[:12]
+
+    return render_template(
+        "dashboard/index.html",
+        unread=unread,
+        movie_stats=movie_stats,
+        user_count=user_count,
+        recent_movies=recent_movies,
+        films_by_year=films_by_year,
+        films_by_genre=films_by_genre,
+        films_by_actor=films_by_actor,
+    )
+
 
 
 
@@ -147,6 +212,23 @@ _ACTION_PATTERNS: dict[str, list[str]] = {
         r"Import utilisateurs par",
         r"Import.*utilisateurs.*créés",
     ],
+    "movie_added": [
+        r"Film ajouté",
+        r"Film ajouté :",
+    ],
+    "movie_deleted": [
+        r"Film supprimé",
+        r"Film supprimé :",
+    ],
+    "movie_updated": [
+        r"Film mis à jour",
+        r"TMDB sync",
+        r"Film mis à jour depuis TMDB",
+    ],
+    "movie_downloaded": [
+        r"Téléchargement :",
+        r"Téléchargement film",
+    ],
 }
 
 _TECHNICAL_EXCLUDES = [
@@ -171,6 +253,7 @@ _USERNAME_PATTERNS = [
     r'(?:username|utilisateur|compte)[\s:]+([a-zA-Z0-9_]+)',
     r'Utilisateur\s+«\s*([a-zA-Z0-9_]+)\s*»',
     r'pour l\'utilisateur\s+«\s*([a-zA-Z0-9_]+)\s*»',
+    r'\bpar\s+([a-zA-Z0-9_]+)\s*$',
 ]
 
 _MONTH_NAMES = {

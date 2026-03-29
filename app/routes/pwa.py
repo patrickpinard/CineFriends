@@ -63,23 +63,24 @@ def generate_icon(size: int):
 
 @main_bp.route("/manifest.json")
 def manifest():
-    sizes = [180, 192, 256, 512]
-    icons = [
-        {
-            "src": url_for("main.generate_icon", size=s, _external=True),
+    # Icônes statiques pré-générées depuis cinefriends.jpg — plus fiables que la génération dynamique
+    icon_sizes = [192, 256, 512]
+    icons = []
+    for s in icon_sizes:
+        icons.append({
+            "src": url_for("static", filename=f"img/{s}.png", _external=True),
             "sizes": f"{s}x{s}",
             "type": "image/png",
-            "purpose": "any",
-        }
-        for s in sizes
-    ]
+            "purpose": "any maskable",
+        })
     return jsonify({
-        "name": "TemplateApp",
-        "short_name": "TemplateApp",
+        "name": "CinéFriends",
+        "short_name": "CinéFriends",
+        "description": "Votre médiathèque cinéma privée",
         "start_url": "/",
         "display": "standalone",
         "background_color": "#ffffff",
-        "theme_color": "#0f172a",
+        "theme_color": "#ffffff",
         "lang": "fr",
         "scope": "/",
         "orientation": "any",

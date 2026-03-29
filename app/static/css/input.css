@@ -126,4 +126,11 @@
     .journal-accordion-closed {
         max-height: 0;
     }
+
+    /* Désactive le bouton de téléchargement natif Chrome sur les images dans les liens */
+    a img, a picture img {
+        -webkit-user-drag: none;
+        user-drag: none;
+        pointer-events: none;
+    }
 }

@@ -1,5 +1,5 @@
-const STATIC_CACHE = 'templateapp-static-v8';
-const DYNAMIC_CACHE = 'templateapp-dynamic-v8';
+const STATIC_CACHE = 'cinefriends-static-v1';
+const DYNAMIC_CACHE = 'cinefriends-dynamic-v1';
 
 // Ressources à mettre en cache immédiatement
 const STATIC_ASSETS = [

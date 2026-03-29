@@ -7,18 +7,14 @@ incluant les utilisateurs, les paramètres et les notifications.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import db, login_manager
-
-
-def utcnow() -> datetime:
-    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
-    return datetime.now(timezone.utc)
+from .utils import utcnow
 
 
 class User(UserMixin, db.Model):
@@ -68,9 +64,9 @@ class User(UserMixin, db.Model):
     last_name = db.Column(db.String(100), nullable=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
-    role = db.Column(db.String(20), default="user")
+    role = db.Column(db.String(20), default="user", index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    active = db.Column(db.Boolean, default=True)
+    active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
     avatar_filename = db.Column(db.String(255), nullable=True)
@@ -152,6 +148,56 @@ def load_user(user_id: str) -> Optional[User]:
     return User.query.get(int(user_id))
 
 
+class Movie(db.Model):
+    """Film de la médiathèque partagée."""
+    __tablename__ = 'movie'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    original_title = db.Column(db.String(200), nullable=True)
+    year = db.Column(db.Integer, nullable=True)
+    genres = db.Column(db.String(300), nullable=True)   # "Action, Thriller"
+    director = db.Column(db.String(200), nullable=True)
+    overview = db.Column(db.Text, nullable=True)
+    poster_url = db.Column(db.String(500), nullable=True)
+    tmdb_id = db.Column(db.Integer, nullable=True, unique=True)
+    language = db.Column(db.String(10), nullable=True)
+    rating = db.Column(db.Float, nullable=True)
+    file_filename = db.Column(db.String(300), nullable=True)
+    file_size = db.Column(db.BigInteger, default=0)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id], backref=db.backref('movies', lazy=True))
+    created_at = db.Column(db.DateTime, default=utcnow)
+    download_count = db.Column(db.Integer, default=0, nullable=True)
+    last_downloaded_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    last_downloaded_by = db.relationship('User', foreign_keys='Movie.last_downloaded_by_id')
+    cast = db.Column(db.String(500), nullable=True)           # "Acteur 1, Acteur 2, Acteur 3"
+    content_type = db.Column(db.String(20), nullable=True, default='film', index=True)   # 'film' ou 'série'
+    episode_count = db.Column(db.Integer, nullable=True)     # nombre d'épisodes dans le dossier
+    seasons_count = db.Column(db.Integer, nullable=True)     # nombre de saisons (TMDB)
+
+    @property
+    def genres_list(self) -> list:
+        if not self.genres:
+            return []
+        return [g.strip() for g in self.genres.split(',') if g.strip()]
+
+    @property
+    def file_size_human(self) -> str:
+        size = self.file_size or 0
+        for unit in ('o', 'Ko', 'Mo', 'Go', 'To'):
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} To"
+
+    @property
+    def rating_stars(self) -> int:
+        """Note sur 5 étoiles."""
+        if not self.rating:
+            return 0
+        return round(self.rating / 2)
+
+
 class Setting(db.Model):
     """
     Modèle représentant un paramètre de configuration du système.
@@ -192,13 +238,13 @@ class Notification(db.Model):
     """
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    audience = db.Column(db.String(50), default="user")  # user, admin, global
+    audience = db.Column(db.String(50), default="user", index=True)  # user, admin, global
     level = db.Column(db.String(20), default="info")
     title = db.Column(db.String(150), nullable=False)
     message = db.Column(db.Text, nullable=False)
     action_url = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow)
-    read = db.Column(db.Boolean, default=False)
+    read = db.Column(db.Boolean, default=False, index=True)
     persistent = db.Column(db.Boolean, default=False)
 
     user = db.relationship("User", backref=db.backref("notifications", lazy=True))

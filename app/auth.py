@@ -13,11 +13,7 @@ from .forms import LoginForm, RegisterForm, ResetPasswordRequestForm, ResetPassw
 from .mailer import send_email
 from .models import User
 from .services import create_notification
-
-
-def utcnow() -> datetime:
-    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
-    return datetime.now(timezone.utc)
+from .utils import utcnow
 
 
 def to_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
@@ -152,7 +148,7 @@ def register():
                 html_body = render_template("email/registration_pending.html", user=user, current_year=utcnow().year)
                 text_body = render_template("email/registration_pending.txt", user=user)
                 email_sent = send_email(
-                    subject="TemplateApp \u2014 Activation en attente",
+                    subject="CinéFriends \u2014 Activation en attente",
                     recipients=user.email,
                     body=text_body,
                     html_body=html_body,
@@ -319,7 +315,7 @@ def _issue_twofa_code(user: User) -> bool:
     html_body = render_template("email/twofa_code.html", user=user, code=code, ttl_minutes=ttl_minutes, current_year=utcnow().year)
     text_body = render_template("email/twofa_code.txt", user=user, code=code, ttl_minutes=ttl_minutes)
     success = send_email(
-        subject="TemplateApp — Votre code de connexion",
+        subject="CinéFriends — Votre code de connexion",
         recipients=user.email,
         body=text_body,
         html_body=html_body,
@@ -364,7 +360,7 @@ def reset_password_request():
             )
             text_body = render_template("email/reset_password.txt", user=user, reset_url=reset_url, current_year=utcnow().year)
             send_email(
-                subject="TemplateApp — Réinitialisation de votre mot de passe",
+                subject="CinéFriends — Réinitialisation de votre mot de passe",
                 recipients=user.email,
                 body=text_body,
                 html_body=html_body,

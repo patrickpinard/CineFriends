@@ -1,6 +1,6 @@
 import hashlib
 import os
-from datetime import datetime, timezone
+
 from pathlib import Path
 
 from flask import Flask, url_for
@@ -17,11 +17,7 @@ from flask_cors import CORS  # noqa: F401 — kept for possible direct use
 
 from config import get_config
 from .security import configure_security
-
-
-def utcnow() -> datetime:
-    """Retourne la date/heure UTC actuelle (remplace datetime.utcnow() déprécié)."""
-    return datetime.now(timezone.utc)
+from .utils import utcnow
 
 
 db = SQLAlchemy()
@@ -37,6 +33,62 @@ migrate = Migrate()
 # )
 limiter = Limiter(key_func=get_remote_address, default_limits=["2000 per day", "500 per hour"])
 cache = Cache()
+
+
+def _seed_movies(app):
+    """Enregistre les films présents dans films/ qui ne sont pas encore dans la DB."""
+    import os
+    from pathlib import Path
+    from .models import Movie
+
+    _ALLOWED = {'.mkv', '.mp4', '.avi', '.mov', '.m4v', '.wmv', '.webm', '.flv'}
+
+    # Données connues pour les films du dossier (titre, année, genres)
+    _KNOWN = {
+        'Kraven.The.Hunter.2024.mkv':       ('Kraven The Hunter',         2024, 'Action, Aventure, Science-Fiction'),
+        'How.to.Make.a.Killing.2026.mkv':   ('How to Make a Killing',     2026, 'Thriller, Crime'),
+        'Agent.Zeta.2026.mp4':              ('Agent Zeta',                2026, 'Action, Espionnage'),
+        'The.Tiger.2025.mkv':               ('The Tiger',                 2025, 'Drame, Thriller'),
+        'Under.Fire.2025.mp4':              ('Under Fire',                2025, 'Action, Guerre'),
+    }
+
+    folder = app.config.get('MOVIES_FOLDER', '')
+    if not folder or not Path(folder).is_dir():
+        return
+
+    registered = {m.file_filename for m in Movie.query.with_entities(Movie.file_filename).all() if m.file_filename}
+
+    for filename in os.listdir(folder):
+        ext = Path(filename).suffix.lower()
+        if ext not in _ALLOWED or filename in registered:
+            continue
+
+        info = _KNOWN.get(filename)
+        if info:
+            title, year, genres = info
+        else:
+            # Déduire depuis le nom de fichier
+            stem = Path(filename).stem
+            parts = stem.replace('.', ' ').split()
+            year_parts = [p for p in parts if p.isdigit() and len(p) == 4]
+            year = int(year_parts[0]) if year_parts else None
+            title = ' '.join(p for p in parts if not (p.isdigit() and len(p) == 4))
+            genres = None
+
+        fp = Path(folder) / filename
+        movie = Movie(
+            title=title,
+            year=year,
+            genres=genres,
+            file_filename=filename,
+            file_size=fp.stat().st_size if fp.exists() else 0,
+        )
+        db.session.add(movie)
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def create_app(config_name=None):
@@ -185,9 +237,13 @@ def create_app(config_name=None):
     from .routes import main_bp  # package app/routes/
     from .auth import auth_bp
     from .admin import admin_bp
+    from .movies import movies_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(movies_bp)
+
+    os.makedirs(app.config.get("MOVIES_FOLDER", "films"), exist_ok=True)
 
     from .models import Notification
 
@@ -574,11 +630,39 @@ def create_app(config_name=None):
                 db.session.commit()
                 migrations_applied.append("phone_professional")
             
+            # Migration de la table movie
+            try:
+                movie_cols = {
+                    row[1]
+                    for row in db.session.execute(text("PRAGMA table_info(movie)"))
+                }
+                if "download_count" not in movie_cols:
+                    db.session.execute(text("ALTER TABLE movie ADD COLUMN download_count INTEGER DEFAULT 0"))
+                    db.session.commit()
+                if "last_downloaded_by_id" not in movie_cols:
+                    db.session.execute(text("ALTER TABLE movie ADD COLUMN last_downloaded_by_id INTEGER REFERENCES user(id)"))
+                    db.session.commit()
+                if "cast" not in movie_cols:
+                    db.session.execute(text("ALTER TABLE movie ADD COLUMN cast VARCHAR(500)"))
+                    db.session.commit()
+                if "content_type" not in movie_cols:
+                    db.session.execute(text("ALTER TABLE movie ADD COLUMN content_type VARCHAR(20) DEFAULT 'film'"))
+                    db.session.commit()
+                if "episode_count" not in movie_cols:
+                    db.session.execute(text("ALTER TABLE movie ADD COLUMN episode_count INTEGER"))
+                    db.session.commit()
+                if "seasons_count" not in movie_cols:
+                    db.session.execute(text("ALTER TABLE movie ADD COLUMN seasons_count INTEGER"))
+                    db.session.commit()
+            except Exception:
+                pass
+
             # Migrations appliquées silencieusement (pas de log pour éviter le spam CLI)
         except Exception as exc:  # pragma: no cover - dépend de l'état SQLite
             app.logger.warning("Impossible de vérifier les schémas SQLite: %s", exc)
         seed.ensure_default_admin()
-        
+        _seed_movies(app)
+
         # Enregistrer les commandes CLI
         from . import commands
         commands.register_commands(app)

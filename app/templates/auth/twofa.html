@@ -4,9 +4,9 @@
 <div class="space-y-6">
     <div class="flex items-center gap-3 text-left">
         <span class="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo TemplateApp" class="h-full w-full object-contain" />
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo CinéFriends" class="h-full w-full object-contain" />
         </span>
-        <h1 class="text-2xl font-semibold text-slate-800">TemplateApp</h1>
+        <h1 class="text-2xl font-semibold text-slate-800">CinéFriends</h1>
     </div>
     <div class="text-left">
         <h2 class="text-2xl font-semibold text-slate-900">Confirmez votre connexion</h2>
@@ -24,24 +24,62 @@
         </div>
         <div class="flex items-center justify-end text-xs text-slate-500">
             {% if resend_remaining_seconds and resend_remaining_seconds > 0 %}
-                <span class="font-semibold text-rose-600">{{ resend_remaining_seconds }}s</span>
+                <span id="resend-countdown" class="font-semibold text-rose-600">{{ resend_remaining_seconds }}s</span>
+                <a id="resend-link" href="{{ url_for('auth.twofa_verify', resend=1) }}" class="hidden font-semibold text-teal-600 hover:text-teal-500">Renvoyer le code</a>
             {% else %}
-                <a href="{{ url_for('auth.twofa_verify', resend=1) }}" class="font-semibold text-teal-600 hover:text-teal-500">Renvoyer le code</a>
+                <span id="resend-countdown" class="hidden font-semibold text-rose-600"></span>
+                <a id="resend-link" href="{{ url_for('auth.twofa_verify', resend=1) }}" class="font-semibold text-teal-600 hover:text-teal-500">Renvoyer le code</a>
             {% endif %}
         </div>
         {% if code_missing %}
-            <p class="rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500">
+            <p id="code-status" class="rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500">
                 Aucun code actif — renvoyez un nouveau code.
             </p>
         {% elif code_expired %}
-            <p class="rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500">
+            <p id="code-status" class="rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500">
                 Code expiré — renvoyez un nouveau code.
             </p>
         {% else %}
-            <p class="rounded-xl bg-teal-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-teal-600">
-                Code valable encore {{ code_remaining_seconds }}s.
+            <p id="code-status" class="rounded-xl bg-teal-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-teal-600">
+                Code valable encore <span id="code-countdown">{{ code_remaining_seconds }}</span>s.
             </p>
         {% endif %}
+<script>
+(function () {
+    var resendEl = document.getElementById("resend-countdown");
+    var resendLink = document.getElementById("resend-link");
+    var codeCountdownEl = document.getElementById("code-countdown");
+    var codeStatusEl = document.getElementById("code-status");
+
+    var resendSec = parseInt(resendEl ? resendEl.textContent : "0", 10) || 0;
+    var codeSec = codeCountdownEl ? parseInt(codeCountdownEl.textContent, 10) : 0;
+
+    if (resendSec <= 0 && codeSec <= 0) return;
+
+    var tick = setInterval(function () {
+        if (resendSec > 0) {
+            resendSec--;
+            if (resendSec <= 0) {
+                resendEl.classList.add("hidden");
+                resendLink.classList.remove("hidden");
+            } else {
+                resendEl.textContent = resendSec + "s";
+            }
+        }
+        if (codeCountdownEl && codeSec > 0) {
+            codeSec--;
+            if (codeSec <= 0) {
+                codeStatusEl.className = "rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-rose-500";
+                codeStatusEl.textContent = "Code expiré — renvoyez un nouveau code.";
+                clearInterval(tick);
+            } else {
+                codeCountdownEl.textContent = codeSec;
+            }
+        }
+        if (resendSec <= 0 && codeSec <= 0) clearInterval(tick);
+    }, 1000);
+}());
+</script>
         <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-full bg-teal-500 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-soft transition hover:bg-teal-400">
             Valider
         </button>

@@ -5,6 +5,39 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — ve
 
 ---
 
+## [1.2.0] - 2026-03-29
+
+### Ajouté
+
+- **Module Médiathèque** (`app/movies.py`, blueprint `movies_bp`, préfixe `/films`) — partage de films en réseau privé
+  - Liste des films avec filtres genre / année / recherche textuelle
+  - Fiche détaillée avec affiche TMDB, synopsis, note, genres, réalisateur
+  - **Streaming intégré** : remux FFmpeg à la volée (MKV → MP4) pour la compatibilité navigateur ; pool de 2 workers ; requêtes HTTP range supportées ; suivi d'avancement via `/films/<id>/stream-status`
+  - **Lecteur vidéo** (`/films/<id>/player`) intégré dans la page
+  - **Téléchargement** : fichier unique, épisode individuel ou archive ZIP de tous les épisodes d'une série
+  - **Enrichissement TMDB** automatique lors de l'ajout (films et séries) ; rafraîchissement individuel ou en masse (admin)
+  - **Favoris** : toggle par utilisateur, page dédiée `/favoris`
+  - **Notes** : 1–5 étoiles par utilisateur par film (`UserRating`)
+  - **Recommandations** : suggestion de films non vus, avec possibilité de masquage individuel (`HiddenRecommendation`)
+  - **Upload** (`/films/ajouter`) : formulaire avec auto-complétion TMDB (films et séries), sélection de fichier depuis le dossier NAS ou upload direct
+  - **Scan NAS** : API de détection des fichiers/dossiers non enregistrés (`/films/api/scan-folder`, `/films/api/unregistered-folders`, `/films/api/unregistered-count`)
+  - **Diagnostic admin** (`/films/admin/diagnostic`) : vérification de compatibilité des fichiers, test de streaming
+  - **Sync TMDB en masse** (`/films/admin/sync-tmdb-bulk`) pour enrichir tous les films non encore liés à TMDB
+
+- **Nouveaux modèles** : `Movie`, `Favorite`, `UserRating`, `HiddenRecommendation`
+- **Compteurs utilisateur** : `download_count`, `stream_count`, `login_count` sur le modèle `User`
+- **Nouvelles variables de configuration** : `MOVIES_FOLDER`, `TMDB_API_KEY`, `TMDB_LANGUAGE`, `CACHE_TYPE`, `CACHE_REDIS_URL`
+- **Nouveaux templates** : `movies/index.html`, `movies/detail.html`, `movies/upload.html`, `movies/player.html`, `movies/diagnostic.html`, `dashboard/favorites.html`
+- **`filters.js`** : gestion des filtres dynamiques de la médiathèque côté client
+
+### Modifié
+
+- **README** : entièrement réécrit pour refléter CineFriends (plus TemplateApp) avec documentation de la médiathèque, du streaming, des nouvelles routes et modèles
+- **Sidebar** : ajout de l'entrée Médiathèque (`/films/`)
+- **Nom du projet** : renommé Dashboard → CineFriends ; remote GitHub mis à jour vers `patrickpinard/CineFriends`
+
+---
+
 ## [1.1.0] - 2026-03-26
 
 ### Ajouté

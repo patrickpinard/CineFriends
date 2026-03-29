@@ -41,10 +41,17 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
     PREFERRED_URL_SCHEME = "https"
     
-    # Uploads
+    # Uploads avatars
     UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
-    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 5 * 1024 * 1024))
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 15 * 1024 * 1024 * 1024))  # 15 GB (films)
     MAX_AVATAR_SIZE = int(os.getenv("MAX_AVATAR_SIZE", 2 * 1024 * 1024))
+
+    # Médiathèque (films)
+    MOVIES_FOLDER = str(BASE_DIR / "films")
+
+    # TMDB API
+    TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
+    TMDB_LANGUAGE = os.getenv("TMDB_LANGUAGE", "fr-FR")
     
     # 2FA
     TWOFA_CODE_LENGTH = int(os.getenv("TWOFA_CODE_LENGTH", "6"))

@@ -14,7 +14,7 @@ from .forms import BroadcastNotificationForm, ProfileForm
 from .mailer import send_email
 from .models import Notification, User
 from .services import create_notification, notify_admins
-from .utils import delete_avatar, populate_form_from_user, save_avatar
+from .utils import delete_avatar, handle_avatar, populate_form_from_user, save_avatar
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -23,21 +23,6 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 # ---------------------------------------------------------------------------
 # Helpers privés
 # ---------------------------------------------------------------------------
-
-def _handle_avatar(form, user) -> None:
-    """Gère l'upload ou la suppression de l'avatar d'un utilisateur."""
-    if form.remove_avatar.data:
-        delete_avatar(user.avatar_filename)
-        user.avatar_filename = None
-    elif (
-        form.avatar.data
-        and hasattr(form.avatar.data, "filename")
-        and form.avatar.data.filename
-    ):
-        delete_avatar(user.avatar_filename)
-        user.avatar_filename = save_avatar(form.avatar.data)
-
-
 
 def _apply_user_fields(user, form) -> None:
     """Applique tous les champs du formulaire sur l'objet utilisateur."""
@@ -352,46 +337,54 @@ def import_users():
     created = skipped = errors = 0
     error_details = []
 
-    for i, row in enumerate(rows, start=1):
-        username = (row.get("username") or "").strip()
-        if not username:
-            errors += 1
-            error_details.append(f"Ligne {i} : username manquant.")
-            continue
+    try:
+        for i, row in enumerate(rows, start=1):
+            username = (row.get("username") or "").strip()
+            if not username:
+                errors += 1
+                error_details.append(f"Ligne {i} : username manquant.")
+                continue
 
-        if User.query.filter_by(username=username).first():
-            skipped += 1
-            continue
+            if User.query.filter_by(username=username).first():
+                skipped += 1
+                continue
 
-        email = (row.get("email") or "").strip() or None
-        if email and User.query.filter_by(email=email).first():
-            errors += 1
-            error_details.append(f"Ligne {i} ({username}) : email « {email} » déjà utilisé.")
-            continue
+            email = (row.get("email") or "").strip() or None
+            if email and User.query.filter_by(email=email).first():
+                errors += 1
+                error_details.append(f"Ligne {i} ({username}) : email « {email} » déjà utilisé.")
+                continue
 
-        role = row.get("role", "user").strip().lower()
-        if role not in {"admin", "user"}:
-            role = "user"
+            role = row.get("role", "user").strip().lower()
+            if role not in {"admin", "user"}:
+                role = "user"
 
-        actif_raw = row.get("actif", "non").strip().lower()
-        active = actif_raw in ("oui", "true", "1", "yes")
+            actif_raw = row.get("actif", "non").strip().lower()
+            active = actif_raw in ("oui", "true", "1", "yes")
 
-        tmp_password = secrets.token_urlsafe(16)
-        u = User(username=username)
-        u.set_password(tmp_password)
-        u.email      = email
-        u.role       = role
-        u.active     = active
-        u.first_name = (row.get("prenom") or "").strip() or None
-        u.last_name  = (row.get("nom") or "").strip() or None
-        u.phone      = (row.get("telephone") or "").strip() or None
-        u.company    = (row.get("entreprise") or "").strip() or None
-        u.job_title  = (row.get("poste") or "").strip() or None
+            tmp_password = secrets.token_urlsafe(16)
+            u = User(username=username)
+            u.set_password(tmp_password)
+            u.email      = email
+            u.role       = role
+            u.active     = active
+            u.first_name = (row.get("prenom") or "").strip() or None
+            u.last_name  = (row.get("nom") or "").strip() or None
+            u.phone      = (row.get("telephone") or "").strip() or None
+            u.company    = (row.get("entreprise") or "").strip() or None
+            u.job_title  = (row.get("poste") or "").strip() or None
 
-        db.session.add(u)
-        created += 1
+            db.session.add(u)
+            created += 1
 
-    db.session.commit()
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error(
+            f"Erreur lors de l'import utilisateurs par {current_user.username} : {exc}"
+        )
+        flash(f"Erreur lors de l'import : {exc}. Aucun utilisateur n'a été créé.", "danger")
+        return redirect(url_for("admin.users"))
 
     # ── Flash récapitulatif ───────────────────────────────────────────────────
     parts = []
@@ -523,7 +516,7 @@ def create_user():
         )
         user = User(username=form.username.data, role=form.role.data, active=active_value)
         _apply_user_fields(user, form)
-        _handle_avatar(form, user)
+        handle_avatar(form, user)
         user.twofa_enabled = form.twofa_enabled.data
         if not user.twofa_enabled:
             user.twofa_code_hash = None
@@ -552,7 +545,7 @@ def create_user():
 
         if user.email:
             create_notification(
-                title="Bienvenue sur TemplateApp",
+                title="Bienvenue sur CinéFriends",
                 message="Votre compte a été créé par un administrateur. Vous pouvez vous connecter avec vos identifiants.",
                 user=user,
                 level="info",
@@ -630,7 +623,7 @@ def edit_user(user_id: int):
         twofa_before = user.twofa_enabled
 
         # Appliquer les modifications
-        _handle_avatar(form, user)
+        handle_avatar(form, user)
         _apply_user_fields(user, form)
         user.username = new_username
         if user.username != "admin":
@@ -687,14 +680,14 @@ def edit_user(user_id: int):
         # Notifications activation/désactivation compte
         if not was_active and user.active and user.email:
             send_email(
-                subject="TemplateApp \u2014 Votre accès est activé",
+                subject="CinéFriends \u2014 Votre accès est activé",
                 recipients=user.email,
                 body=render_template("email/account_approved.txt", user=user),
                 html_body=render_template("email/account_approved.html", user=user),
             )
             create_notification(
                 title="Compte activé",
-                message="Votre accès à TemplateApp vient d'être activé.",
+                message="Votre accès à CinéFriends vient d'être activé.",
                 user=user, level="success",
                 action_endpoint="auth.login", persistent=True,
             )
@@ -706,14 +699,14 @@ def edit_user(user_id: int):
             flash("Utilisateur activé et notification envoyée.", "success")
         elif was_active and not user.active and user.email:
             send_email(
-                subject="TemplateApp \u2014 Compte désactivé",
+                subject="CinéFriends \u2014 Compte désactivé",
                 recipients=user.email,
                 body=render_template("email/account_deactivated.txt", user=user),
                 html_body=render_template("email/account_deactivated.html", user=user),
             )
             create_notification(
                 title="Compte désactivé",
-                message="Votre accès à TemplateApp a été suspendu par un administrateur.",
+                message="Votre accès à CinéFriends a été suspendu par un administrateur.",
                 user=user, level="warning", persistent=True,
             )
             notify_admins(
@@ -758,14 +751,14 @@ def approve_user(user_id: int):
     )
     if user.email:
         send_email(
-            subject="TemplateApp \u2014 Votre accès est activé",
+            subject="CinéFriends \u2014 Votre accès est activé",
             recipients=user.email,
             body=render_template("email/account_approved.txt", user=user),
             html_body=render_template("email/account_approved.html", user=user),
         )
         create_notification(
             title="Compte activé",
-            message="Votre accès à TemplateApp vient d'être activé.",
+            message="Votre accès à CinéFriends vient d'être activé.",
             user=user,
             level="success",
             action_endpoint="auth.login",
@@ -853,7 +846,7 @@ def reset_user_password(user_id: int):
 
     reset_url = url_for("auth.reset_password", token=token, _external=True)
     send_email(
-        subject="TemplateApp \u2014 Réinitialisation de votre mot de passe",
+        subject="CinéFriends \u2014 Réinitialisation de votre mot de passe",
         recipients=user.email,
         body=render_template(
             "email/reset_password.txt",

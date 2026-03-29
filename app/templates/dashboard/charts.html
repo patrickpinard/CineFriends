@@ -2,11 +2,63 @@
 {% block title %}Graphiques{% endblock %}
 {% block header_title %}Graphiques{% endblock %}
 {% block content %}
-<div class="flex flex-col items-center justify-center min-h-[60vh] text-center">
-    <div class="mb-6">
-        <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo TemplateApp" class="h-24 w-24 mx-auto rounded-2xl object-contain" />
+
+{% set max_year  = films_by_year  | map(attribute=1) | max | default(1) %}
+{% set max_genre = films_by_genre | map(attribute=1) | max | default(1) %}
+
+<div class="space-y-6">
+
+    {# ── Films par année ─────────────────────────────────────────────────── #}
+    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-100 px-6 py-4">
+            <h2 class="text-sm font-semibold text-slate-700">Films par année</h2>
+        </div>
+        <div class="px-6 py-5">
+            {% if films_by_year %}
+            <div class="space-y-3">
+                {% for year, count in films_by_year %}
+                {% set pct = (count / max_year * 100) | round | int %}
+                <div class="flex items-center gap-3">
+                    <span class="w-10 flex-shrink-0 text-right text-xs font-semibold text-slate-500">{{ year }}</span>
+                    <div class="flex-1 overflow-hidden rounded-full bg-slate-100" style="height: 10px;">
+                        <div class="h-full rounded-full bg-gradient-to-r from-teal-400 to-teal-500 transition-all duration-500"
+                             style="width: {{ pct }}%;"></div>
+                    </div>
+                    <span class="w-6 flex-shrink-0 text-xs font-bold text-teal-600">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-center text-sm text-slate-400">Aucun film enregistré.</p>
+            {% endif %}
+        </div>
     </div>
-    <h2 class="text-2xl font-semibold text-slate-900 mb-2">Graphiques</h2>
-    <p class="text-slate-500">Cette page est vide et prête à être personnalisée.</p>
+
+    {# ── Films par genre ─────────────────────────────────────────────────── #}
+    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-100 px-6 py-4">
+            <h2 class="text-sm font-semibold text-slate-700">Films par genre</h2>
+        </div>
+        <div class="px-6 py-5">
+            {% if films_by_genre %}
+            <div class="space-y-3">
+                {% for genre, count in films_by_genre %}
+                {% set pct = (count / max_genre * 100) | round | int %}
+                <div class="flex items-center gap-3">
+                    <span class="w-28 flex-shrink-0 truncate text-right text-xs font-semibold text-slate-500">{{ genre }}</span>
+                    <div class="flex-1 overflow-hidden rounded-full bg-slate-100" style="height: 10px;">
+                        <div class="h-full rounded-full bg-gradient-to-r from-sky-400 to-teal-400 transition-all duration-500"
+                             style="width: {{ pct }}%;"></div>
+                    </div>
+                    <span class="w-6 flex-shrink-0 text-xs font-bold text-sky-600">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-center text-sm text-slate-400">Aucun genre enregistré.</p>
+            {% endif %}
+        </div>
+    </div>
+
 </div>
 {% endblock %}

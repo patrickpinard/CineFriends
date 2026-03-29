@@ -107,6 +107,20 @@ def save_avatar(file: FileStorage) -> str:
     return filename
 
 
+def handle_avatar(form, user) -> None:
+    """Gère l'upload ou la suppression de l'avatar d'un utilisateur."""
+    if form.remove_avatar.data:
+        delete_avatar(user.avatar_filename)
+        user.avatar_filename = None
+    elif (
+        form.avatar.data
+        and hasattr(form.avatar.data, "filename")
+        and form.avatar.data.filename
+    ):
+        delete_avatar(user.avatar_filename)
+        user.avatar_filename = save_avatar(form.avatar.data)
+
+
 def delete_avatar(filename: str | None) -> None:
     """
     Supprime un fichier avatar du système de fichiers.
