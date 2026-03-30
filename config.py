@@ -1,5 +1,5 @@
 """
-Configuration de l'application TemplateApp avec support multi-environnements.
+Configuration de l'application avec support multi-environnements.
 
 Ce module définit les classes de configuration pour différents environnements
 (development, testing, production) et fournit une fonction pour obtenir
